@@ -15,6 +15,7 @@ import callRoutes from "./callRoutes.js";
 
 const router = Router();
 
+
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
 router.use("/users", userLeadRoutes);
@@ -32,6 +33,11 @@ router.use("/calls",    callRoutes);
 // Health check
 router.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+
+router.get("/hi", (_req, res) => {
+  res.send("hi");
 });
 
 export default router;
