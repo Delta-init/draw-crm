@@ -47,6 +47,7 @@ const start = async () => {
   httpServer.listen(env.PORT, () => {
     console.log(`🚀 Server running on http://localhost:${env.PORT} [${env.NODE_ENV}]`);
     console.log(`📋 API Base: http://localhost:${env.PORT}/api/v1`);
+    console.log(`client side runing on ${env.CLIENT_URL}`)
     // Start after server is listening so Socket.IO is ready for emitToUser
     startReminderScheduler();
     startSplitScheduler();
