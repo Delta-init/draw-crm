@@ -199,7 +199,7 @@ function Logo({ collapsed = false }: { collapsed?: boolean }) {
             transition={{ duration: 0.15 }}
             className="overflow-hidden"
           >
-            <p className="text-sm font-bold text-sidebar-foreground whitespace-nowrap">Delta</p>
+            <p className="text-sm font-bold text-sidebar-foreground whitespace-nowrap">Delta Draw</p>
             <p className="text-xs text-muted-foreground whitespace-nowrap">Phase 4</p>
           </motion.div>
         )}

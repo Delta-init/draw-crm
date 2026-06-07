@@ -54,7 +54,7 @@ export function LoginForm() {
               <Zap className="h-7 w-7 text-primary-foreground" />
             </motion.div>
             <div>
-              <CardTitle className="text-2xl font-bold">Delta</CardTitle>
+              <CardTitle className="text-2xl font-bold">Delta Draw</CardTitle>
               <CardDescription className="mt-1">
                 Sign in to your account to continue
               </CardDescription>
