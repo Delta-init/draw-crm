@@ -10,7 +10,7 @@
 |------|--------|
 | Backend server | ✅ Running on port 5001 |
 | Frontend server | ✅ Running on port 3000 |
-| 3CX XML uploaded to admin | ✅ Done — `https://api-crm.deltainstitutions.com/api/v1/calls/` |
+| 3CX XML uploaded to admin | ✅ Done — `https://api-draw-crm.deltainstitutions.com/api/v1/calls/` |
 | Call journaling active | ✅ Inbound/outbound calls auto-log to `call_logs` collection |
 | Contact lookup live | ✅ 3CX resolves caller name from CRM on every inbound call |
 
@@ -164,7 +164,7 @@
 |------|-------|
 | 3CX URL | `https://deltainstitutions.3cx.ae:5002` |
 | 3CX Client ID | `deltaleads` |
-| Production API | `https://api-crm.deltainstitutions.com` |
+| Production API | `https://api-draw-crm.deltainstitutions.com` |
 | Frontend URL | `https://crm.deltainstitutions.com` |
 | MongoDB | `mongodb://delta:123@82.25.109.155:27017/crm_db__delta_v1` |
 | CallLog collection | `calllogs` |

@@ -20,8 +20,8 @@ const containerVariants = {
 };
 
 const itemVariants = {
-  hidden:   { opacity: 0, y: 16 },
-  visible:  { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
+  hidden: { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
 };
 
 export default function SettingsPage() {
@@ -158,8 +158,8 @@ export default function SettingsPage() {
               {[
                 { label: "Contact Lookup", ok: true },
                 { label: "Call Journaling", ok: true },
-                { label: "Click-to-Call",  ok: true },
-                { label: "Recordings",      ok: true },
+                { label: "Click-to-Call", ok: true },
+                { label: "Recordings", ok: true },
               ].map(({ label, ok }) => (
                 <span
                   key={label}
@@ -185,11 +185,11 @@ export default function SettingsPage() {
                 CRM API Endpoint (used in 3CX XML)
               </p>
               {[
-                { label: "Base URL",        value: "https://api-crm.deltainstitutions.com/api/v1/calls/" },
-                { label: "Contact Lookup",  value: "GET /contact-lookup?phonenumber=[Number]" },
-                { label: "Contact Search",  value: "GET /contact-search?search_string=[SearchQuery]" },
-                { label: "Journal (POST)",  value: "POST /journal" },
-                { label: "Webhook (GET)",   value: "GET /webhook?phonenumber=[Number]&..." },
+                { label: "Base URL", value: "https://api-draw-crm.deltainstitutions.com/api/v1/calls/" },
+                { label: "Contact Lookup", value: "GET /contact-lookup?phonenumber=[Number]" },
+                { label: "Contact Search", value: "GET /contact-search?search_string=[SearchQuery]" },
+                { label: "Journal (POST)", value: "POST /journal" },
+                { label: "Webhook (GET)", value: "GET /webhook?phonenumber=[Number]&..." },
               ].map(({ label, value }) => (
                 <div key={label} className="flex items-start justify-between gap-3 text-xs">
                   <span className="text-muted-foreground shrink-0 w-28">{label}</span>
@@ -206,11 +206,11 @@ export default function SettingsPage() {
                 Setup Steps
               </p>
               {[
-                { step: 1, done: true,  text: "Enable REST API in 3CX Admin → API → Enable REST API" },
-                { step: 2, done: true,  text: "Create API key — Client ID: deltaleads, copy key to backend .env" },
-                { step: 3, done: true,  text: "Download XML template below and upload to 3CX Admin → CRM" },
-                { step: 4, done: true,  text: "Set agent Extensions in CRM → Users → Edit each user" },
-                { step: 5, done: true,  text: "Test: make a call — it should auto-log in Calls page" },
+                { step: 1, done: true, text: "Enable REST API in 3CX Admin → API → Enable REST API" },
+                { step: 2, done: true, text: "Create API key — Client ID: deltaleads, copy key to backend .env" },
+                { step: 3, done: true, text: "Download XML template below and upload to 3CX Admin → CRM" },
+                { step: 4, done: true, text: "Set agent Extensions in CRM → Users → Edit each user" },
+                { step: 5, done: true, text: "Test: make a call — it should auto-log in Calls page" },
               ].map(({ step, done, text }) => (
                 <motion.div
                   key={step}
@@ -244,7 +244,7 @@ export default function SettingsPage() {
                   size="sm"
                   className="gap-2"
                   onClick={() => {
-                    window.open("https://api-crm.deltainstitutions.com/api/v1/calls/3cx-template", "_blank");
+                    window.open("https://api-draw-crm.deltainstitutions.com/api/v1/calls/3cx-template", "_blank");
                     toast.success("3CX XML template downloading…");
                   }}
                 >
@@ -258,7 +258,7 @@ export default function SettingsPage() {
                   variant="outline"
                   className="gap-2"
                   onClick={() => {
-                    navigator.clipboard.writeText("https://api-crm.deltainstitutions.com/api/v1/calls/");
+                    navigator.clipboard.writeText("https://api-draw-crm.deltainstitutions.com/api/v1/calls/");
                     toast.success("API base URL copied!");
                   }}
                 >

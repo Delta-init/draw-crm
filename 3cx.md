@@ -389,10 +389,10 @@ The XML file you upload to 3CX Admin → Integrations → CRM must point to your
 
 ```xml
 <!-- Key endpoints used by 3CX -->
-Contact Lookup:  GET  https://api-crm.deltainstitutions.com/api/v1/calls/contact-lookup?phone_number=[Number]
-Contact Search:  GET  https://api-crm.deltainstitutions.com/api/v1/calls/contact-search?search_text=[SearchText]
-Contact Create:  POST https://api-crm.deltainstitutions.com/api/v1/calls/contact-create
-Call Journal:    POST https://api-crm.deltainstitutions.com/api/v1/calls/journal
+Contact Lookup:  GET  https://api-draw-crm.deltainstitutions.com/api/v1/calls/contact-lookup?phone_number=[Number]
+Contact Search:  GET  https://api-draw-crm.deltainstitutions.com/api/v1/calls/contact-search?search_text=[SearchText]
+Contact Create:  POST https://api-draw-crm.deltainstitutions.com/api/v1/calls/contact-create
+Call Journal:    POST https://api-draw-crm.deltainstitutions.com/api/v1/calls/journal
 ```
 
 > These endpoints must be **publicly accessible** (no auth header) because 3CX calls them directly.
