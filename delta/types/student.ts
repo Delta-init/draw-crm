@@ -12,7 +12,7 @@ export interface Student {
   name: string;
   phone?: string;
   email?: string;
-  course?: Course | string | null;
+  courses?: (Course | string)[] | null;
   team?:   Team   | string | null;
   assignedTo?: User | string | null;
   leadId?: { _id: string; name: string; phone?: string; status: string } | string | null;
@@ -59,7 +59,7 @@ export interface CreateStudentInput {
   name: string;
   phone?: string;
   email?: string;
-  course?: string | null;
+  courses?: string[] | null;
   team?: string | null;
   assignedTo?: string | null;
   initialLeadResponse?: string | null;

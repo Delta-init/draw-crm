@@ -7,7 +7,7 @@ const baseLeadFields = z.object({
   phone:      z.string().min(1, "Phone is required").max(20, "Phone too long"),
   source:     z.string().optional(),
   campaignId:      z.string().max(100, "Campaign ID too long").optional(),
-  course:          z.string().optional().nullable(),
+  courses:         z.array(z.string()).optional(),
   leadReceivedTime: z.string().max(50).optional().nullable(),
   lastFollowupDate: z.string().optional().nullable(),
   demoScheduled:   z.boolean().optional().nullable(),

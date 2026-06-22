@@ -155,11 +155,12 @@ const leadSchema = new Schema<ILead>(
       trim: true,
       maxlength: [100, "Source cannot exceed 100 characters"],
     },
-    course: {
-      type: Schema.Types.ObjectId,
-      ref: "Course",
-      default: null,
-    },
+    courses: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "Course",
+      },
+    ],
     status: {
       type: String,
       enum: ["new", "assigned", "pending_response", "followup", "closed", "lost", "not_connected", "mia", "repeated", "callback", "cnc"],
@@ -282,7 +283,7 @@ const leadSchema = new Schema<ILead>(
   }
 );
 
-leadSchema.index({ course: 1 });
+leadSchema.index({ courses: 1 });
 
 // Sparse unique index on email (allows multiple nulls)
 leadSchema.index({ email: 1 });

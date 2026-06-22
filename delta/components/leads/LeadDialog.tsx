@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import {
   createLeadSchema,
   updateLeadSchema,
@@ -63,7 +64,7 @@ export function LeadDialog({ open, onOpenChange, lead, mode }: LeadDialogProps) 
     formState: { errors },
   } = useForm<CreateLeadFormValues>({
     resolver: zodResolver(isEditing ? updateLeadSchema : createLeadSchema) as never,
-    defaultValues: { name: "", email: "", phone: "", source: "", course: "", team: "", assignedTo: "" },
+    defaultValues: { name: "", email: "", phone: "", source: "", courses: [], team: "", assignedTo: "" },
   });
 
   // Watch team field to fetch its members
@@ -103,12 +104,12 @@ export function LeadDialog({ open, onOpenChange, lead, mode }: LeadDialogProps) 
           demoAttended:    lead.demoAttended ?? false,
           hasWhatsapp:     lead.hasWhatsapp ?? false,
           sellingAmount:   lead.sellingAmount ?? null,
-          course: (typeof lead.course === "object" && lead.course !== null)
-            ? (lead.course as { _id: string })._id
-            : (lead.course as string | null | undefined) ?? "",
+          courses: (lead.courses ?? []).map((c) =>
+            typeof c === "object" && c !== null ? (c as { _id: string })._id : (c as string),
+          ),
         } as UpdateLeadFormValues as never);
       } else {
-        reset({ name: "", email: "", phone: "", source: "", campaignId: "", lastFollowupDate: "", demoScheduled: false, demoAttended: false, hasWhatsapp: true, sellingAmount: null, course: "", team: "", assignedTo: "" });
+        reset({ name: "", email: "", phone: "", source: "", campaignId: "", lastFollowupDate: "", demoScheduled: false, demoAttended: false, hasWhatsapp: true, sellingAmount: null, courses: [], team: "", assignedTo: "" });
       }
     }
   }, [open, lead, reset]);
@@ -130,7 +131,7 @@ export function LeadDialog({ open, onOpenChange, lead, mode }: LeadDialogProps) 
       demoScheduled:    extended.demoScheduled ?? false,
       demoAttended:     extended.demoAttended ?? false,
       sellingAmount:    extended.sellingAmount ?? null,
-      course:           data.course     || undefined,
+      courses:          data.courses ?? [],
       team:             (data as CreateLeadFormValues).team       || undefined,
       assignedTo:       (data as CreateLeadFormValues).assignedTo || undefined,
     };
@@ -272,21 +273,21 @@ export function LeadDialog({ open, onOpenChange, lead, mode }: LeadDialogProps) 
               />
             </div>
 
-            {/* Course */}
-            <div className="space-y-1.5">
-              <Label>Course</Label>
+            {/* Courses */}
+            <div className="col-span-2 space-y-1.5">
+              <Label>Courses</Label>
               <Controller
-                name="course"
+                name={"courses" as never}
                 control={control}
-                render={({ field }) => (
-                  <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                    <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
-                    <SelectContent>
-                      {allCourses.map((c) => (
-                        <SelectItem key={c._id} value={c._id || ""}>{c.name || ""}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                render={({ field }: { field: { value: string[]; onChange: (v: string[]) => void } }) => (
+                  <MultiSelect
+                    options={allCourses.map((c) => ({ value: c._id, label: c.name }))}
+                    selected={field.value ?? []}
+                    onChange={field.onChange}
+                    placeholder="Select courses"
+                    searchPlaceholder="Search courses…"
+                    emptyText="No courses found."
+                  />
                 )}
               />
             </div>

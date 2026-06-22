@@ -40,6 +40,7 @@ import { formatDate, getInitials } from "@/lib/utils";
 import type { LeadNote, ActivityLog, ActivityAction } from "@/types/lead";
 import type { LeadStatus } from "@/lib/statusConfig";
 import type { Course } from "@/types/course";
+import { MultiSelect } from "@/components/ui/multi-select";
 import type { User } from "@/types";
 import type { Team } from "@/types/team";
 import LeadDialog from "@/components/leads/LeadDialog";
@@ -625,25 +626,26 @@ export default function LeadDetailPage() {
                   </div>
                 </div>
 
-                {/* Course */}
-                {lead.course && (
+                {/* Courses */}
+                {lead.courses && lead.courses.length > 0 && (
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 rounded-md bg-muted/50 p-1.5">
                       <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs text-muted-foreground mb-0.5">Course</p>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-foreground">
-                          {typeof lead.course === "object"
-                            ? (lead.course as Course).name
-                            : lead.course}
-                        </p>
-                        {typeof lead.course === "object" && (lead.course as Course).amount != null && (
-                          <span className="text-xs text-muted-foreground bg-muted/50 rounded px-1.5 py-0.5">
-                            {fmtFull((lead.course as Course).amount)}
-                          </span>
-                        )}
+                      <p className="text-xs text-muted-foreground mb-0.5">Courses</p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {lead.courses.map((c, i) => {
+                          const obj = typeof c === "object" && c !== null ? (c as Course) : null;
+                          return (
+                            <span key={obj?._id ?? i} className="inline-flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-0.5">
+                              <span className="text-sm font-medium text-foreground">{obj ? obj.name : String(c)}</span>
+                              {obj?.amount != null && (
+                                <span className="text-xs text-muted-foreground">{fmtFull(obj.amount)}</span>
+                              )}
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -886,50 +888,28 @@ export default function LeadDetailPage() {
                       </Select>
                     </div>
 
-                    {/* Course change */}
+                    {/* Courses change */}
                     <div>
                       <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
                         <BookOpen className="h-3 w-3" />
-                        Change Course
+                        Change Courses
                       </p>
-                      <Select
-                        value={
-                          lead.course
-                            ? typeof lead.course === "object"
-                              ? (lead.course as Course)._id
-                              : (lead.course as string)
-                            : "__none__"
-                        }
-                        onValueChange={(val) =>
-                          updateLead.mutate({
-                            id: lead._id,
-                            data: { course: val === "__none__" ? null : val },
-                          })
+                      <MultiSelect
+                        options={allCourses.map((c) => ({
+                          value: c._id,
+                          label: `${c.name}${c.amount != null ? ` · ${fmtFull(c.amount)}` : ""}`,
+                        }))}
+                        selected={(lead.courses ?? []).map((c) =>
+                          typeof c === "object" && c !== null ? (c as Course)._id : (c as string),
+                        )}
+                        onChange={(vals) =>
+                          updateLead.mutate({ id: lead._id, data: { courses: vals } })
                         }
                         disabled={updateLead.isPending}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          {updateLead.isPending
-                            ? <span className="flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" />Saving…</span>
-                            : <SelectValue placeholder="No course" />
-                          }
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__" className="text-xs text-muted-foreground">
-                            — No course —
-                          </SelectItem>
-                          {allCourses.map((c) => (
-                            <SelectItem key={c._id} value={c._id} className="text-xs">
-                              <span className="flex items-center justify-between gap-3 w-full">
-                                <span>{c.name}</span>
-                                <span className="text-muted-foreground">
-                                  {fmtFull(c.amount)}
-                                </span>
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder="No courses"
+                        searchPlaceholder="Search courses…"
+                        emptyText="No courses found."
+                      />
                     </div>
 
                     {/* Selling Amount */}
@@ -1311,9 +1291,10 @@ export default function LeadDetailPage() {
             payments={lead.payments ?? []}
             sellingAmount={lead.sellingAmount ?? undefined}
             courseAmount={
-              typeof lead.course === "object" && lead.course
-                ? (lead.course as Course).amount
-                : undefined
+              (lead.courses ?? []).reduce(
+                (s, c) => s + (typeof c === "object" && c !== null ? ((c as Course).amount ?? 0) : 0),
+                0,
+              ) || undefined
             }
             canEdit={canEdit}
           />

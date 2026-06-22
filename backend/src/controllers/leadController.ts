@@ -23,7 +23,7 @@ const createLeadSchema = z.object({
   phone: z.string().min(1, "Phone is required").max(20),
   hasWhatsapp: z.boolean().optional(),
   source: z.string().max(100).optional(),
-  course: z.string().optional().nullable(),
+  courses: z.array(z.string()).optional(),
   status: z
     .enum(["new", "assigned", "pending_response", "followup", "closed", "lost", "not_connected", "mia", "repeated", "callback", "cnc"])
     .optional(),
@@ -41,7 +41,7 @@ const updateLeadSchema = z.object({
     .nullable(),
   phone: z.string().min(1).max(20).optional(),
   source: z.string().max(100).optional().nullable(),
-  course: z.string().optional().nullable(),
+  courses: z.array(z.string()).optional(),
   status: z
     .enum(["new", "assigned", "pending_response", "followup", "closed", "lost", "not_connected", "mia", "repeated", "callback", "cnc"])
     .optional(),

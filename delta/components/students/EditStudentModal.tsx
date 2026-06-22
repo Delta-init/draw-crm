@@ -16,6 +16,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { useUpdateStudent } from "@/hooks/useStudents";
 import { useCourses } from "@/hooks/useCourses";
 import { useUsers } from "@/hooks/useUsers";
@@ -29,7 +30,7 @@ const schema = z.object({
   name:       z.string().min(1, "Name is required"),
   phone:      z.string().optional(),
   email:      z.string().email("Invalid email").optional().or(z.literal("")),
-  course:     z.string().optional(),
+  courses:    z.array(z.string()).optional(),
   team:       z.string().optional(),
   assignedTo: z.string().optional(),
   totalFee:   z.coerce.number().min(0).optional(),
@@ -56,7 +57,7 @@ export function EditStudentModal({ open, student, onClose }: Props) {
   const users:   User[]   = usersData?.data   ?? [];
   const teams:   Team[]   = teamsData?.data   ?? [];
 
-  const courseId     = student.course     && typeof student.course     === "object" ? (student.course as Course)._id     : (student.course     as string | undefined);
+  const courseIds    = (student.courses ?? []).map((c) => (typeof c === "object" && c !== null ? (c as Course)._id : (c as string)));
   const teamId       = student.team       && typeof student.team       === "object" ? (student.team   as Team)._id       : (student.team       as string | undefined);
   const assignedToId = student.assignedTo && typeof student.assignedTo === "object" ? (student.assignedTo as User)._id  : (student.assignedTo as string | undefined);
 
@@ -66,7 +67,7 @@ export function EditStudentModal({ open, student, onClose }: Props) {
       name:       student.name,
       phone:      student.phone      ?? "",
       email:      student.email      ?? "",
-      course:     courseId           ?? "",
+      courses:    courseIds,
       team:       teamId             ?? "",
       assignedTo: assignedToId       ?? "",
       totalFee:   student.totalFee,
@@ -81,7 +82,7 @@ export function EditStudentModal({ open, student, onClose }: Props) {
         name:       student.name,
         phone:      student.phone      ?? "",
         email:      student.email      ?? "",
-        course:     courseId           ?? "",
+        courses:    courseIds,
         team:       teamId             ?? "",
         assignedTo: assignedToId       ?? "",
         totalFee:   student.totalFee,
@@ -96,7 +97,7 @@ export function EditStudentModal({ open, student, onClose }: Props) {
       name:   values.name,
       phone:  values.phone  || undefined,
       email:  values.email  || undefined,
-      course: values.course || null,
+      courses: values.courses ?? [],
       team:   values.team   || null,
       assignedTo: values.assignedTo || null,
       totalFee:   values.totalFee,
@@ -151,21 +152,17 @@ export function EditStudentModal({ open, student, onClose }: Props) {
             </div>
           </div>
 
-          {/* Course */}
+          {/* Courses */}
           <div className="space-y-1.5">
-            <Label>Course</Label>
-            <Select
-              value={form.watch("course") ?? ""}
-              onValueChange={(v) => form.setValue("course", v === "none" ? "" : v)}
-            >
-              <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">— None —</SelectItem>
-                {courses.map((c) => (
-                  <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Courses</Label>
+            <MultiSelect
+              options={courses.map((c) => ({ value: c._id, label: c.name }))}
+              selected={form.watch("courses") ?? []}
+              onChange={(vals) => form.setValue("courses", vals)}
+              placeholder="Select courses"
+              searchPlaceholder="Search courses…"
+              emptyText="No courses found."
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">

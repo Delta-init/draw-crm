@@ -16,7 +16,7 @@ const studentSchema = new Schema<IStudent>(
     },
     phone: { type: String, trim: true },
     email: { type: String, trim: true, lowercase: true },
-    course: { type: Schema.Types.ObjectId, ref: "Course", default: null },
+    courses: [{ type: Schema.Types.ObjectId, ref: "Course" }],
     team:   { type: Schema.Types.ObjectId, ref: "Team",   default: null },
     assignedTo: { type: Schema.Types.ObjectId, ref: "User", default: null },
     leadId: { type: Schema.Types.ObjectId, ref: "Lead", required: true, unique: true },
@@ -68,7 +68,7 @@ const studentSchema = new Schema<IStudent>(
 
 studentSchema.index({ leadId: 1 }, { unique: true });
 studentSchema.index({ enrollmentNumber: 1 }, { unique: true });
-studentSchema.index({ course: 1 });
+studentSchema.index({ courses: 1 });
 studentSchema.index({ team: 1 });
 studentSchema.index({ assignedTo: 1 });
 studentSchema.index({ status: 1 });

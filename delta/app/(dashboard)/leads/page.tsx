@@ -329,8 +329,8 @@ function LeadsPageContent() {
       );
       case "course": return (
         <td key="course" className="px-4 py-4 hidden lg:table-cell">
-          {lead.course
-            ? <span className="text-sm text-muted-foreground">{typeof lead.course === "object" ? lead.course.name : lead.course}</span>
+          {lead.courses && lead.courses.length > 0
+            ? <span className="text-sm text-muted-foreground">{lead.courses.map((c) => (typeof c === "object" && c !== null ? c.name : c)).join(", ")}</span>
             : <span className="text-sm text-muted-foreground/40">—</span>}
         </td>
       );

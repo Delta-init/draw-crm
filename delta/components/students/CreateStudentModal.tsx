@@ -27,8 +27,8 @@ interface Props {
 }
 
 export function CreateStudentModal({ open, lead, onClose, onSkip, onCreated }: Props) {
-  const courseObj = lead.course && typeof lead.course === "object" ? lead.course as Course : null;
-  const totalFee  = courseObj?.amount ?? 0;
+  const courseObjs = (lead.courses ?? []).map((c) => (typeof c === "object" && c !== null ? c as Course : null)).filter(Boolean) as Course[];
+  const totalFee  = courseObjs.reduce((s, c) => s + (c.amount ?? 0), 0);
   const paidAmount = (lead.payments ?? []).reduce((s, p) => s + p.amount, 0);
   const pending   = Math.max(0, totalFee - paidAmount);
 
@@ -57,7 +57,7 @@ export function CreateStudentModal({ open, lead, onClose, onSkip, onCreated }: P
       name:   lead.name,
       phone:  lead.phone ?? undefined,
       email:  lead.email ?? undefined,
-      course: courseObj?._id ?? null,
+      courses: courseObjs.map((c) => c._id),
       team:   lead.team
         ? typeof lead.team === "object" ? (lead.team as { _id: string })._id : lead.team
         : null,
@@ -122,7 +122,7 @@ export function CreateStudentModal({ open, lead, onClose, onSkip, onCreated }: P
                     { icon: User2, label: "Name",    value: lead.name },
                     { icon: Phone, label: "Phone",   value: lead.phone },
                     { icon: Mail,  label: "Email",   value: lead.email },
-                    { icon: BookOpen, label: "Course", value: courseObj ? `${courseObj.name}${courseObj.amount ? ` · ${fmtFull(courseObj.amount)}` : ""}` : null },
+                    { icon: BookOpen, label: courseObjs.length > 1 ? "Courses" : "Course", value: courseObjs.length ? courseObjs.map((c) => `${c.name}${c.amount ? ` · ${fmtFull(c.amount)}` : ""}`).join(", ") : null },
                     { icon: User2, label: "Counsellor", value: assignedName },
                   ].filter((r) => r.value).map(({ icon: Icon, label, value }) => (
                     <div key={label} className="flex items-center gap-3 px-3 py-2.5">

@@ -256,7 +256,7 @@ function StudentsPageContent() {
     const colDef = ALL_COLUMNS.find((c) => c.id === colId);
     if (!colDef || (!colDef.alwaysVisible && !col(colId))) return null;
 
-    const courseObj = s.course && typeof s.course === "object" ? s.course as Course : null;
+    const courseObjs = (s.courses ?? []).map((c) => (typeof c === "object" && c !== null ? c as Course : null)).filter(Boolean) as Course[];
     const assignedObj = s.assignedTo && typeof s.assignedTo === "object" ? s.assignedTo as User : null;
     const teamObj = s.team && typeof s.team === "object" ? (s.team as { name: string }) : null;
 
@@ -287,8 +287,8 @@ function StudentsPageContent() {
       );
       case "course": return (
         <td key="course" className="px-4 py-3.5 hidden md:table-cell">
-          {courseObj
-            ? <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><BookOpen className="h-3 w-3 shrink-0" />{courseObj.name}</span>
+          {courseObjs.length > 0
+            ? <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><BookOpen className="h-3 w-3 shrink-0" />{courseObjs.map((c) => c.name).join(", ")}</span>
             : <span className="text-xs text-muted-foreground/40">—</span>}
         </td>
       );

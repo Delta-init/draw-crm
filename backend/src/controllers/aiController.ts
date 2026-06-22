@@ -23,7 +23,7 @@ async function buildLeadPrompt(leadId: string): Promise<string> {
   const lead = await Lead.findById(leadId)
     .populate("assignedTo", "name email")
     .populate("team", "name")
-    .populate("course", "name amount")
+    .populate("courses", "name amount")
     .populate("notes.author", "name")
     .populate("activityLogs.performedBy", "name")
     .lean();
@@ -44,9 +44,11 @@ async function buildLeadPrompt(leadId: string): Promise<string> {
 
   const paymentsArr = Array.from(lead.payments ?? []) as unknown as { amount: number }[];
   const totalPaid = paymentsArr.reduce((s, p) => s + p.amount, 0);
-  const courseObj = typeof lead.course === "object" && lead.course ? lead.course as unknown as Record<string, unknown> : null;
-  const courseAmount = courseObj && typeof courseObj.amount === "number" ? courseObj.amount : null;
-  const courseName = courseObj && typeof courseObj.name === "string" ? courseObj.name : "None";
+  const courseArr = (Array.isArray(lead.courses) ? lead.courses : []) as unknown as Record<string, unknown>[];
+  const courseAmount = courseArr.reduce((s, c) => s + (typeof c.amount === "number" ? c.amount : 0), 0) || null;
+  const courseName = courseArr.length
+    ? courseArr.map((c) => (typeof c.name === "string" ? c.name : "Unknown")).join(", ")
+    : "None";
   const assignedObj = typeof lead.assignedTo === "object" && lead.assignedTo ? lead.assignedTo as unknown as Record<string, unknown> : null;
   const assignedName = assignedObj && typeof assignedObj.name === "string" ? assignedObj.name : "Unassigned";
   const teamObj = typeof lead.team === "object" && lead.team ? lead.team as unknown as Record<string, unknown> : null;
@@ -67,7 +69,7 @@ async function buildLeadPrompt(leadId: string): Promise<string> {
 - **Source**: ${lead.source ?? "N/A"}
 - **Assigned To**: ${assignedName}
 - **Team**: ${teamName}
-- **Course**: ${courseName}
+- **Courses**: ${courseName}
 - **Payments**: ${paymentLine}
 - **Created**: ${new Date(lead.createdAt).toLocaleString("en-AE", { timeZone: "Asia/Dubai" })} GST
 - **Last Updated**: ${new Date(lead.updatedAt).toLocaleString("en-AE", { timeZone: "Asia/Dubai" })} GST

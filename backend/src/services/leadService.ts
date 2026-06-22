@@ -28,7 +28,7 @@ function buildPopulatedQuery(id: string) {
         { path: "members", select: "name email designation" },
       ],
     })
-    .populate("course", "name amount status")
+    .populate("courses", "name amount status")
     .populate("notes.author", "name email")
     .populate("activityLogs.performedBy", "name email");
 }
@@ -304,7 +304,7 @@ export class LeadService {
     data: ParsedLead & {
       status?: LeadStatus;
       assignedTo?: string;
-      course?: string | null;
+      courses?: string[];
       team?: string | null;
     },
     reporterId: string,
@@ -375,7 +375,7 @@ export class LeadService {
     if (filters.assignedTo) query.assignedTo = filters.assignedTo;
     if (filters.team) query.team = filters.team;
     if (filters.reporter) query.reporter = filters.reporter;
-    if (filters.course) query.course = filters.course;
+    if (filters.course) query.courses = filters.course;
     if (filters.source) query.source = new RegExp(filters.source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
 
     // ── Date range filter on createdAt ──────────────────────────────────────────
@@ -411,7 +411,7 @@ export class LeadService {
         .populate("reporter", "name email")
         .populate("assignedTo", "name email")
         .populate("team", "name status")
-        .populate("course", "name amount status")
+        .populate("courses", "name amount status")
         .sort({ [sortField]: sortOrder })
         .skip(skip)
         .limit(limit)
@@ -438,7 +438,7 @@ export class LeadService {
       ParsedLead & {
         status?: LeadStatus;
         assignedTo?: string | null;
-        course?: string | null;
+        courses?: string[];
         initialLeadResponse?: string;
         primaryConcern?: string;
         followupStrategy?: string;
@@ -465,7 +465,7 @@ export class LeadService {
       "email",
       "phone",
       "source",
-      "course",
+      "courses",
       "status",
       "initialLeadResponse",
       "primaryConcern",

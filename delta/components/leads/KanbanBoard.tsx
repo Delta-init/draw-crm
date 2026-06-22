@@ -445,7 +445,7 @@ function LeadPreviewBody({
 }) {
   const style = STATUS_STYLE[lead.status];
   const teamObj    = typeof lead.team   === "object" ? lead.team   as Team   : null;
-  const courseObj  = typeof lead.course === "object" ? lead.course as Course : null;
+  const courseObjs = (lead.courses ?? []).map((c) => (typeof c === "object" && c !== null ? c as Course : null)).filter(Boolean) as Course[];
   const assignedName = getUserName(lead.assignedTo as User | string | null);
 
   function Row({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value?: string | null }) {
@@ -494,9 +494,9 @@ function LeadPreviewBody({
         <Row icon={Mail}     label="Email"        value={lead.email} />
         <Row icon={User2}    label="Assigned To"  value={assignedName || "Unassigned"} />
         <Row icon={Users}    label="Team"         value={teamObj?.name} />
-        <Row icon={BookOpen} label="Course"
-          value={courseObj
-            ? `${courseObj.name}${courseObj.amount != null ? ` · ${fmtFull(courseObj.amount)}` : ""}`
+        <Row icon={BookOpen} label={courseObjs.length > 1 ? "Courses" : "Course"}
+          value={courseObjs.length > 0
+            ? courseObjs.map((c) => `${c.name}${c.amount != null ? ` · ${fmtFull(c.amount)}` : ""}`).join(", ")
             : undefined}
         />
         {lead.lastFollowupDate && (

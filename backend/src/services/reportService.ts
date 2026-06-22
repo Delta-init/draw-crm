@@ -159,7 +159,7 @@ export class ReportService {
       {
         $lookup: {
           from:         "courses",
-          localField:   "course",
+          localField:   "courses",
           foreignField: "_id",
           as:           "courseInfo",
         },
@@ -173,7 +173,7 @@ export class ReportService {
             $sum: {
               $cond: [
                 { $gt: [{ $size: { $ifNull: ["$courseInfo", []] } }, 0] },
-                { $arrayElemAt: ["$courseInfo.amount", 0] },
+                { $sum: "$courseInfo.amount" },
                 0,
               ],
             },
@@ -509,11 +509,20 @@ export class ReportService {
       // ── total pending (sellingAmount ?? course.amount − payments received)
       Lead.aggregate([
         { $match: leadMatch },
-        { $lookup: { from: "courses", localField: "course", foreignField: "_id", as: "courseInfo" } },
+        { $lookup: { from: "courses", localField: "courses", foreignField: "_id", as: "courseInfo" } },
         {
           $addFields: {
             effectiveAmount: {
-              $ifNull: ["$sellingAmount", { $arrayElemAt: ["$courseInfo.amount", 0] }],
+              $ifNull: [
+                "$sellingAmount",
+                {
+                  $cond: [
+                    { $gt: [{ $size: { $ifNull: ["$courseInfo", []] } }, 0] },
+                    { $sum: "$courseInfo.amount" },
+                    null,
+                  ],
+                },
+              ],
             },
           },
         },
@@ -720,11 +729,20 @@ export class ReportService {
       // ── pending per team (sellingAmount ?? course.amount − payments)
       Lead.aggregate([
         { $match: { team: { $exists: true, $ne: null } } },
-        { $lookup: { from: "courses", localField: "course", foreignField: "_id", as: "courseInfo" } },
+        { $lookup: { from: "courses", localField: "courses", foreignField: "_id", as: "courseInfo" } },
         {
           $addFields: {
             effectiveAmount: {
-              $ifNull: ["$sellingAmount", { $arrayElemAt: ["$courseInfo.amount", 0] }],
+              $ifNull: [
+                "$sellingAmount",
+                {
+                  $cond: [
+                    { $gt: [{ $size: { $ifNull: ["$courseInfo", []] } }, 0] },
+                    { $sum: "$courseInfo.amount" },
+                    null,
+                  ],
+                },
+              ],
             },
           },
         },
@@ -746,11 +764,20 @@ export class ReportService {
       // ── pending per (team × member)
       Lead.aggregate([
         { $match: { team: { $exists: true, $ne: null }, assignedTo: { $exists: true, $ne: null } } },
-        { $lookup: { from: "courses", localField: "course", foreignField: "_id", as: "courseInfo" } },
+        { $lookup: { from: "courses", localField: "courses", foreignField: "_id", as: "courseInfo" } },
         {
           $addFields: {
             effectiveAmount: {
-              $ifNull: ["$sellingAmount", { $arrayElemAt: ["$courseInfo.amount", 0] }],
+              $ifNull: [
+                "$sellingAmount",
+                {
+                  $cond: [
+                    { $gt: [{ $size: { $ifNull: ["$courseInfo", []] } }, 0] },
+                    { $sum: "$courseInfo.amount" },
+                    null,
+                  ],
+                },
+              ],
             },
           },
         },
@@ -856,11 +883,20 @@ export class ReportService {
       // ── team-level pending (sellingAmount ?? course.amount − payments)
       Lead.aggregate([
         { $match: teamFilter },
-        { $lookup: { from: "courses", localField: "course", foreignField: "_id", as: "courseInfo" } },
+        { $lookup: { from: "courses", localField: "courses", foreignField: "_id", as: "courseInfo" } },
         {
           $addFields: {
             effectiveAmount: {
-              $ifNull: ["$sellingAmount", { $arrayElemAt: ["$courseInfo.amount", 0] }],
+              $ifNull: [
+                "$sellingAmount",
+                {
+                  $cond: [
+                    { $gt: [{ $size: { $ifNull: ["$courseInfo", []] } }, 0] },
+                    { $sum: "$courseInfo.amount" },
+                    null,
+                  ],
+                },
+              ],
             },
           },
         },
@@ -882,11 +918,20 @@ export class ReportService {
       // ── per-member pending
       Lead.aggregate([
         { $match: { ...teamFilter, assignedTo: { $exists: true, $ne: null } } },
-        { $lookup: { from: "courses", localField: "course", foreignField: "_id", as: "courseInfo" } },
+        { $lookup: { from: "courses", localField: "courses", foreignField: "_id", as: "courseInfo" } },
         {
           $addFields: {
             effectiveAmount: {
-              $ifNull: ["$sellingAmount", { $arrayElemAt: ["$courseInfo.amount", 0] }],
+              $ifNull: [
+                "$sellingAmount",
+                {
+                  $cond: [
+                    { $gt: [{ $size: { $ifNull: ["$courseInfo", []] } }, 0] },
+                    { $sum: "$courseInfo.amount" },
+                    null,
+                  ],
+                },
+              ],
             },
           },
         },

@@ -169,7 +169,7 @@ export class TeamService {
     if (filters.status && filters.status !== "all") query.status = filters.status;
     if (filters.assignedTo && filters.assignedTo !== "all") query.assignedTo = filters.assignedTo;
     if (filters.reporter   && filters.reporter   !== "all") query.reporter   = filters.reporter;
-    if (filters.course     && filters.course     !== "all") query.course     = filters.course;
+    if (filters.course     && filters.course     !== "all") query.courses    = filters.course;
     if (filters.unassignedOnly === "true") query.assignedTo = null;
     if (filters.search) {
       const regex = new RegExp(filters.search, "i");

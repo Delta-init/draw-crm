@@ -220,7 +220,7 @@ export interface ILead extends Document {
   hasWhatsapp?: boolean;
   source?: string;
   status: LeadStatus;
-  course?: Types.ObjectId | ICourse;
+  courses?: (Types.ObjectId | ICourse)[];
   assignedTo?: Types.ObjectId | IUser;
   assignedAt?: Date | null;
   team?: Types.ObjectId | ITeam;
@@ -289,7 +289,7 @@ export interface IStudent extends Document {
   name: string;
   phone?: string;
   email?: string;
-  course?: Types.ObjectId | ICourse;
+  courses?: (Types.ObjectId | ICourse)[];
   team?: Types.ObjectId | ITeam;
   assignedTo?: Types.ObjectId | IUser;
   leadId: Types.ObjectId | ILead;

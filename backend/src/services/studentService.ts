@@ -24,7 +24,7 @@ export class StudentService {
     name: string;
     phone?: string;
     email?: string;
-    course?: string | null;
+    courses?: string[] | null;
     team?: string | null;
     assignedTo?: string | null;
     initialLeadResponse?: string | null;
@@ -52,7 +52,7 @@ export class StudentService {
       name: data.name,
       phone: data.phone,
       email: data.email,
-      course: data.course || undefined,
+      courses: data.courses || undefined,
       team:   data.team   || undefined,
       assignedTo: data.assignedTo || undefined,
       leadId: data.leadId,
@@ -107,7 +107,7 @@ export class StudentService {
     }
     if (filters.status)               query.status     = filters.status;
     if (filters.feeStatus)            query.feeStatus  = filters.feeStatus;
-    if (filters.course)               query.course     = filters.course;
+    if (filters.course)               query.courses    = filters.course;
     if (filters.team)                 query.team       = filters.team;
     if (filters.assignedTo)           query.assignedTo = filters.assignedTo;
     if (filters.initialLeadResponse)  query.initialLeadResponse  = filters.initialLeadResponse;
@@ -126,7 +126,7 @@ export class StudentService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate("course",     "name amount")
+        .populate("courses",    "name amount")
         .populate("team",       "name")
         .populate("assignedTo", "name email designation")
         .populate("leadId",     "name phone status")
@@ -153,7 +153,7 @@ export class StudentService {
 
   async getStudentByLeadId(leadId: string) {
     return Student.findOne({ leadId })
-      .populate("course",     "name amount")
+      .populate("courses",    "name amount")
       .populate("team",       "name")
       .populate("assignedTo", "name email designation")
       .lean();
@@ -161,12 +161,12 @@ export class StudentService {
 
   // ── Update ───────────────────────────────────────────────────────────────────
 
-  async updateStudent(id: string, data: Partial<IStudent & { course?: string; team?: string; assignedTo?: string }>) {
+  async updateStudent(id: string, data: Partial<IStudent & { courses?: string[]; team?: string; assignedTo?: string }>) {
     const student = await Student.findById(id);
     if (!student) throw createError("Student not found", 404);
 
     const allowed: Array<keyof typeof data> = [
-      "name", "phone", "email", "course", "team", "assignedTo",
+      "name", "phone", "email", "courses", "team", "assignedTo",
       "initialLeadResponse", "primaryConcern", "followupStrategyType",
       "demoScheduled", "demoAttended", "firstContactTime", "lastFollowupDate",
       "enrollmentDate", "feeStatus", "totalFee", "paidAmount", "notes", "status",
@@ -207,7 +207,7 @@ export class StudentService {
 
   private populateStudent(id: string) {
     return Student.findById(id)
-      .populate("course",     "name amount")
+      .populate("courses",    "name amount")
       .populate("team",       "name")
       .populate("assignedTo", "name email designation")
       .populate("leadId",     "name phone status")

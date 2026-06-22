@@ -84,7 +84,7 @@ export default function StudentDetailPage() {
     </div>
   );
 
-  const courseObj   = student.course   && typeof student.course   === "object" ? student.course   as Course : null;
+  const courseObjs  = (student.courses ?? []).map((c) => (typeof c === "object" && c !== null ? c as Course : null)).filter(Boolean) as Course[];
   const assignedObj = student.assignedTo && typeof student.assignedTo === "object" ? student.assignedTo as User : null;
   const teamObj     = student.team     && typeof student.team     === "object" ? (student.team as { _id: string; name: string }) : null;
   const leadObj     = student.leadId   && typeof student.leadId   === "object" ? student.leadId   as { _id: string; name: string } : null;
@@ -137,7 +137,7 @@ export default function StudentDetailPage() {
                 <div className="flex flex-wrap gap-3 mt-3 text-sm text-muted-foreground">
                   {student.phone && <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" />{student.phone}</span>}
                   {student.email && <span className="flex items-center gap-1"><Mail  className="h-3.5 w-3.5" />{student.email}</span>}
-                  {courseObj     && <span className="flex items-center gap-1"><BookOpen className="h-3.5 w-3.5" />{courseObj.name}</span>}
+                  {courseObjs.length > 0 && <span className="flex items-center gap-1"><BookOpen className="h-3.5 w-3.5" />{courseObjs.map((c) => c.name).join(", ")}</span>}
                 </div>
               </div>
             </div>
@@ -251,7 +251,7 @@ export default function StudentDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <InfoRow icon={BookOpen}  label="Course"      value={courseObj?.name ?? null} />
+                <InfoRow icon={BookOpen}  label={courseObjs.length > 1 ? "Courses" : "Course"}      value={courseObjs.length ? courseObjs.map((c) => c.name).join(", ") : null} />
                 <InfoRow icon={User2}     label="Counsellor"  value={assignedObj?.name ?? null} />
                 <InfoRow icon={Users}     label="Team"        value={teamObj?.name ?? null} />
                 <InfoRow icon={Calendar}  label="Enrolled"    value={formatIST(student.enrollmentDate)} />

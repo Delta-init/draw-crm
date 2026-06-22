@@ -77,7 +77,7 @@ export interface Lead {
   source?: string;
   campaignId?: string;
   status: LeadStatus;
-  course?: Course | string | null;
+  courses?: (Course | string)[] | null;
   assignedTo?: User | string | null;
   assignedAt?: string | null;
   team?: Team | string | null;
