@@ -262,7 +262,7 @@ export default function SettingsPage() {
                     toast.success("API base URL copied!");
                   }}
                 >
-                  <Copy cl\assName="h-3.5 w-3.5" />
+                  <Copy className="h-3.5 w-3.5" />
                   Copy API URL
                 </Button>
               </motion.div>
