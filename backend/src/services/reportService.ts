@@ -186,7 +186,7 @@ export class ReportService {
           pendingAmount: { $max: [0, { $subtract: ["$courseRevenue", "$revenue"] }] },
         },
       },
-      { $sort: { closed: -1, total: -1 } },
+      { $sort: { revenue: -1, total: -1 } },
       { $limit: limit },
       {
         $lookup: {

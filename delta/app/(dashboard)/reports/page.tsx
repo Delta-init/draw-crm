@@ -521,7 +521,6 @@ function OverviewTab({ dateFrom, dateTo }: { dateFrom: string; dateTo: string })
                           <th className="pb-2 text-left font-medium text-muted-foreground w-8">#</th>
                           <th className="pb-2 text-left font-medium text-muted-foreground">Agent</th>
                           <th className="pb-2 text-right font-medium text-muted-foreground">Total</th>
-                          <th className="pb-2 text-right font-medium text-green-500">Closed</th>
                           <th className="pb-2 text-right font-medium text-emerald-500">Revenue</th>
                           <th className="pb-2 text-right font-medium text-amber-500">Pending</th>
                           <th className="pb-2 text-right font-medium text-muted-foreground">Conv%</th>
@@ -542,7 +541,6 @@ function OverviewTab({ dateFrom, dateTo }: { dateFrom: string; dateTo: string })
                               </div>
                             </td>
                             <td className="py-2.5 text-right font-semibold tabular-nums">{u.total}</td>
-                            <td className="py-2.5 text-right"><span className="font-bold text-green-500 tabular-nums">{u.closed}</span></td>
                             <td className="py-2.5 text-right">
                               <span className="font-semibold text-emerald-500 tabular-nums">{fmtUSD(u.revenue ?? 0)}</span>
                             </td>
