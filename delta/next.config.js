@@ -2,6 +2,15 @@
 
 const nextConfig = {
   reactStrictMode: true,
+  async rewrites() {
+    const backend = process.env.BACKEND_URL ?? "http://localhost:5001";
+    return [
+      {
+        source: "/api/v1/:path*",
+        destination: `${backend}/api/v1/:path*`,
+      },
+    ];
+  },
 };
 
 
