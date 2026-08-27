@@ -27,7 +27,7 @@
  *   1. Open the sheet → Extensions → Apps Script → paste this file.
  *   2. Fill in CRM_API_URL and SHEETS_API_KEY below.
  *   3. Run setupTriggers() ONCE from the Run menu, then authorize.
- *   4. Run syncAllRows() once to backfill everything already in the sheet.
+ *   4. Use the “Draw CRM” menu → Sync pending rows to backfill.
  *
  * ASSIGNMENT
  *   Leads are created UNASSIGNED and the CRM splits them. Column G's
@@ -194,7 +194,7 @@ function post_(path, body) {
  * Rows already marked SYNCED or DUPLICATE are skipped, so this is safe to run
  * repeatedly and safe to run on a trigger. ERROR rows are retried.
  */
-function syncAllRows() {
+function syncPendingRows() {
   var lock = LockService.getScriptLock();
   // Two triggers can fire at once — onChange while the timer is mid-run — and
   // without this the same rows are posted twice.
@@ -290,7 +290,7 @@ function sendBatch_(sh, slice) {
 // ─── Triggers ─────────────────────────────────────────────────────────────────
 
 function onChangeTrigger(e) {
-  syncAllRows();
+  syncPendingRows();
 }
 
 /** Run ONCE from the Run menu. Safe to re-run; it clears its own triggers first. */
@@ -299,14 +299,14 @@ function setupTriggers() {
 
   ScriptApp.getProjectTriggers().forEach(function (t) {
     var fn = t.getHandlerFunction();
-    if (fn === "onChangeTrigger" || fn === "syncAllRows") ScriptApp.deleteTrigger(t);
+    if (fn === "onChangeTrigger" || fn === "syncPendingRows") ScriptApp.deleteTrigger(t);
   });
 
   ScriptApp.newTrigger("onChangeTrigger").forSpreadsheet(ss).onChange().create();
 
   // Safety net: onChange does not fire for every edit path, and a failed CRM
   // call leaves ERROR rows that should be retried without anyone noticing.
-  ScriptApp.newTrigger("syncAllRows").timeBased().everyMinutes(30).create();
+  ScriptApp.newTrigger("syncPendingRows").timeBased().everyMinutes(30).create();
 
   Logger.log("Triggers installed: onChange + every 30 minutes.");
 }
@@ -338,4 +338,133 @@ function testSingleRow() {
     return;
   }
   Logger.log("No unsynced rows found.");
+}
+
+// ─── Sheet menu ───────────────────────────────────────────────────────────────
+
+/**
+ * Adds the Draw CRM menu. Runs automatically whenever the sheet is opened.
+ *
+ * Google installs this one by name — it does not need setupTriggers() — but it
+ * only appears for a user who has authorised the script, so a colleague opening
+ * the sheet for the first time may need to run one menu item manually before it
+ * sticks.
+ */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu("🚀 Draw CRM")
+    .addItem("Sync pending rows",        "syncPendingRows")
+    .addItem("Sync status…",             "showSyncStatus")
+    .addSeparator()
+    .addItem("Test connection",          "testConnection")
+    .addItem("Send first pending row",   "testSingleRow")
+    .addSeparator()
+    .addItem("Setup triggers",           "setupTriggers")
+    .addItem("Remove triggers",          "removeTriggers")
+    .addSeparator()
+    .addItem("Re-sync EVERYTHING…",      "resyncEverything")
+    .addToUi();
+}
+
+/** Counts what is synced, pending, duplicate and errored, without calling the CRM. */
+function showSyncStatus() {
+  var sh = sheet_();
+  ensureSyncColumn_(sh);
+
+  var lastRow = sh.getLastRow();
+  if (lastRow < FIRST_DATA_ROW) {
+    SpreadsheetApp.getUi().alert("The sheet has no data rows yet.");
+    return;
+  }
+
+  var values = sh
+    .getRange(FIRST_DATA_ROW, 1, lastRow - FIRST_DATA_ROW + 1, COL.CRM_SYNC + 1)
+    .getValues();
+
+  var synced = 0, dup = 0, err = 0, pending = 0, unusable = 0;
+
+  for (var i = 0; i < values.length; i++) {
+    var state = String(values[i][COL.CRM_SYNC] || "").trim();
+    if (state === SYNC.SYNCED)         { synced += 1; continue; }
+    if (state === SYNC.DUPLICATE)      { dup += 1;    continue; }
+    if (state.indexOf(SYNC.ERROR) === 0) { err += 1;  continue; }
+    if (!buildPayload_(values[i]))     { unusable += 1; continue; }
+    pending += 1;
+  }
+
+  SpreadsheetApp.getUi().alert(
+    "Draw CRM — sync status\n" +
+    "─────────────────────────────\n" +
+    "✅ Synced         " + synced + "\n" +
+    "⚠️ Duplicate      " + dup + "\n" +
+    "❌ Error          " + err + "   (retried on the next run)\n" +
+    "⏳ Pending        " + pending + "\n" +
+    "— No name/phone  " + unusable + "\n\n" +
+    "Leads are created unassigned; the CRM decides who gets them."
+  );
+}
+
+/**
+ * Checks the URL and API key without creating anything.
+ *
+ * Sends one deliberately invalid row: the server validates each row on its own
+ * and reports it as invalid, so a 201 back proves the endpoint is reachable and
+ * the key is accepted while nothing is written. The older Carlton script tested
+ * by posting a real "Test Lead", which left a lead behind every time.
+ */
+function testConnection() {
+  var ui = SpreadsheetApp.getUi();
+
+  if (!SHEETS_API_KEY || SHEETS_API_KEY.indexOf("PASTE_") === 0) {
+    ui.alert("Set SHEETS_API_KEY at the top of the script first.");
+    return;
+  }
+
+  var res = post_("/sheets/sync/batch", { rows: [{ full_name: "", phone_number: "" }] });
+
+  if (res.code === 401) {
+    ui.alert("❌ The API key was rejected.\n\nIt must match SHEETS_API_KEY in the Draw backend .env.");
+    return;
+  }
+  if (res.code === 404) {
+    ui.alert("❌ Not found.\n\nCheck CRM_API_URL — it should end in /api/v1.\n\n" + CRM_API_URL);
+    return;
+  }
+  if (res.code === 200 || res.code === 201) {
+    ui.alert("✅ Connected.\n\n" + CRM_API_URL + "\n\nNothing was created — the test row is rejected by design.");
+    return;
+  }
+  ui.alert("⚠️ Unexpected reply: HTTP " + res.code + "\n\n" + String(res.text).slice(0, 300));
+}
+
+/** Removes only this script's triggers, leaving anything else alone. */
+function removeTriggers() {
+  var removed = 0;
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    var fn = t.getHandlerFunction();
+    // Deliberately not deleting every project trigger the way the Carlton
+    // script does — another script on this sheet should keep working.
+    if (fn === "onChangeTrigger" || fn === "syncPendingRows") {
+      ScriptApp.deleteTrigger(t);
+      removed += 1;
+    }
+  });
+  SpreadsheetApp.getUi().alert("Removed " + removed + " trigger(s). Automatic syncing is off.");
+}
+
+/** Clears every marker and re-posts the whole sheet. Asks first. */
+function resyncEverything() {
+  var ui = SpreadsheetApp.getUi();
+  var answer = ui.alert(
+    "Re-sync everything?",
+    "This clears the CRM Sync column and re-posts all rows.\n\n" +
+      "Nothing is duplicated — the CRM still matches on phone number — but on a " +
+      "large sheet it takes a while.",
+    ui.ButtonSet.YES_NO
+  );
+  if (answer !== ui.Button.YES) return;
+
+  resetSyncColumn();
+  syncPendingRows();
+  ui.alert("Done. Open Sync status… to see the result.");
 }
