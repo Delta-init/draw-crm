@@ -41,7 +41,15 @@ yarn-error.log*
 next-env.d.ts
 
 dist
-sheets
+
+# The sheets/ folder is ignored, but the Apps Scripts inside it are source and
+# belong in the repo — the other two CRMs already track theirs. Anything else
+# dropped in here (exports, dumps) stays ignored.
+# Note: sheets/* not sheets/ — git will not descend into an excluded
+# directory, so the negation below is only reachable if the contents are
+# excluded rather than the directory itself.
+sheets/*
+!sheets/*.gs
 
 # Telegram backup temp files
 backups/
