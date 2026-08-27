@@ -31,6 +31,11 @@ const sheetRowSchema = z.object({
   assigned_to: z.string().optional(), // CRM user ID — direct counselor assignment
   source: z.string().optional(), // override derived source (e.g. "meta - shuhaib leads")
   ad_creative: z.string().optional(), // ad creative name — stored in note
+  // Free-text carried over from a manually-maintained sheet: status label,
+  // counsellor remark, follow-up notes. Kept as one block rather than mapped
+  // to CRM fields, because a sheet's "Follow Up" is a person's shorthand and
+  // not the same thing as the CRM's own status.
+  sheet_notes: z.string().optional(),
   reporter: z.string().optional(), //
 });
 
@@ -85,6 +90,14 @@ function buildNote(row: SheetRow): string {
   if (row.email) lines.push(`📧 Email: ${row.email}`);
   if (row.city) lines.push(`📍 City: ${row.city}`);
   if (row.platform) lines.push(`📱 Platform: ${row.platform.toUpperCase()}`);
+
+  // Notes carried over from the source sheet
+  if (row.sheet_notes) {
+    lines.push("");
+    lines.push("📋 From the sheet");
+    lines.push("─────────────────────────────");
+    lines.push(row.sheet_notes);
+  }
 
   // Ad creative (key field for this sheet)
   if (row.ad_creative) {
