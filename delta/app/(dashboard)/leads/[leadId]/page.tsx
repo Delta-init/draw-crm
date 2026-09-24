@@ -867,7 +867,18 @@ export default function LeadDetailPage() {
                         value={lead.status}
                         onValueChange={(val) => {
                           if (val === "closed" && !existingStudent) {
-                            updateStatus.mutate({ id: lead._id, status: "closed" });
+                            /*
+                             * Held, not written.
+                             *
+                             * This used to apply "closed" the instant it was
+                             * picked, before the enrolment form had even
+                             * opened — so dismissing that form, by any of its
+                             * three exits, left the lead closed with nothing
+                             * behind it: no student record, and so nothing
+                             * finance or the LMS could ever be told about.
+                             * The status is applied now only when the
+                             * enrolment is actually saved, in onCreated below.
+                             */
                             setShowStudentModal(true);
                           } else {
                             updateStatus.mutate({ id: lead._id, status: val as LeadStatus });
@@ -1320,14 +1331,18 @@ export default function LeadDetailPage() {
         mode="edit"
       />
 
-      {/* Create Student Modal — fires when status → closed and no student yet */}
+      {/* Create Student Modal — fires when status → closed and no student yet.
+          Dismissing leaves the lead exactly as it was; only a saved
+          enrolment moves it to closed. */}
       {showStudentModal && !existingStudent && (
         <CreateStudentModal
           open
           lead={lead}
           onClose={() => setShowStudentModal(false)}
-          onSkip={() => setShowStudentModal(false)}
-          onCreated={() => setShowStudentModal(false)}
+          onCreated={() => {
+            setShowStudentModal(false);
+            if (lead.status !== "closed") updateStatus.mutate({ id: lead._id, status: "closed" });
+          }}
         />
       )}
     </div>

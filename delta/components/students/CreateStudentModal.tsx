@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   GraduationCap, X, User2, Phone, Mail, BookOpen,
-  Calendar, DollarSign, StickyNote, CheckCircle2, SkipForward,
+  Calendar, DollarSign, StickyNote, CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,11 +22,10 @@ interface Props {
   open: boolean;
   lead: Lead;
   onClose: () => void;
-  onSkip: () => void;
   onCreated: () => void;
 }
 
-export function CreateStudentModal({ open, lead, onClose, onSkip, onCreated }: Props) {
+export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
   const courseObjs = (lead.courses ?? []).map((c) => (typeof c === "object" && c !== null ? c as Course : null)).filter(Boolean) as Course[];
   const totalFee  = courseObjs.reduce((s, c) => s + (c.amount ?? 0), 0);
   const paidAmount = (lead.payments ?? []).reduce((s, p) => s + p.amount, 0);
@@ -251,11 +250,17 @@ export function CreateStudentModal({ open, lead, onClose, onSkip, onCreated }: P
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border/50 bg-card px-5 py-3"
+              /*
+               * No "skip". Closing a lead used to be reachable by pressing
+               * this and never filling in the enrolment — the lead moved to
+               * "closed" anyway, with no student record behind it, which is
+               * a sale nobody downstream (finance, the LMS) can ever be told
+               * about. Cancelling still works, by the ✕ or the backdrop; it
+               * leaves the lead exactly where it was, which is the one thing
+               * a cancel should do.
+               */
+              className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-border/50 bg-card px-5 py-3"
             >
-              <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground" onClick={onSkip} disabled={createMut.isPending}>
-                <SkipForward className="h-4 w-4" /> Skip for now
-              </Button>
               <Button
                 size="sm"
                 className="gap-2"
