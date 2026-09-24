@@ -150,8 +150,58 @@ export interface ICourse extends Document {
   description?: string;
   amount: number;
   status: "active" | "inactive";
+  /** The finance catalogue item this course bills against, once mapped. */
+  financeItemId?: string | null;
+  /** Which course this is in the LMS, for provisioning a student on approval. */
+  lmsCourseSlug?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/*
+ * What a course is taught in.
+ *
+ * A fixed list rather than a typed box — finance counts enrolments by
+ * language, and "Malayalam", "MALAYALAM" and "malayalam" would each be a
+ * different answer to the same question. Same list Delta CRM uses, so a
+ * shared finance organization reads one vocabulary from both.
+ */
+export const ENROLMENT_LANGUAGES = ["English", "Malayalam", "Hindi/Urdu", "Tamil"] as const;
+export type EnrolmentLanguage = (typeof ENROLMENT_LANGUAGES)[number];
+
+/** How the money was taken at the close — spelled the way finance's
+    declaredPaymentMethod expects, or it is refused at the far end. */
+export const ENROLMENT_PAYMENT_METHODS = [
+  "cash",
+  "bank_transfer",
+  "cheque",
+  "card",
+  "easebuzz_emi",
+  "tabby",
+  "tamara",
+  "billexpro",
+] as const;
+export type EnrolmentPaymentMethod = (typeof ENROLMENT_PAYMENT_METHODS)[number];
+
+export const PAYMENT_METHOD_LABELS: Record<EnrolmentPaymentMethod, string> = {
+  cash: "Cash",
+  bank_transfer: "Bank Transfer",
+  cheque: "Cheque",
+  card: "Card",
+  easebuzz_emi: "Easebuzz EMI",
+  tabby: "Tabby",
+  tamara: "Tamara",
+  billexpro: "BillExPro",
+};
+
+/** A file kept in object storage, as the enrolment records it. */
+export interface StoredFile {
+  name: string;
+  url: string;
+  key: string;
+  size?: number;
+  mimeType?: string;
+  uploadedAt?: Date;
 }
 
 // ─── Lead ──────────────────────────────────────────────────────────────────────
@@ -307,6 +357,12 @@ export interface IStudent extends Document {
   paidAmount: number;
   pendingAmount: number;
   status: "active" | "inactive" | "graduated" | "dropped";
+  /** What the courses are taught in, taken at the close. */
+  language?: EnrolmentLanguage;
+  /** How the money was taken at the close. */
+  paymentMethod?: EnrolmentPaymentMethod;
+  /** Proof the money was taken, handed on to finance with the enrolment. */
+  paymentReceipt?: StoredFile | null;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;

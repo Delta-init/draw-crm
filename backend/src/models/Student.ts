@@ -58,6 +58,27 @@ const studentSchema = new Schema<IStudent>(
       enum: ["active", "inactive", "graduated", "dropped"],
       default: "active",
     },
+    language: { type: String, enum: ["English", "Malayalam", "Hindi/Urdu", "Tamil"] },
+    paymentMethod: {
+      type: String,
+      enum: ["cash", "bank_transfer", "cheque", "card", "easebuzz_emi", "tabby", "tamara", "billexpro"],
+    },
+    /**
+     * Proof the money was taken, once this CRM has somewhere to put one.
+     *
+     * Optional rather than required, unlike Delta's — this application has no
+     * object storage wired yet, so there is nowhere yet to upload a receipt
+     * to. The field and finance's schema both accept one; nothing here can
+     * produce one until that gap is closed.
+     */
+    paymentReceipt: {
+      name: { type: String },
+      url: { type: String },
+      key: { type: String },
+      size: { type: Number },
+      mimeType: { type: String },
+      uploadedAt: { type: Date },
+    },
     notes: { type: String, trim: true, maxlength: 2000 },
   },
   {

@@ -25,6 +25,10 @@ const courseSchema = new Schema<ICourse>(
       enum: ["active", "inactive"],
       default: "active",
     },
+    /** The finance catalogue item this course bills against, once mapped. */
+    financeItemId: { type: String, default: null },
+    /** Which course this is in the LMS, for provisioning a student on approval. */
+    lmsCourseSlug: { type: String, default: "", trim: true },
   },
   {
     timestamps: true,
@@ -32,7 +36,8 @@ const courseSchema = new Schema<ICourse>(
   }
 );
 
-courseSchema.index({ name: 1 }, { unique: true });
+// name already declares unique on the field itself, which builds this same
+// index — declaring it again warned on every boot for nothing.
 courseSchema.index({ status: 1 });
 
 export const Course = mongoose.model<ICourse>("Course", courseSchema);

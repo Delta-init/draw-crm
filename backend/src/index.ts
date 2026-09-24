@@ -12,6 +12,7 @@ import { initSocket } from "./socket.js";
 import { startReminderScheduler } from "./services/reminderScheduler.js";
 import { startSplitScheduler } from "./services/splitScheduler.js";
 import { startBackupScheduler } from "./services/backupService.js";
+import { startFinanceHandoverWorker } from "./services/financeHandoverWorker.js";
 
 const app = express();
 
@@ -52,6 +53,7 @@ const start = async () => {
     startReminderScheduler();
     startSplitScheduler();
     startBackupScheduler();
+    startFinanceHandoverWorker();
   });
 };
 

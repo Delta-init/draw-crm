@@ -29,6 +29,28 @@ const envSchema = z.object({
   LMS_API_URL: z.string().default(""),
   LMS_SERVICE_SECRET: z.string().default(""),
   LMS_REMOTE_ORG_ID: z.string().default(""),
+
+  /*
+   * Delta Finance, where a closed lead becomes an invoice.
+   *
+   * The same organization the Delta sales CRM bills into, not a separate
+   * one of Draw's own — FINANCE_ORG_ID should be set to that org's id, and
+   * FINANCE_CLIENT_ID / FINANCE_INTEGRATION_SECRET to the very same values
+   * the Delta CRM holds. Finance recognises one signed caller for its whole
+   * integration surface, not a caller per system, so there is no separate
+   * credential to issue here — this is not a shortcut, it is the only
+   * credential that exists. Enrolments are told apart by the source field instead:
+   * this CRM sends "draw-crm", Delta's sends "crm".
+   *
+   * All four empty means the handover is off: the CRM works exactly as it
+   * did, students are created, and nothing is queued. A half-configured
+   * integration is the dangerous state — it would queue enrolments nobody
+   * is delivering — so it is on only when every field is set.
+   */
+  FINANCE_API_URL:            z.string().default(""),
+  FINANCE_CLIENT_ID:          z.string().default(""),
+  FINANCE_INTEGRATION_SECRET: z.string().default(""),
+  FINANCE_ORG_ID:             z.string().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);
