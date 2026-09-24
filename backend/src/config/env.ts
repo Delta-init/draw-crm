@@ -25,6 +25,10 @@ const envSchema = z.object({
   GEMINI_API_KEY:      z.string().default(""),
   TELEGRAM_BOT_TOKEN:  z.string().default(""),
   TELEGRAM_CHAT_ID:    z.string().default(""),
+  // LMS mentor calendar integration; empty settings keep the feature disabled.
+  LMS_API_URL: z.string().default(""),
+  LMS_SERVICE_SECRET: z.string().default(""),
+  LMS_REMOTE_ORG_ID: z.string().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);

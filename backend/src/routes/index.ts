@@ -14,6 +14,7 @@ import aiRoutes from "./aiRoutes.js";
 import studentRoutes from "./studentRoutes.js";
 import callRoutes from "./callRoutes.js";
 import portalRoutes from "./portalRoutes.js";
+import mentorRoutes from "./mentorRoutes.js";
 
 const router = Router();
 
@@ -35,6 +36,7 @@ router.use("/push",    pushRoutes);
 router.use("/ai",       aiRoutes);
 router.use("/students", studentRoutes);
 router.use("/calls",    callRoutes);
+router.use("/mentors", mentorRoutes);
 
 // Health check
 router.get("/health", (_req, res) => {

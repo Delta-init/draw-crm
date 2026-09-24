@@ -613,3 +613,9 @@ Google Sheets columns map to Lead fields:
 ### Memory Management Routes
 - `GET /api/v1/ai/memory/:leadId` — fetch conversation history for a lead
 - `DELETE /api/v1/ai/memory/:leadId` — clear conversation for a lead
+
+---
+
+## LMS Mentor Booking
+
+Authenticated requests flow from the Draw `/mentors` page through `/api/v1/mentors/*`, `mentorController`, and `mentorService` to the LMS service API. The backend supplies the signed-in user's email as actor, scopes calls using `LMS_REMOTE_ORG_ID`, and leaves schedule availability, meeting ownership, and conflict decisions to the LMS. No meeting data is stored in Draw's database.

@@ -525,3 +525,7 @@ view | create | edit | delete | approve | export
 #### `settings`
 - `view` — access settings page
 - `edit` — modify system settings (VAPID keys, Sheets API key, etc.)
+
+### Mentor booking routes
+
+All `/api/v1/mentors/*` routes require `authenticate`. Meeting ownership and Super Admin override checks are delegated to the LMS using the acting user's email.

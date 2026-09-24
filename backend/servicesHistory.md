@@ -580,3 +580,14 @@ This file documents every service in `backend/src/services/`. Read this before w
 **Filters:** `memberId`, `isDone` ("true"/"false"), `search` (lead name / reminder title / note), `page`, `limit`.
 **Returns:** `{ reminders: [{ reminder, lead: { _id, name, phone, status, assignedTo } }], pagination }`
 **Pipeline:** $match lead → $unwind reminders → optional filters → $sort remindAt ASC → paginate → $lookup assignedTo + createdBy.
+
+---
+
+## LMS mentor integration services
+
+**Files**: `src/services/lmsClient.ts`, `src/services/mentorService.ts`
+**Purpose**: `lmsClient` makes authenticated, time-bounded requests to the LMS service API. `mentorService` validates calendar windows and forwards schedule, class, and meeting operations.
+**Configuration**: `LMS_API_URL`, `LMS_SERVICE_SECRET`, `LMS_REMOTE_ORG_ID`.
+**Data ownership**: Mentor availability and meeting records remain in the LMS; Draw does not mirror them in MongoDB.
+
+**Methods**: `schedule`, `classDetail`, `scheduleMeeting`, `getMeeting`, `updateMeeting`, `cancelMeeting`, and `callLms` (15-second request timeout).

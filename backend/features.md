@@ -500,3 +500,19 @@ Each feature documents:
 **Change Log**:
 - Initial PDF export for teams
 - Added user-scoped PDF export
+
+---
+
+## 18. LMS Mentor Booking
+
+**Description**: Authenticated Draw staff can view mentor availability, classes, and meetings from the configured LMS academy, book meetings, and manage meetings subject to LMS ownership rules.
+
+**Routes**: `GET /api/v1/mentors/schedule`, `GET /api/v1/mentors/classes/:classId`, `POST /api/v1/mentors/meetings`, `GET|PATCH /api/v1/mentors/meetings/:meetingId`, and `POST /api/v1/mentors/meetings/:meetingId/cancel`. All routes require `authenticate`.
+
+**Services**: `mentorService` proxies to the LMS through `lmsClient`; the LMS remains the source of truth for schedules, availability, and meetings.
+
+**Configuration**: `LMS_API_URL`, `LMS_SERVICE_SECRET`, and `LMS_REMOTE_ORG_ID`.
+
+**Permissions**: Any signed-in user can browse and book. The LMS enforces ownership and configured Super Admin overrides for meeting changes.
+
+**Change Log**: Ported the Sales CRM mentor booking integration.

@@ -1312,8 +1312,21 @@ Axios instance: `frontend/lib/axios.ts` — auto-attaches `Authorization: Bearer
 
 Copy the template at the top of this file and add under the correct module section.
 
-**Endpoint count**: 71
+**Endpoint count**: 77
 *(Increment every time you add an endpoint)*
+
+### Mentor Booking
+
+All routes require authentication and call the Draw backend, which proxies the LMS:
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/v1/mentors/schedule?from=&to=` | Load calendar schedule |
+| GET | `/api/v1/mentors/classes/:classId` | Load class detail |
+| POST | `/api/v1/mentors/meetings` | Book a meeting |
+| GET | `/api/v1/mentors/meetings/:meetingId` | Read a meeting |
+| PATCH | `/api/v1/mentors/meetings/:meetingId` | Update a meeting |
+| POST | `/api/v1/mentors/meetings/:meetingId/cancel` | Cancel a meeting |
 
 ---
 

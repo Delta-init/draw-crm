@@ -612,5 +612,14 @@ Per-lead AI chat assistant powered by Anthropic Claude. Stores conversation memo
 
 Copy the template at the top and place it in the correct module section.
 
-**Feature count**: 12
+**Feature count**: 13
 *(Increment every time you add a feature)*
+
+---
+
+## Mentor Booking
+
+- **Page**: `app/(dashboard)/mentors/page.tsx`
+- **Navigation**: `Mentors` entry in `components/layout/Sidebar.tsx`
+- **Backend**: Authenticated `/api/v1/mentors/*` routes; schedule and meetings are served by the configured LMS.
+- **State**: React Query keys use the `mentors` prefix; meeting changes invalidate the schedule.
