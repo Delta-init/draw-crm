@@ -13,6 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { fmtFull } from "@/lib/currency";
+import {
+  ENROLMENT_LANGUAGES, ENROLMENT_PAYMENT_METHODS, PAYMENT_METHOD_LABELS,
+  type EnrolmentLanguage, type EnrolmentPaymentMethod,
+} from "@/types/student";
+import { toast } from "@/lib/toast";
 import { useCreateStudent } from "@/hooks/useStudents";
 import type { Lead } from "@/types/lead";
 import type { Course } from "@/types/course";
@@ -39,6 +44,14 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
   const [notes, setNotes] = useState("");
   const [enrollmentDate, setEnrollmentDate] = useState(new Date().toISOString().slice(0, 10));
   const [feeStatus, setFeeStatus] = useState<FeeStatus>(computedFeeStatus);
+  /*
+   * Asked for at the close, because this is the only moment somebody is in a
+   * position to answer — and because finance's own intake refuses an
+   * enrolment with no language at all. Required here rather than left to
+   * default, the same rule Delta CRM's closing form holds.
+   */
+  const [language, setLanguage] = useState<EnrolmentLanguage | "">("");
+  const [paymentMethod, setPaymentMethod] = useState<EnrolmentPaymentMethod | "">("");
 
   const createMut = useCreateStudent();
 
@@ -51,7 +64,13 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
   }
 
   async function handleCreate() {
+    if (!language || !paymentMethod) {
+      toast.error("Choose the language and payment method before closing.");
+      return;
+    }
     await createMut.mutateAsync({
+      language,
+      paymentMethod,
       leadId: lead._id,
       name:   lead.name,
       phone:  lead.phone ?? undefined,
@@ -230,6 +249,37 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
                   </div>
                 </div>
 
+                {/* Both required — finance's own intake refuses an enrolment
+                    missing either, and asking now is the only chance to. */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Language *</p>
+                    <Select value={language} onValueChange={(v) => setLanguage(v as EnrolmentLanguage)}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Choose one" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ENROLMENT_LANGUAGES.map((l) => (
+                          <SelectItem key={l} value={l} className="text-xs">{l}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Payment Method *</p>
+                    <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as EnrolmentPaymentMethod)}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Choose one" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ENROLMENT_PAYMENT_METHODS.map((m) => (
+                          <SelectItem key={m} value={m} className="text-xs">{PAYMENT_METHOD_LABELS[m]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
                     <StickyNote className="h-3 w-3" /> Notes (optional)
@@ -265,7 +315,7 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
                 size="sm"
                 className="gap-2"
                 onClick={handleCreate}
-                disabled={createMut.isPending}
+                disabled={createMut.isPending || !language || !paymentMethod}
               >
                 {createMut.isPending ? (
                   <span className="flex items-center gap-1.5"><span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> Creating…</span>
