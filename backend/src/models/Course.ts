@@ -27,8 +27,14 @@ const courseSchema = new Schema<ICourse>(
     },
     /** The finance catalogue item this course bills against, once mapped. */
     financeItemId: { type: String, default: null },
-    /** Which course this is in the LMS, for provisioning a student on approval. */
+    /** Which course this is in the LMS, for provisioning a student on approval — the first of `lmsCourseSlugs`. */
     lmsCourseSlug: { type: String, default: "", trim: true },
+    /**
+     * Every LMS course it opens, in order — two for a bundle like "MBT + DWT",
+     * which is one course to sell and two to study. Set on the Courses page
+     * ("Map"), and sent with every enrolment so finance opens them all.
+     */
+    lmsCourseSlugs: { type: [String], default: [] },
   },
   {
     timestamps: true,

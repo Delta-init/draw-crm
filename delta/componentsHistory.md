@@ -1000,3 +1000,14 @@
 **Props:** `teams: Team[]`, `selectedTeamIds: Set<string>`, `selectedMemberIds: Record<string, Set<string>>`, `lockedTeamId?: string | null`, `lockedMemberId?: string | null`, `onToggleTeam: (id: string) => void`, `onToggleMember: (teamId: string, memberId: string) => void`, `onSetAllMembers: (teamId: string, all: boolean) => void`
 **Used in:** upload page
 **Purpose:** Vertical list of team rows, each expands to show `MemberSelector`. BDE sees only their team (locked, non-removable). Admins can toggle any team + any member. Framer Motion AnimatePresence for expand/collapse.
+
+---
+
+## MapCourseDialog (added 2026-09-29)
+
+**File:** `components/courses/MapCourseDialog.tsx`
+**Props:** `course: Course | null`, `open: boolean`, `onClose: () => void`
+**Used in:** `app/(dashboard)/courses/page.tsx` — the Map button (Link2 icon) on each course card, and the card's mapping chips
+**Purpose:** Where a course goes when it is sold: the Delta Finance product it bills as (select, with a same-name suggestion) and the LMS course(s) the student gets on approval (checkbox list — tick order is the order they open; two for a bundle). Says so plainly when finance or the LMS is not connected or cannot be read. Saves with `useMapCourse`.
+
+**Course card change:** each card shows two chips — "Finance mapped / not mapped" and "LMS: N courses / LMS not mapped" (semantic tokens: `bg-primary/10 text-primary` mapped, `bg-muted text-muted-foreground` not) — clicking them opens the dialog too.

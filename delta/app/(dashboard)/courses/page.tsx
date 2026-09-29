@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen, Plus, Search, X, Edit2, Trash2,
   DollarSign, ChevronLeft, ChevronRight, BookMarked,
-  TrendingUp, Package, Loader2,
+  TrendingUp, Package, Loader2, Link2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCourses } from "@/hooks/useCourses";
 import { CourseDialog } from "@/components/courses/CourseDialog";
 import { DeleteCourseDialog } from "@/components/courses/DeleteCourseDialog";
+import { MapCourseDialog } from "@/components/courses/MapCourseDialog";
 import type { Course } from "@/types/course";
+import { lmsCoursesOf } from "@/types/course";
 import { useCurrencyStore } from "@/lib/store/currencyStore";
 import { fmtCurrency } from "@/lib/currency";
 
@@ -53,10 +55,12 @@ interface CourseCardProps {
   course: Course;
   onEdit: (c: Course) => void;
   onDelete: (c: Course) => void;
+  onMap: (c: Course) => void;
   index: number;
 }
 
-function CourseCard({ course, onEdit, onDelete, index }: CourseCardProps) {
+function CourseCard({ course, onEdit, onDelete, onMap, index }: CourseCardProps) {
+  const lms = lmsCoursesOf(course);
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -99,6 +103,20 @@ function CourseCard({ course, onEdit, onDelete, index }: CourseCardProps) {
             {formatAmount(course.amount)}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">Course fee</p>
+          {/* Where it goes when sold: finance's product, and the LMS course(s). */}
+          <button
+            type="button"
+            onClick={() => onMap(course)}
+            className="mt-2 flex flex-wrap gap-1.5 text-left"
+            title="Map to finance and the LMS"
+          >
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${course.financeItemId ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+              Finance {course.financeItemId ? "mapped" : "not mapped"}
+            </span>
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${lms.length ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+              {lms.length ? `LMS: ${lms.length} course${lms.length === 1 ? "" : "s"}` : "LMS not mapped"}
+            </span>
+          </button>
         </CardContent>
 
         <CardFooter className="pt-3 border-t border-border/50 flex items-center justify-between gap-2">
@@ -113,6 +131,15 @@ function CourseCard({ course, onEdit, onDelete, index }: CourseCardProps) {
 
           {/* Actions — always visible on mobile, hover-only on desktop */}
           <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150 shrink-0">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              onClick={() => onMap(course)}
+              title="Map to finance and the LMS"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+            </Button>
             <Button
               size="icon"
               variant="ghost"
@@ -151,6 +178,7 @@ function CoursesPageContent() {
   const [editCourse, setEditCourse]           = useState<Course | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteCourse, setDeleteCourse]       = useState<Course | null>(null);
+  const [mapCourse, setMapCourse]             = useState<Course | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
@@ -188,6 +216,7 @@ function CoursesPageContent() {
   const openCreate = () => { setEditCourse(null); setDialogOpen(true); };
   const openEdit   = (c: Course) => { setEditCourse(c); setDialogOpen(true); };
   const openDelete = (c: Course) => { setDeleteCourse(c); setDeleteDialogOpen(true); };
+  const openMap    = (c: Course) => setMapCourse(c);
 
   const totalCourses  = pagination?.total ?? 0;
   const activeCourses = courses.filter((c) => c.status === "active").length;
@@ -346,6 +375,7 @@ function CoursesPageContent() {
                   course={course}
                   onEdit={openEdit}
                   onDelete={openDelete}
+                  onMap={openMap}
                   index={i}
                 />
               ))}
@@ -407,6 +437,12 @@ function CoursesPageContent() {
         onOpenChange={setDialogOpen}
         course={editCourse}
       />
+      <MapCourseDialog
+        course={mapCourse}
+        open={!!mapCourse}
+        onClose={() => setMapCourse(null)}
+      />
+
       <DeleteCourseDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}

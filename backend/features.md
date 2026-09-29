@@ -516,3 +516,19 @@ Each feature documents:
 **Permissions**: Any signed-in user can browse and book. The LMS enforces ownership and configured Super Admin overrides for meeting changes.
 
 **Change Log**: Ported the Sales CRM mentor booking integration.
+
+---
+
+## 19. Course mapping — finance products and LMS courses
+
+**Description**: Each course can be mapped to the Delta Finance product it bills against and to every LMS course a student gets for it (two for a bundle). Every enrolment then carries both, so finance bills the right product and its approval opens every course.
+
+**Routes**: `GET /api/v1/courses/finance-items`, `GET /api/v1/courses/lms-courses` (both `authenticate` → `checkPermission("leads", "edit")`, before `/:id`), and `PUT /api/v1/courses/:id` now accepting `financeItemId` and `lmsCourseSlugs`.
+
+**Services**: `courseService` (mapping fields), `lmsClient.listLmsCourses`, `financeClient.listFinanceItems`, `StudentService.buildHandoverPayload` (per-course `lmsCourseSlugs`). Bulk scripts: `mapFinanceItems.ts`, `mapLmsCourses.ts`.
+
+**Model**: `Course.lmsCourseSlugs: string[]` (first also kept in `lmsCourseSlug`).
+
+**Tests**: `scripts/course-mapping-e2e.sh` — throwaway mongod, no `.env`, stand-in finance and LMS; the four cases.
+
+**Change Log**: 2026-09-29 — added.

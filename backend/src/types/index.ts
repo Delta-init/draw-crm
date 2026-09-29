@@ -152,8 +152,10 @@ export interface ICourse extends Document {
   status: "active" | "inactive";
   /** The finance catalogue item this course bills against, once mapped. */
   financeItemId?: string | null;
-  /** Which course this is in the LMS, for provisioning a student on approval. */
+  /** Which course this is in the LMS, for provisioning a student on approval — the first of `lmsCourseSlugs`. */
   lmsCourseSlug?: string;
+  /** Every LMS course it opens, in order (a bundle opens more than one). */
+  lmsCourseSlugs?: string[];
   createdAt: Date;
   updatedAt: Date;
 }

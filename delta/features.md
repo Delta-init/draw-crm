@@ -623,3 +623,12 @@ Copy the template at the top and place it in the correct module section.
 - **Navigation**: `Mentors` entry in `components/layout/Sidebar.tsx`
 - **Backend**: Authenticated `/api/v1/mentors/*` routes; schedule and meetings are served by the configured LMS.
 - **State**: React Query keys use the `mentors` prefix; meeting changes invalidate the schedule.
+
+---
+
+## Course mapping (finance products + LMS courses)
+
+- **Page**: `app/(dashboard)/courses/page.tsx` — "Map" on each course card, and mapping chips on the card
+- **Dialog**: `components/courses/MapCourseDialog.tsx`
+- **Backend**: `GET /api/v1/courses/finance-items`, `GET /api/v1/courses/lms-courses`, `PUT /api/v1/courses/:id` with `financeItemId` / `lmsCourseSlugs`
+- **Why**: an enrolment bills against the mapped finance product, and its approval opens every mapped LMS course (a bundle opens two)

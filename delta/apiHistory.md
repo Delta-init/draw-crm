@@ -1338,3 +1338,15 @@ All routes require authentication and call the Draw backend, which proxies the L
 **Params:** `memberId`, `isDone`, `search`, `page`, `limit`
 **Response:** `{ data: TeamReminderItem[], pagination }`
 **Used by:** `TeamRemindersTab`
+
+## Course mapping hooks (added 2026-09-29)
+
+**File:** `hooks/useCourses.ts`
+
+| Hook | Query key | Endpoint | Notes |
+|------|-----------|----------|-------|
+| `useFinanceItems(enabled)` | `["finance-items"]` | `GET /api/v1/courses/finance-items` | Delta Finance's products (`FinanceItem[]`); `[]` when the server is not connected to finance |
+| `useLmsCourses(enabled)` | `["lms-courses"]` | `GET /api/v1/courses/lms-courses` | The LMS's published courses (`LmsCourse[]`, by title) |
+| `useMapCourse()` | invalidates `["courses"]` | `PUT /api/v1/courses/:id` | Body `{ financeItemId, lmsCourseSlugs }` — `""` / `[]` unmap; toasts "Mapping saved" |
+
+**Used by:** `MapCourseDialog`. Both lists are fetched only while the dialog is open (`enabled = open`), and need `leads.edit`.

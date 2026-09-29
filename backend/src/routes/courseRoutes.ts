@@ -8,6 +8,8 @@ import {
   getCourseById,
   updateCourse,
   deleteCourse,
+  getFinanceItems,
+  getLmsCourses,
 } from "../controllers/courseController.js";
 
 const router = Router();
@@ -19,6 +21,12 @@ router.get("/all", getAllCourses);
 
 // Paginated list
 router.get("/", getCourses);
+
+// What a course can be mapped to — finance's products, the LMS's courses — for
+// the Map screen. Behind the permission that edits courses, and registered
+// before "/:id", which would otherwise take them for course ids.
+router.get("/finance-items", checkPermission("leads", "edit"), getFinanceItems);
+router.get("/lms-courses", checkPermission("leads", "edit"), getLmsCourses);
 
 // Single course
 router.get("/:id", getCourseById);

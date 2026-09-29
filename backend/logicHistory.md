@@ -619,3 +619,15 @@ Google Sheets columns map to Lead fields:
 ## LMS Mentor Booking
 
 Authenticated requests flow from the Draw `/mentors` page through `/api/v1/mentors/*`, `mentorController`, and `mentorService` to the LMS service API. The backend supplies the signed-in user's email as actor, scopes calls using `LMS_REMOTE_ORG_ID`, and leaves schedule availability, meeting ownership, and conflict decisions to the LMS. No meeting data is stored in Draw's database.
+
+---
+
+## Course mapping — where a course goes when it is sold (2026-09-29)
+
+Each course maps to two things:
+- **Finance product** (`financeItemId`) — the Delta Finance catalogue item the invoice line bills against. Unmapped, finance bills the line as typed text and flags "not mapped to a catalogue item". The price billed is always Draw's own (the student's fee split across their courses), mapped or not.
+- **LMS course(s)** (`lmsCourseSlugs`, first also in `lmsCourseSlug`) — what the student gets once accounts approve the sale. A bundle ("COURSE 2 - MBT + DWT") opens two. Unmapped, the sale is billed and nobody is enrolled.
+
+Set per course on the Courses page ("Map", `MapCourseDialog`) or in bulk with the two scripts. The lists offered are read live from finance (signed, the organization `FINANCE_ORG_ID` names) and the LMS (public list), so what can be chosen is what exists there now. Name matches are only ever suggested, never applied.
+
+Every enrolment carries each course's product and LMS course list; finance's approval opens every course (finance-delta `lmsCoursesForInvoice`) — each line's product mapping if finance has one, else what Draw sent for that line. End-to-end test: `backend/scripts/course-mapping-e2e.sh`.

@@ -2,6 +2,30 @@ import { Course } from "../models/Course.js";
 import { buildPagination } from "../utils/response.js";
 import type { ICourse } from "../types/index.js";
 
+/** What a caller may say about where a course maps: finance's product, and the LMS course(s) it opens. */
+export interface CourseMapping {
+  /** The finance catalogue item's id; "" or null unmaps it. */
+  financeItemId?: string | null;
+  /** Every LMS course it opens, in order; [] unmaps it. */
+  lmsCourseSlugs?: string[];
+}
+
+/**
+ * The fields to store for a mapping, from what the caller sent: nothing about
+ * a side it did not mention, the course list with its first as
+ * `lmsCourseSlug` — which is what everything reading a single course reads.
+ */
+function mappingFields(mapping: CourseMapping): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  if (mapping.financeItemId !== undefined) fields.financeItemId = mapping.financeItemId || null;
+  if (mapping.lmsCourseSlugs !== undefined) {
+    const slugs = [...new Set(mapping.lmsCourseSlugs.map((s) => s.trim()).filter(Boolean))];
+    fields.lmsCourseSlugs = slugs;
+    fields.lmsCourseSlug = slugs[0] ?? "";
+  }
+  return fields;
+}
+
 export interface CourseFilters {
   search?: string;
   status?: string;
@@ -11,8 +35,9 @@ export interface CourseFilters {
 
 export class CourseService {
   // ── Create ──────────────────────────────────────────────────────────────────
-  async createCourse(data: { name: string; description?: string; amount: number; status?: string }) {
-    const course = await Course.create(data);
+  async createCourse(data: { name: string; description?: string; amount: number; status?: string } & CourseMapping) {
+    const { financeItemId, lmsCourseSlugs, ...rest } = data;
+    const course = await Course.create({ ...rest, ...mappingFields({ financeItemId, lmsCourseSlugs }) });
     return course;
   }
 
@@ -57,12 +82,13 @@ export class CourseService {
   }
 
   // ── Update ───────────────────────────────────────────────────────────────────
-  async updateCourse(id: string, data: Partial<{ name: string; description: string; amount: number; status: string }>) {
+  async updateCourse(id: string, data: Partial<{ name: string; description: string; amount: number; status: string }> & CourseMapping) {
     const course = await Course.findById(id);
     if (!course)
       throw Object.assign(new Error("Course not found"), { statusCode: 404 });
 
-    Object.assign(course, data);
+    const { financeItemId, lmsCourseSlugs, ...rest } = data;
+    Object.assign(course, rest, mappingFields({ financeItemId, lmsCourseSlugs }));
     await course.save();
     return course;
   }

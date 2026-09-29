@@ -418,6 +418,7 @@ This file documents every service in `backend/src/services/`. Read this before w
 #### `updateCourse(courseId, data)`
 - Updates any course fields
 - Throws 404 if not found
+- Also takes the mapping (both `createCourse` and `updateCourse`): `financeItemId` (the Delta Finance product; `""`/`null` unmaps) and `lmsCourseSlugs` (every LMS course it opens, in order, de-duplicated; `[]` unmaps). `lmsCourseSlug` is always stored as the first of the list, so single-course readers keep working. A side the caller does not mention is left alone — editing a name or fee never touches the mapping.
 
 #### `deleteCourse(courseId)`
 - Hard delete
@@ -591,3 +592,21 @@ This file documents every service in `backend/src/services/`. Read this before w
 **Data ownership**: Mentor availability and meeting records remain in the LMS; Draw does not mirror them in MongoDB.
 
 **Methods**: `schedule`, `classDetail`, `scheduleMeeting`, `getMeeting`, `updateMeeting`, `cancelMeeting`, and `callLms` (15-second request timeout).
+
+---
+
+## Course mapping — finance products and LMS courses (2026-09-29)
+
+#### `lmsClient.listLmsCourses()` — `src/services/lmsClient.ts`
+- The LMS's published courses (`{ slug, title }`, sorted by title), read live from its public list `GET {LMS_API_URL}/api/v1/courses?per_page=100` — no secret needed
+- `[]` when `LMS_API_URL` is not set; throws when the LMS answers an error, so the Map screen can say so
+
+#### `financeClient.listFinanceItems()` — `src/services/financeClient.ts` (existing)
+- Now used by `GET /api/v1/courses/finance-items` for the Map screen
+
+#### `StudentService.buildHandoverPayload(studentId)` — `src/services/studentService.ts`
+- Each course line now carries `lmsCourseSlugs` (every LMS course it opens — two for a bundle) alongside `lmsCourseSlug` (the first); finance's approval opens them all
+- A course mapped before the list existed (only `lmsCourseSlug`) sends `[lmsCourseSlug]`
+
+#### Scripts — `src/scripts/mapFinanceItems.ts`, `src/scripts/mapLmsCourses.ts`
+- Bulk mapping on the server; dry run by default, `--apply` writes exact name matches only, `--set "COURSE=value"` for anything else (LMS: several courses separated by commas), `--force` to overwrite an existing mapping

@@ -529,3 +529,13 @@ view | create | edit | delete | approve | export
 ### Mentor booking routes
 
 All `/api/v1/mentors/*` routes require `authenticate`. Meeting ownership and Super Admin override checks are delegated to the LMS using the acting user's email.
+
+### Course mapping routes (2026-09-29)
+
+| Route | Chain | Notes |
+|-------|-------|-------|
+| `GET /api/v1/courses/finance-items` | `authenticate` → `checkPermission("leads", "edit")` | Delta Finance's products for the Map screen; `[]` when finance is not configured |
+| `GET /api/v1/courses/lms-courses` | `authenticate` → `checkPermission("leads", "edit")` | The LMS's published courses for the Map screen |
+| `PUT /api/v1/courses/:id` (existing) | `authenticate` → `checkPermission("leads", "edit")` | Now also accepts `financeItemId` and `lmsCourseSlugs` |
+
+Both GET routes are registered **before** `/:id` in `courseRoutes.ts` — otherwise `/:id` takes "finance-items" for a course id (Bugs #6, #7).

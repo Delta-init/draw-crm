@@ -94,3 +94,32 @@ export async function callLms<T>(
     clearTimeout(timer);
   }
 }
+
+export interface LmsCourse {
+  slug: string;
+  title: string;
+}
+
+/**
+ * The LMS's published courses, for mapping a course onto the one(s) it opens
+ * — read live from the LMS's public course list, which needs no secret: it is
+ * what anybody browsing the LMS sees. Empty when no LMS address is set. Throws
+ * when the LMS cannot be read, so the Map screen says so rather than offering
+ * nothing to map to.
+ */
+export async function listLmsCourses(): Promise<LmsCourse[]> {
+  if (!env.LMS_API_URL) return [];
+  const res = await fetch(`${baseUrl()}/api/v1/courses?per_page=100`, { signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) throw new Error(`The LMS answered ${res.status} for its course list`);
+  const body = (await res.json().catch(() => ({}))) as { data?: unknown };
+  const data = body.data as unknown;
+  const list = (Array.isArray(data)
+    ? data
+    : Array.isArray((data as { courses?: unknown[] } | undefined)?.courses)
+      ? (data as { courses: unknown[] }).courses
+      : []) as { slug?: unknown; title?: unknown; name?: unknown }[];
+  return list
+    .map((c) => ({ slug: String(c.slug ?? ""), title: String(c.title ?? c.name ?? "") }))
+    .filter((c) => c.slug)
+    .sort((a, b) => a.title.localeCompare(b.title));
+}

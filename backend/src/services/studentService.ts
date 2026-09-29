@@ -230,8 +230,8 @@ export class StudentService {
    * Every course on the student, one line each — Draw's enrolments hold an
    * array from the start, unlike Delta's single course, so a sale of three
    * courses is one invoice with three lines rather than three invoices for
-   * one sale. See finance's own note on `courses` in its inbound schema for
-   * why LMS provisioning still follows only the first.
+   * one sale. Each course carries every LMS course it opens (two for a
+   * bundle), and finance's approval opens them all.
    *
    * Built from the student as it stands right now, which is a snapshot at
    * the close and the current record for a correction after finance sends
@@ -242,13 +242,13 @@ export class StudentService {
    */
   async buildHandoverPayload(studentId: string): Promise<Record<string, unknown> | null> {
     const student = await Student.findById(studentId)
-      .populate("courses", "name amount financeItemId lmsCourseSlug")
+      .populate("courses", "name amount financeItemId lmsCourseSlug lmsCourseSlugs")
       .populate("assignedTo", "name email")
       .lean();
     if (!student) return null;
 
     const courseDocs = ((student.courses ?? []) as unknown as {
-      name?: string; amount?: number; financeItemId?: string | null; lmsCourseSlug?: string;
+      name?: string; amount?: number; financeItemId?: string | null; lmsCourseSlug?: string; lmsCourseSlugs?: string[];
     }[]).filter(Boolean);
     if (courseDocs.length === 0) return null;
 
@@ -273,11 +273,15 @@ export class StudentService {
         ? totalFee - allocated
         : Math.round((totalFee * (c.amount ?? 0)) / listTotal);
       allocated += amountMinor;
+      // Every LMS course this one opens — the list where it was mapped as one,
+      // the single slug from before otherwise.
+      const listed = (c.lmsCourseSlugs ?? []).map((s) => s.trim()).filter(Boolean);
+      const lms = listed.length ? listed : c.lmsCourseSlug?.trim() ? [c.lmsCourseSlug.trim()] : [];
       return {
         name: c.name ?? "Course",
         amountMinor,
         ...(c.financeItemId ? { itemId: c.financeItemId } : {}),
-        ...(c.lmsCourseSlug?.trim() ? { lmsCourseSlug: c.lmsCourseSlug.trim() } : {}),
+        ...(lms.length ? { lmsCourseSlug: lms[0], lmsCourseSlugs: lms } : {}),
       };
     });
 

@@ -8,11 +8,25 @@ const courseService = new CourseService();
 
 // ─── Validation Schemas ───────────────────────────────────────────────────────
 
+/**
+ * Where a course maps: the finance product it bills against ("" or null to
+ * unmap), and every LMS course it opens, in order ([] to unmap) — two for a
+ * bundle. Slugs as the LMS writes them: lowercase letters, digits, hyphens.
+ */
+const mappingSchema = {
+  financeItemId: z.string().regex(/^[a-f\d]{24}$/i, "Not a finance item id").or(z.literal("")).nullable().optional(),
+  lmsCourseSlugs: z
+    .array(z.string().trim().regex(/^[a-z0-9][a-z0-9-]{0,199}$/, "Not an LMS course slug"))
+    .max(10, "At most 10 LMS courses")
+    .optional(),
+};
+
 const createCourseSchema = z.object({
   name: z.string().min(1, "Course name is required").max(150),
   description: z.string().max(1000).optional(),
   amount: z.number().min(0, "Amount cannot be negative"),
   status: z.enum(["active", "inactive"]).optional(),
+  ...mappingSchema,
 });
 
 const updateCourseSchema = z.object({
@@ -20,6 +34,7 @@ const updateCourseSchema = z.object({
   description: z.string().max(1000).optional().nullable(),
   amount: z.number().min(0).optional(),
   status: z.enum(["active", "inactive"]).optional(),
+  ...mappingSchema,
 });
 
 // ─── Controllers ─────────────────────────────────────────────────────────────
@@ -108,6 +123,45 @@ export const deleteCourse = async (
   try {
     const result = await courseService.deleteCourse(req.params.id);
     sendSuccess(res, result.message, null);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Delta Finance's catalogue, for mapping a course onto the product it bills
+ * against. Read live, so what is offered is what exists there now. Empty, not
+ * an error, when this server is not connected to finance.
+ */
+export const getFinanceItems = async (
+  _req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { listFinanceItems, financeConfigured } = await import("../services/financeClient.js");
+    if (!financeConfigured()) {
+      sendSuccess(res, "Finance integration is not configured", []);
+      return;
+    }
+    sendSuccess(res, "Finance catalogue retrieved", await listFinanceItems());
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * The LMS's courses, for mapping a course onto the one(s) it opens. Read live
+ * from the LMS's public course list. Empty when no LMS address is set.
+ */
+export const getLmsCourses = async (
+  _req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { listLmsCourses } = await import("../services/lmsClient.js");
+    sendSuccess(res, "LMS courses retrieved", await listLmsCourses());
   } catch (err) {
     next(err);
   }
