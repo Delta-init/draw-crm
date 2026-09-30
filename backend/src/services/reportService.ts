@@ -33,6 +33,14 @@ export class ReportService {
     }, {});
   }
 
+  // Add up per-status counts that statusSumFields() produced in an earlier $group
+  private statusTotalFields() {
+    return ALL_STATUSES.reduce<Record<string, unknown>>((acc, s) => {
+      acc[s] = { $sum: `$${s}` };
+      return acc;
+    }, {});
+  }
+
   // ── 1. Overview KPIs + status & source distributions ────────────────────────
 
   async getOverview(dateFrom?: string, dateTo?: string) {
@@ -149,45 +157,95 @@ export class ReportService {
   }
 
   // ── 3. User rankings ─────────────────────────────────────────────────────────
+  //
+  // Money is counted the way the Revenue tab counts it, so the two agree:
+  //   revenue        payments *paid* in the period, whenever the lead came in,
+  //                  credited to whoever the lead is assigned to now
+  //   pendingAmount  still owed, all time: per team the member sells in, the
+  //                  selling amount (else the courses' list price) less
+  //                  everything paid, never below 0 — the member "due" of the
+  //                  Revenue tab and the team page
+  // Lead flow stays on leads *created* in the period: total, the status counts
+  // and conversionRate. Someone paid in the period with no new lead in it is
+  // listed with a total of 0.
 
   async getUserRankings(dateFrom?: string, dateTo?: string, limit = 20) {
-    const match = this.buildDateFilter(dateFrom, dateTo);
+    const leadMatch    = this.buildDateFilter(dateFrom, dateTo);
+    const paymentMatch = this.buildPaymentDateFilter(dateFrom, dateTo);
+    const take         = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 20;
+    const assigned     = { assignedTo: { $exists: true, $ne: null } };
 
     const agg = await Lead.aggregate([
-      { $match: { ...match, assignedTo: { $exists: true, $ne: null } } },
-      // Lookup course to get course fee for pending calculation
+      // Leads that came in during the period
+      { $match: { ...leadMatch, ...assigned } },
+      { $group: { _id: "$assignedTo", total: { $sum: 1 }, ...this.statusSumFields() } },
+      { $addFields: { listed: true } },
+      // Payments received during the period
       {
-        $lookup: {
-          from:         "courses",
-          localField:   "courses",
-          foreignField: "_id",
-          as:           "courseInfo",
+        $unionWith: {
+          coll: Lead.collection.name,
+          pipeline: [
+            { $match: assigned },
+            { $unwind: "$payments" },
+            { $match: paymentMatch },
+            { $group: { _id: "$assignedTo", revenue: { $sum: "$payments.amount" } } },
+            { $addFields: { listed: true } },
+          ],
+        },
+      },
+      // Still owed, all time, per (team × member)
+      {
+        $unionWith: {
+          coll: Lead.collection.name,
+          pipeline: [
+            { $match: { ...assigned, team: { $exists: true, $ne: null } } },
+            { $lookup: { from: "courses", localField: "courses", foreignField: "_id", as: "courseInfo" } },
+            {
+              $addFields: {
+                effectiveAmount: {
+                  $ifNull: [
+                    "$sellingAmount",
+                    {
+                      $cond: [
+                        { $gt: [{ $size: { $ifNull: ["$courseInfo", []] } }, 0] },
+                        { $sum: "$courseInfo.amount" },
+                        null,
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+            { $match: { effectiveAmount: { $ne: null } } },
+            {
+              $group: {
+                _id:                  { team: "$team", member: "$assignedTo" },
+                totalEffectiveAmount: { $sum: "$effectiveAmount" },
+                totalPaid:            { $sum: { $sum: "$payments.amount" } },
+              },
+            },
+            {
+              $project: {
+                _id:           "$_id.member",
+                pendingAmount: { $max: [0, { $subtract: ["$totalEffectiveAmount", "$totalPaid"] }] },
+              },
+            },
+          ],
         },
       },
       {
         $group: {
-          _id:           "$assignedTo",
-          total:         { $sum: 1 },
-          revenue:       { $sum: { $sum: "$payments.amount" } },
-          courseRevenue: {
-            $sum: {
-              $cond: [
-                { $gt: [{ $size: { $ifNull: ["$courseInfo", []] } }, 0] },
-                { $sum: "$courseInfo.amount" },
-                0,
-              ],
-            },
-          },
-          ...this.statusSumFields(),
+          _id:           "$_id",
+          listed:        { $max: "$listed" },
+          total:         { $sum: "$total" },
+          revenue:       { $sum: "$revenue" },
+          pendingAmount: { $sum: "$pendingAmount" },
+          ...this.statusTotalFields(),
         },
       },
-      {
-        $addFields: {
-          pendingAmount: { $max: [0, { $subtract: ["$courseRevenue", "$revenue"] }] },
-        },
-      },
-      { $sort: { revenue: -1, total: -1 } },
-      { $limit: limit },
+      // Only people with a lead or a payment in the period
+      { $match: { listed: true } },
+      { $sort: { revenue: -1, total: -1, _id: 1 } },
       {
         $lookup: {
           from:         "users",
@@ -197,7 +255,7 @@ export class ReportService {
         },
       },
       { $unwind: { path: "$user", preserveNullAndEmptyArrays: false } },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { $limit: take },
       {
         $project: {
           userId:        "$_id",
@@ -224,27 +282,47 @@ export class ReportService {
   }
 
   // ── 4. Team rankings ─────────────────────────────────────────────────────────
+  //
+  // totalPayments is what the team received in the period — payments *paid*
+  // in it, whenever the lead came in — as on the Revenue tab. Lead flow stays
+  // on leads *created* in the period. With no dates (the dashboard) that is
+  // every payment and every lead, as before.
 
   async getTeamRankings(dateFrom?: string, dateTo?: string) {
-    const match = this.buildDateFilter(dateFrom, dateTo);
+    const leadMatch    = this.buildDateFilter(dateFrom, dateTo);
+    const paymentMatch = this.buildPaymentDateFilter(dateFrom, dateTo);
+    const inTeam       = { team: { $exists: true, $ne: null } };
 
     // This-month window for the thisMonth field (always current month, regardless of date filter)
     const rankNow = new Date();
     const rankMonthStart = new Date(Date.UTC(rankNow.getUTCFullYear(), rankNow.getUTCMonth(), 1));
 
     const agg = await Lead.aggregate([
-      { $match: { ...match, team: { $exists: true, $ne: null } } },
+      // Leads that came in during the period
+      { $match: { ...leadMatch, ...inTeam } },
+      { $group: { _id: "$team", total: { $sum: 1 }, ...this.statusSumFields() } },
+      // Payments received during the period
       {
-        $group: {
-          _id:           "$team",
-          total:         { $sum: 1 },
-          // Sum all payments[].amount across every lead in this team
-          totalPayments: { $sum: { $sum: "$payments.amount" } },
-          ...this.statusSumFields(),
+        $unionWith: {
+          coll: Lead.collection.name,
+          pipeline: [
+            { $match: inTeam },
+            { $unwind: "$payments" },
+            { $match: paymentMatch },
+            { $group: { _id: "$team", totalPayments: { $sum: "$payments.amount" } } },
+          ],
         },
       },
-      // Rank by highest total payments collected
-      { $sort: { totalPayments: -1, total: -1 } },
+      {
+        $group: {
+          _id:           "$_id",
+          total:         { $sum: "$total" },
+          totalPayments: { $sum: "$totalPayments" },
+          ...this.statusTotalFields(),
+        },
+      },
+      // Rank by money received
+      { $sort: { totalPayments: -1, total: -1, _id: 1 } },
       {
         $lookup: {
           from:         "teams",

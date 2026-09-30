@@ -447,13 +447,21 @@ This file documents every service in `backend/src/services/`. Read this before w
 - Groups lead creation by day/week/month
 - Returns `[{ date, count, byStatus }]` for charting
 
-#### `getUserRankings(dateRange, teamId?)`
-- Aggregates per-user: lead count, closed count, revenue
-- Returns `[{ userId, name, leads, closed, revenue, conversionRate }]` sorted by revenue desc
+#### `getUserRankings(dateFrom?, dateTo?, limit = 20)`
+- Reports → Overview "User Rankings"; money counted like the Revenue tab (2026-09-30)
+- `revenue`: payments whose `paidAt` is in the period, whenever the lead was created, credited to the lead's current `assignedTo` (= `getRevenueOverview` `agentBreakdown`)
+- `pendingAmount`: all time, per (team × member) `max(0, Σ(sellingAmount ?? Σcourse.amount) − Σpaid)`, summed per person (= the member "due" of `getRevenueTeams` / `getTeamRevenue`)
+- `total`, per-status counts, `conversionRate`: leads **created** in the period
+- Lists anyone with a lead created or a payment made in the period (a payment alone → `total` 0); unknown users dropped; `limit` not a positive number → 20
+- Returns `[{ userId, name, email, designation, total, revenue, pendingAmount, <status counts>, conversionRate, rank }]` sorted by revenue, then total
 
-#### `getTeamRankings(dateRange)`
-- Same as user rankings but grouped by team
-- Returns `[{ teamId, name, leads, closed, revenue }]`
+#### `getTeamRankings(dateFrom?, dateTo?)`
+- Reports → Overview "Team Rankings", the dashboard's Team Performance Rankings (no dates = all time) and the Excel/PDF report exports
+- `totalPayments`: payments whose `paidAt` is in the period (= `getRevenueOverview` `teamBreakdown`); `total`, status counts, `conversionRate`: leads created in the period
+- Returns `[{ teamId, name, description, memberCount, total, totalPayments, <status counts>, conversionRate, rank, thisMonth }]` sorted by totalPayments, then total
+
+#### `statusTotalFields()` (private)
+- `$sum` of each per-status count produced upstream by `statusSumFields()` — used where lead-flow rows and payment rows are merged
 
 #### `getTeamSplit(dateRange)`
 - Pie chart data: how leads are distributed across teams

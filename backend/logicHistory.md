@@ -631,3 +631,15 @@ Each course maps to two things:
 Set per course on the Courses page ("Map", `MapCourseDialog`) or in bulk with the two scripts. The lists offered are read live from finance (signed, the organization `FINANCE_ORG_ID` names) and the LMS (public list), so what can be chosen is what exists there now. Name matches are only ever suggested, never applied.
 
 Every enrolment carries each course's product and LMS course list; finance's approval opens every course (finance-delta `lmsCoursesForInvoice`) — each line's product mapping if finance has one, else what Draw sent for that line. End-to-end test: `backend/scripts/course-mapping-e2e.sh`.
+
+---
+
+## Revenue in reports — counted by the date it was paid (2026-09-30)
+
+One rule everywhere a report shows money per person or team: **a payment counts in the period its `paidAt` falls in**, whenever the lead was created and whenever the payment was typed in, and it counts for whoever the lead is assigned to **now** (and the lead's team). Periods are `dateFrom T00:00:00.000Z` → `dateTo T23:59:59.999Z` (`buildPaymentDateFilter`).
+
+- Reports → Revenue tab (`getRevenueOverview`, `getRevenueTimeline`, `getRevenueTeams`), the team page (`getTeamRevenue`) and, since this date, Reports → Overview's User/Team Rankings (`getUserRankings`, `getTeamRankings`) all use it.
+- Before, the Overview rankings took the leads *created* in the period and added every payment on them, so a lead from August paid in September was August's money there and September's on the Revenue tab (DRAW 1, September 2026: 64,224 vs 71,570.25).
+- **Pending / due** is all time, not per period: per (team × member), `max(0, Σ(sellingAmount ?? Σ course amounts) − Σ every payment)`. The agreed selling amount wins over the course's list price. Netted per person, so an overpaid lead offsets an unpaid one. (The Revenue tab's "Total Pending" KPI is the one exception: the same formula over leads created in the period.)
+- **Lead flow** — lead counts, status mix, conversion — stays on leads *created* in the period.
+- Not yet on this rule: the team PDF export (`exportTeamPdf`) still adds up the payments on leads created in the period for its member rows.
