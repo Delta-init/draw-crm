@@ -386,6 +386,9 @@ export class StudentService {
     return {
       externalId: String(student._id),
       source: "draw-crm",
+      // Which sales CRM sold it, shown as a tag in finance, the LMS and
+      // Tetra Commission — the same field Delta's and the Remote CRM send.
+      crm: "draw",
       customer: {
         name: student.name,
         email: student.email ?? "",

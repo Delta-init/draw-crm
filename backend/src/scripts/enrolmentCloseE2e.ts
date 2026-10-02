@@ -216,6 +216,7 @@ const sentFast = await waitFor(async () => (await FinanceHandover.findOne({ stud
 check("finance has it within seconds — sent at the close, not on the next minute's pass", sentFast && Date.now() - t0 < 8_000, `${Date.now() - t0}ms`);
 const p1 = received[0]?.payload ?? {};
 check("signed as finance checks, for the organization configured", badSignatures === 0 && received[0]?.org === ORG_ID, `bad=${badSignatures}`);
+check("tagged as sold through Draw, for finance, the LMS and Tetra Commission to show", p1.crm === "draw", String(p1.crm));
 check("from draw-crm, to the client by email and phone", p1.source === "draw-crm" && at(p1, "customer.email") === "abdul76sathar@draw-e2e.test"
   && at(p1, "customer.phone") === "+971509000001" && p1.externalId === String(s1?._id), JSON.stringify(p1.customer));
 const lines = (p1.courses ?? []) as { name: string; amountMinor: number }[];
