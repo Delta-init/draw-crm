@@ -1,11 +1,26 @@
+import { Types } from "mongoose";
+import { z } from "zod";
 import { Student } from "../models/Student.js";
 import { Lead } from "../models/Lead.js";
+import { Course } from "../models/Course.js";
 import type { IStudent, EnrolmentLanguage, EnrolmentPaymentMethod } from "../types/index.js";
 import { ENROLMENT_LANGUAGES, ENROLMENT_PAYMENT_METHODS } from "../types/index.js";
 
 function createError(msg: string, status: number) {
   return Object.assign(new Error(msg), { statusCode: status });
 }
+
+/**
+ * A bonus amount that can be recorded: a real number of at least one minor
+ * unit — finance counts in fils, and refuses a bonus that rounds to none.
+ */
+function isBonusAmount(v: unknown): boolean {
+  const n = Number(v);
+  return v !== null && v !== "" && Number.isFinite(n) && Math.round(n * 100) > 0;
+}
+
+/** An email finance will take: its intake refuses an enrolment without a valid one. */
+const isEmail = (v: string): boolean => z.email().safeParse(v).success;
 
 // Auto-generate enrollment number: STU-0001, STU-0002, ...
 async function nextEnrollmentNumber(): Promise<string> {
@@ -43,7 +58,9 @@ export class StudentService {
     language?: string;
     paymentMethod?: string;
     paymentReceipt?: { name: string; url: string; key: string; size?: number; mimeType?: string } | null;
-  }) {
+    hasBonus?: boolean;
+    bonusAmount?: number;
+  }, performedBy?: string) {
     const existing = await Student.findOne({ leadId: data.leadId });
     if (existing) throw createError("A student already exists for this lead", 409);
 
@@ -53,17 +70,40 @@ export class StudentService {
      * Enrolments predating these fields exist and have to keep loading, so
      * the schema leaves them optional; the requirement belongs at the moment
      * of closing, which is the only moment somebody is in a position to
-     * answer. The receipt is not required — this application has no object
-     * storage wired yet, so there is nowhere for a counsellor to have put one.
+     * answer. The same list Delta CRM's close holds, and two more that only
+     * this one needed:
+     *
+     *   - a course. An enrolment with none was saved and then dropped without
+     *     a word: there is nothing to put on an invoice, so nothing went to
+     *     finance, and the sale was never heard of again.
+     *   - the client's email. Finance's intake refuses an enrolment without a
+     *     valid one, so a close without it failed there, permanently, where
+     *     nobody closing the lead could see it.
+     *
+     * All asked for at once and refused as one list — rejecting them one at a
+     * time means a round trip each to learn what the form could have said.
      */
+    const courseIds = [...new Set((data.courses ?? []).filter(Boolean).map(String))];
+    const coursesFound =
+      courseIds.length > 0 && courseIds.every((id) => Types.ObjectId.isValid(id))
+        ? await Course.countDocuments({ _id: { $in: courseIds } })
+        : 0;
+    const email = String(data.email ?? "").trim().toLowerCase();
+
     const missing: string[] = [];
+    if (courseIds.length === 0 || coursesFound !== courseIds.length) missing.push("a course");
+    if (!isEmail(email)) missing.push("the client's email");
     if (!ENROLMENT_LANGUAGES.includes(data.language as EnrolmentLanguage)) missing.push("language");
     if (!ENROLMENT_PAYMENT_METHODS.includes(data.paymentMethod as EnrolmentPaymentMethod)) {
       missing.push("payment method");
     }
+    if (!data.paymentReceipt?.key || !data.paymentReceipt.url) missing.push("payment receipt");
+    // Yes or no, every time — and a yes is only an answer with its amount.
+    if (typeof data.hasBonus !== "boolean") missing.push("whether a bonus was given");
+    else if (data.hasBonus && !isBonusAmount(data.bonusAmount)) missing.push("the bonus amount");
     if (missing.length) {
       throw createError(
-        `A closing needs ${missing.join(", ")}. Choose the language and payment method, then close again.`,
+        `A closing needs ${missing.join(", ")}. Pick the course, give the client's email, upload the receipt, choose the language and payment method, and say whether a bonus was given, then close again.`,
         422,
       );
     }
@@ -76,8 +116,8 @@ export class StudentService {
       enrollmentNumber,
       name: data.name,
       phone: data.phone,
-      email: data.email,
-      courses: data.courses || undefined,
+      email,
+      courses: courseIds,
       team:   data.team   || undefined,
       assignedTo: data.assignedTo || undefined,
       leadId: data.leadId,
@@ -99,14 +139,56 @@ export class StudentService {
       paymentReceipt: data.paymentReceipt
         ? { ...data.paymentReceipt, uploadedAt: new Date() }
         : undefined,
+      hasBonus: data.hasBonus,
+      bonusAmount: data.hasBonus ? Number(data.bonusAmount) : 0,
       status: "active",
     });
+
+    await this.fillLeadEmail(data.leadId, email, performedBy);
 
     // Queued, not sent. The sale is recorded the moment this returns; the
     // invoice follows when finance is reachable. See financeHandoverWorker.
     await this.queueFinanceHandover(String(student._id), data.leadId);
 
     return this.populateStudent(String(student._id));
+  }
+
+  /**
+   * The email asked for at the close, kept on the lead too — when it had none.
+   *
+   * The lead is where this CRM keeps a client's details, so an address learnt
+   * at the close belongs there rather than only on the enrolment. One the
+   * lead already holds is never replaced from here: correcting it is the
+   * lead's own edit, with its own history. Logged on the lead when somebody
+   * is known to have done it. Never fails the close, which is already saved.
+   *
+   * An update rather than a save, so a lead carrying some older value its
+   * schema would now refuse still gets the email instead of quietly not.
+   */
+  private async fillLeadEmail(leadId: string, email: string, performedBy?: string): Promise<void> {
+    try {
+      await Lead.updateOne(
+        { _id: leadId, $or: [{ email: { $exists: false } }, { email: null }, { email: "" }] },
+        {
+          $set: { email },
+          ...(performedBy
+            ? {
+                $push: {
+                  activityLogs: {
+                    action: "lead_updated",
+                    description: `Email added at the close: ${email}`,
+                    performedBy,
+                    changes: { email: { from: null, to: email } },
+                    createdAt: new Date(),
+                  },
+                },
+              }
+            : {}),
+        },
+      );
+    } catch (err) {
+      console.error("[students] could not keep the email on the lead", err);
+    }
   }
 
   // ── Read ─────────────────────────────────────────────────────────────────────
@@ -212,11 +294,27 @@ export class StudentService {
       }
     }
 
+    /*
+     * The bonus, corrected after the close. Kept here: an enrolment already
+     * with finance is not re-sent for an edit — the bonus reaches finance with
+     * a correction only after finance sends the enrolment back.
+     */
+    if (typeof data.hasBonus === "boolean") student.hasBonus = data.hasBonus;
+    if (data.bonusAmount !== undefined) student.bonusAmount = Number(data.bonusAmount);
+    if (student.hasBonus === true && !isBonusAmount(student.bonusAmount)) {
+      throw createError("A bonus needs an amount above zero — or choose no bonus.", 422);
+    }
+    if (student.hasBonus !== true) student.bonusAmount = 0;
+
     // Recompute pendingAmount and feeStatus if fee fields changed
     const total   = (student as unknown as Record<string, number>).totalFee   as number ?? 0;
     const paid    = (student as unknown as Record<string, number>).paidAmount  as number ?? 0;
     student.pendingAmount = Math.max(0, total - paid);
-    student.feeStatus     = this.computeFeeStatus(total, paid, undefined);
+    // An explicitly sent status is honoured, as it is on create. The figures
+    // decide when nobody says otherwise — but a counsellor who marks an
+    // enrolment paid against a part payment has a reason, and discarding it
+    // made the dropdown on the enrolment dialog do nothing at all.
+    student.feeStatus     = this.computeFeeStatus(total, paid, data.feeStatus);
 
     await student.save();
     return this.populateStudent(id);
@@ -298,6 +396,20 @@ export class StudentService {
       ...(rep?.name ? { salespersonName: rep.name } : {}),
       enrolledOn: (student.enrollmentDate ?? new Date()).toISOString().slice(0, 10),
       declaredPaidMinor: Math.round((student.paidAmount ?? 0) * 100),
+      // The fee less what was paid, in the same minor units as the lines and
+      // the paid figure, so finance sees exactly the difference of what it was
+      // sent. The bonus is never in it.
+      balanceMinor: Math.max(0, totalFee - Math.round((student.paidAmount ?? 0) * 100)),
+      // Whether a bonus was given at the close, for information. Not sent for
+      // an enrolment from before it was asked: unknown is not "no".
+      ...(typeof student.hasBonus === "boolean"
+        ? {
+            bonus: {
+              given: student.hasBonus,
+              amountMinor: student.hasBonus ? Math.round((student.bonusAmount ?? 0) * 100) : 0,
+            },
+          }
+        : {}),
       modeOfStudy: "online" as const,
       language: student.language ?? "",
       ...(student.paymentMethod ? { declaredPaymentMethod: student.paymentMethod } : {}),
@@ -356,6 +468,10 @@ export class StudentService {
         },
         { upsert: true },
       );
+
+      // Out now, in the background; the worker's timer retries whatever this cannot send.
+      const { kickFinanceHandover } = await import("./financeHandoverWorker.js");
+      kickFinanceHandover();
     } catch (err) {
       console.error("[finance] could not queue the handover", err);
     }
@@ -476,6 +592,11 @@ export class StudentService {
 
     const student = await Student.findById(studentId).lean();
     if (!student) return { queued: false, message: "Enrolment not found" };
+    // Said plainly rather than answered "queued": an enrolment with no course
+    // has no line to invoice, and nothing would ever have gone out.
+    if (!(student.courses ?? []).length) {
+      return { queued: false, message: "This enrolment has no course, so there is nothing to invoice — add its course first" };
+    }
 
     const existing = await FinanceHandover.findOne({ studentId }).lean();
 

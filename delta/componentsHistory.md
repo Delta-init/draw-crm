@@ -1011,3 +1011,22 @@
 **Purpose:** Where a course goes when it is sold: the Delta Finance product it bills as (select, with a same-name suggestion) and the LMS course(s) the student gets on approval (checkbox list — tick order is the order they open; two for a bundle). Says so plainly when finance or the LMS is not connected or cannot be read. Saves with `useMapCourse`.
 
 **Course card change:** each card shows two chips — "Finance mapped / not mapped" and "LMS: N courses / LMS not mapped" (semantic tokens: `bg-primary/10 text-primary` mapped, `bg-muted text-muted-foreground` not) — clicking them opens the dialog too.
+
+---
+
+## CloseLeadDialog / CloseLeadsQueue (added 2026-10-02)
+
+**File:** `components/students/CloseLeadDialog.tsx`
+**Props:** `CloseLeadDialog { lead, progress?, onClose, onClosed }` · `CloseLeadsQueue { leadIds, markClosed(leadId), onDone({ closed, skipped }) }`
+**Used in:** `app/(dashboard)/leads/page.tsx` (status menu, bulk Change Status → Closed), `app/(dashboard)/leads/[leadId]/page.tsx` (Change Status → Closed), `components/leads/KanbanBoard.tsx` (a card dropped on Closed), `app/(dashboard)/teams/[teamId]/page.tsx` (bulk → Closed, through the team's own route)
+**Purpose:** Every close goes through the enrolment. Loads the lead fresh (courses populated, payments current) and its enrolment, then mounts `CreateStudentModal`; a lead already enrolled opens its enrolment for editing. The queue opens one lead after another ("2 of 5"); a dismissed dialog skips that lead, which is not closed. The same component Delta CRM uses.
+
+## CreateStudentModal (changed 2026-10-02)
+
+**File:** `components/students/CreateStudentModal.tsx`
+**New props:** `existingStudent?`, `progress?`
+**Now asks for:** the course(s) when none is named (a toggle list — a bundle is several), the client's email when the lead has none, the payment receipt (upload), whether a bonus was given (+ amount). Shows the Balance (fee − paid, the bonus never in it); the fee is editable and starts from the enrolment, else the lead's selling amount, else the courses' prices; "Collected now" becomes a payment on the lead. The footer names what is still needed. "Enrolment" / Save enrolment for a lead already enrolled.
+
+## EditStudentModal (changed 2026-10-02)
+
+Bonus given? (Not answered / No / Yes) + amount; only an answer is sent.

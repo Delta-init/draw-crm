@@ -203,6 +203,48 @@ function formatTime(iso: string) {
 
 ## 📦 Components
 
+### A Lead Could Be Closed Without Its Enrolment
+- **Date**: 2026-10-02
+- **Category**: components
+
+**What happened**:
+Dragging a Kanban card to Closed, and bulk Change Status → Closed on the leads and team pages, set the status directly — no enrolment, so finance never heard of the sale. Closing a lead that was already enrolled skipped the dialog too: the leads page's `StudentModalWrapper` called `onSettled()` during render, and the lead page fell through to a bare status update.
+
+**Why it happened**:
+The enrolment dialog was wired to one path (the status menu); every other way of changing status went straight to the status endpoint.
+
+**Fix**:
+`CloseLeadDialog` / `CloseLeadsQueue` (as in Delta CRM): every close path opens the enrolment, several leads one after another; a lead already enrolled opens its enrolment for editing; only a saved enrolment closes the lead.
+
+**Rule — Never do this again**:
+> Any control that can set a lead to "closed" must go through `CloseLeadDialog` — never call the status endpoint with "closed" directly.
+
+---
+
+### A Long Course Name Widened the Close Dialog Past Its Edge
+- **Date**: 2026-10-02
+- **Category**: tailwind
+
+**What happened**:
+In the close dialog's details strip, "COURSE 1 - MARKET BREAKOUT THEORY (WITH CREDIT) · $2,250" pushed the whole dialog wider than its box: the Balance tile, the inputs and the Create button were cut off on the right.
+
+**Why it happened**:
+`truncate` on a flex child does nothing while the child keeps the default `min-width: auto` — it never shrinks below its text.
+
+**Fix**:
+`min-w-0 flex-1` on the value; the course line wraps (`line-clamp-3 break-words`) rather than truncating, since a bundle's second course is the part that would be cut.
+
+**Rule — Never do this again**:
+> In a flex row, `truncate` needs `min-w-0` on the same element.
+
+**Code**:
+// ❌ Wrong
+<span className="truncate">{value}</span>
+// ✅ Correct
+<span className="min-w-0 flex-1 truncate">{value}</span>
+
+---
+
 ### Duplicate Delete Dialogs Across Modules
 - **Date**: 2026-04-01
 - **Category**: components
@@ -344,5 +386,5 @@ No `min` attribute on `datetime-local` input, and no frontend validation.
 
 Copy the template at the top and place it at the **top** of the correct category section.
 
-**Entry count**: 9
+**Entry count**: 11
 *(Increment every time you add a mistake)*

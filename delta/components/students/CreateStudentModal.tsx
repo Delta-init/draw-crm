@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   GraduationCap, X, User2, Phone, Mail, BookOpen,
-  Calendar, DollarSign, StickyNote, CheckCircle2,
+  Calendar, DollarSign, StickyNote, CheckCircle2, Paperclip, Upload, Gift,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,43 +17,180 @@ import {
   ENROLMENT_LANGUAGES, ENROLMENT_PAYMENT_METHODS, PAYMENT_METHOD_LABELS,
   type EnrolmentLanguage, type EnrolmentPaymentMethod,
 } from "@/types/student";
-import { toast } from "@/lib/toast";
-import { useCreateStudent } from "@/hooks/useStudents";
+import { useCreateStudent, useUpdateStudent, uploadReceipt } from "@/hooks/useStudents";
+import { useAllCourses } from "@/hooks/useCourses";
+import { useAddPayment } from "@/hooks/usePayments";
 import type { Lead } from "@/types/lead";
 import type { Course } from "@/types/course";
-import type { FeeStatus } from "@/types/student";
+import type { FeeStatus, Student, StoredReceipt } from "@/types/student";
 
 interface Props {
   open: boolean;
   lead: Lead;
+  /**
+   * The enrolment this lead already has, when it has one.
+   *
+   * Closing a lead that was closed before is not a mistake — somebody moved it
+   * to follow-up and back, and wants to see the enrolment again. Shown and
+   * editable here rather than skipped, so a second close does not look like
+   * nothing happened at all.
+   */
+  existingStudent?: Student | null;
+  /** "2 of 5" when this is one of several leads being closed together. */
+  progress?: string;
+  /** Dismissed: the lead keeps the status it had. */
   onClose: () => void;
   onCreated: () => void;
 }
 
-export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
-  const courseObjs = (lead.courses ?? []).map((c) => (typeof c === "object" && c !== null ? c as Course : null)).filter(Boolean) as Course[];
-  const totalFee  = courseObjs.reduce((s, c) => s + (c.amount ?? 0), 0);
-  const paidAmount = (lead.payments ?? []).reduce((s, p) => s + p.amount, 0);
-  const pending   = Math.max(0, totalFee - paidAmount);
+/** The shape the lead model itself accepts; finance's own check is stricter still. */
+const EMAIL_RE = /^\S+@\S+\.\S+$/;
+
+/** The populated courses on a lead or an enrolment — ids on their own are no use here. */
+const courseObjects = (list?: (Course | string)[] | null): Course[] =>
+  (list ?? []).filter((c): c is Course => typeof c === "object" && c !== null);
+
+const sumOf = (list: Course[]) => list.reduce((s, c) => s + (c.amount ?? 0), 0);
+
+export function CreateStudentModal({ open, lead, existingStudent, progress, onClose, onCreated }: Props) {
+  const editing = Boolean(existingStudent);
+
+  /*
+   * The courses already named — on the enrolment when there is one, else on
+   * the lead, picked during the sale. Draw sells bundles, so it is a list.
+   */
+  const studentCourses = courseObjects(existingStudent?.courses);
+  const knownCourses = studentCourses.length ? studentCourses : courseObjects(lead.courses);
+
+  // Only needed when nothing is named, which is the only time the list shows.
+  const { data: courses = [], isLoading: coursesLoading } = useAllCourses();
+  const [courseIds, setCourseIds] = useState<string[]>([]);
+  const pickedCourses = knownCourses.length ? knownCourses : courses.filter((c) => courseIds.includes(c._id));
+
+  /*
+   * The fee, and it can be argued with.
+   *
+   * Seeded from what the enrolment already stores, else the price agreed on
+   * the lead, else the courses' list prices added up — an enrolment created
+   * before a course was picked has a fee of zero, and showing that beside a
+   * course priced at 5,200 makes every figure under it wrong. Editable
+   * because the price on the brochure is not always the price that was agreed.
+   */
+  const [feeInput, setFeeInput] = useState(
+    String(existingStudent?.totalFee || lead.sellingAmount || sumOf(knownCourses) || ""),
+  );
+  const totalFee = Number(feeInput) || 0;
+
+  function toggleCourse(id: string) {
+    const next = courseIds.includes(id) ? courseIds.filter((x) => x !== id) : [...courseIds, id];
+    setCourseIds(next);
+    // The fee follows what was just chosen, rather than leaving the old
+    // number under a new set of courses.
+    const listed = sumOf(courses.filter((c) => next.includes(c._id)));
+    if (listed > 0) setFeeInput(String(listed));
+  }
+
+  /** What was collected before today, from the payments already on the lead. */
+  const alreadyPaid = (lead.payments ?? []).reduce((s, p) => s + p.amount, 0);
+  const [paidNowInput, setPaidNowInput] = useState("");
+  const paidNow = Math.max(0, Number(paidNowInput) || 0);
+  const paidAmount = alreadyPaid + paidNow;
+  const pending = Math.max(0, totalFee - paidAmount);
 
   const computedFeeStatus: FeeStatus =
     totalFee <= 0 || paidAmount <= 0 ? "pending"
     : paidAmount >= totalFee         ? "paid"
     :                                  "partial";
 
-  const [notes, setNotes] = useState("");
-  const [enrollmentDate, setEnrollmentDate] = useState(new Date().toISOString().slice(0, 10));
-  const [feeStatus, setFeeStatus] = useState<FeeStatus>(computedFeeStatus);
-  /*
-   * Asked for at the close, because this is the only moment somebody is in a
-   * position to answer — and because finance's own intake refuses an
-   * enrolment with no language at all. Required here rather than left to
-   * default, the same rule Delta CRM's closing form holds.
-   */
-  const [language, setLanguage] = useState<EnrolmentLanguage | "">("");
-  const [paymentMethod, setPaymentMethod] = useState<EnrolmentPaymentMethod | "">("");
+  const [notes, setNotes] = useState(existingStudent?.notes ?? "");
+  const [enrollmentDate, setEnrollmentDate] = useState(
+    (existingStudent?.enrollmentDate ?? new Date().toISOString()).slice(0, 10),
+  );
+  const [feeStatus, setFeeStatus] = useState<FeeStatus>(existingStudent?.feeStatus ?? computedFeeStatus);
+  const [feeStatusTouched, setFeeStatusTouched] = useState(false);
+  // Follows the numbers until somebody sets it by hand, then stays put.
+  const effectiveFeeStatus = feeStatusTouched ? feeStatus : computedFeeStatus;
 
   const createMut = useCreateStudent();
+  const updateMut = useUpdateStudent();
+  const addPayment = useAddPayment(lead._id);
+  const saving = createMut.isPending || updateMut.isPending || addPayment.isPending;
+
+  // An enrolment with no course bills nothing — it was saved and then never
+  // reached finance at all. Where the lead never named one it is chosen here.
+  const courseMissing = pickedCourses.length === 0;
+
+  /*
+   * The client's email, asked for only when the lead has none that works.
+   * Finance refuses an enrolment without one, so a close without it failed
+   * there, out of sight. Kept on the lead too once saved.
+   */
+  const leadEmail = (lead.email ?? "").trim();
+  const leadEmailOk = EMAIL_RE.test(leadEmail);
+  const askEmail = !editing && !leadEmailOk;
+  const [emailInput, setEmailInput] = useState(leadEmailOk ? "" : leadEmail);
+  const email = leadEmailOk ? leadEmail : emailInput.trim();
+  const emailMissing = askEmail && !EMAIL_RE.test(email);
+
+  /*
+   * What a close cannot be made without, because finance needs it: what the
+   * courses are taught in, how the money was taken and proof that it was.
+   *
+   * Only for a new close. Editing an enrolment made before these existed must
+   * not be blocked on filling in what nobody was asked for at the time.
+   */
+  const [language, setLanguage] = useState<EnrolmentLanguage | "">(existingStudent?.language ?? "");
+  const [paymentMethod, setPaymentMethod] = useState<EnrolmentPaymentMethod | "">(existingStudent?.paymentMethod ?? "");
+  const [receipt, setReceipt] = useState<StoredReceipt | null>(existingStudent?.paymentReceipt ?? null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+
+  /*
+   * Whether a bonus was given, and how much.
+   *
+   * Asked at every close — yes or no, with the amount when yes — because the
+   * people who approve, teach and mentor this client all need to know what was
+   * promised. Beside the money, never in it: the balance above is the fee less
+   * what was paid, whatever the bonus. An enrolment from before this was asked
+   * starts unanswered, and can be answered here.
+   */
+  const [bonusChoice, setBonusChoice] = useState<"" | "yes" | "no">(
+    existingStudent?.hasBonus === true ? "yes" : existingStudent?.hasBonus === false ? "no" : "",
+  );
+  const [bonusInput, setBonusInput] = useState(
+    existingStudent?.hasBonus ? String(existingStudent.bonusAmount || "") : "",
+  );
+  const bonusAmount = Math.max(0, Number(bonusInput) || 0);
+  // At least one fils: finance refuses a bonus that rounds to nothing.
+  const bonusAmountMissing = bonusChoice === "yes" && !(Math.round(bonusAmount * 100) > 0);
+  /** Only what was answered is sent: unanswered stays unanswered, not "no". */
+  const bonusFields = bonusChoice
+    ? { hasBonus: bonusChoice === "yes", bonusAmount: bonusChoice === "yes" ? bonusAmount : 0 }
+    : {};
+
+  const missing = editing
+    ? [courseMissing && "a course", bonusAmountMissing && "the bonus amount"].filter(Boolean) as string[]
+    : [
+        courseMissing && "a course",
+        emailMissing && "the client's email",
+        !language && "language",
+        !paymentMethod && "payment method",
+        !receipt && "payment receipt",
+        !bonusChoice && "whether a bonus was given",
+        bonusAmountMissing && "the bonus amount",
+      ].filter(Boolean) as string[];
+
+  async function handleReceipt(file: File) {
+    setUploadError("");
+    setUploading(true);
+    try {
+      setReceipt(await uploadReceipt(lead._id, file));
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Could not upload that file");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   function toIST(iso?: string | null) {
     if (!iso) return null;
@@ -64,18 +201,56 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
   }
 
   async function handleCreate() {
-    if (!language || !paymentMethod) {
-      toast.error("Choose the language and payment method before closing.");
+    /*
+     * The money is recorded on the lead, not just on the enrolment.
+     *
+     * The lead's payment list is where the CRM already counts what a client
+     * has handed over, and it is what the fee summary above reads. Writing the
+     * figure only onto the student would leave two records of the same money
+     * that drift apart the moment anybody adds a payment the ordinary way.
+     *
+     * Done before the enrolment is saved: a payment that failed to record is
+     * worth stopping for, whereas one recorded against an enrolment that then
+     * failed can be finished by hand.
+     */
+    if (paidNow > 0) {
+      await addPayment.mutateAsync({
+        amount: paidNow,
+        note: `Collected at enrolment${pickedCourses.length ? ` — ${pickedCourses.map((c) => c.name).join(", ")}` : ""}`,
+        paidAt: new Date(enrollmentDate).toISOString(),
+      });
+      // Counted once: a second press after a failed save must not add it again.
+      setPaidNowInput("");
+    }
+
+    if (editing && existingStudent) {
+      // The enrolment exists; this is the second visit to it. Only the fields
+      // this dialog actually owns are sent, so nothing recorded elsewhere is
+      // overwritten by a stale copy of the lead.
+      await updateMut.mutateAsync({
+        id: existingStudent._id,
+        data: {
+          courses: pickedCourses.map((c) => c._id),
+          enrollmentDate: new Date(enrollmentDate).toISOString(),
+          feeStatus: effectiveFeeStatus,
+          totalFee,
+          paidAmount,
+          notes: notes || undefined,
+          ...bonusFields,
+        },
+      });
+      onCreated();
       return;
     }
+
     await createMut.mutateAsync({
-      language,
-      paymentMethod,
+      language: language || undefined,
+      paymentMethod: paymentMethod || undefined,
       leadId: lead._id,
       name:   lead.name,
       phone:  lead.phone ?? undefined,
-      email:  lead.email ?? undefined,
-      courses: courseObjs.map((c) => c._id),
+      email:  email || undefined,
+      courses: pickedCourses.map((c) => c._id),
       team:   lead.team
         ? typeof lead.team === "object" ? (lead.team as { _id: string })._id : lead.team
         : null,
@@ -90,10 +265,12 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
       firstContactTime: lead.firstContactTime  ?? null,
       lastFollowupDate: lead.lastFollowupDate  ?? null,
       enrollmentDate: new Date(enrollmentDate).toISOString(),
-      feeStatus,
+      feeStatus: effectiveFeeStatus,
       totalFee,
       paidAmount,
       notes: notes || undefined,
+      paymentReceipt: receipt,
+      ...bonusFields,
     });
     onCreated();
   }
@@ -102,6 +279,10 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
     ? typeof lead.assignedTo === "object"
       ? (lead.assignedTo as { name: string }).name
       : lead.assignedTo
+    : null;
+
+  const courseLine = knownCourses.length
+    ? knownCourses.map((c) => `${c.name}${c.amount ? ` · ${fmtFull(c.amount)}` : ""}`).join(", ")
     : null;
 
   return (
@@ -121,9 +302,12 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
                 </div>
                 <div>
                   <DialogHeader>
-                    <DialogTitle className="text-base font-bold">Create Student Profile</DialogTitle>
+                    <DialogTitle className="text-base font-bold">{editing ? "Enrolment" : "Create Student Profile"}</DialogTitle>
                   </DialogHeader>
-                  <p className="text-xs text-muted-foreground">{lead.name} · Lead closed</p>
+                  <p className="text-xs text-muted-foreground">
+                    {lead.name} · {editing ? `Enrolled ${existingStudent?.enrollmentNumber ?? ""}`.trim() : "Closing the lead"}
+                    {progress ? ` · ${progress}` : ""}
+                  </p>
                 </div>
               </div>
               <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onClose}>
@@ -139,16 +323,43 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
                   {[
                     { icon: User2, label: "Name",    value: lead.name },
                     { icon: Phone, label: "Phone",   value: lead.phone },
-                    { icon: Mail,  label: "Email",   value: lead.email },
-                    { icon: BookOpen, label: courseObjs.length > 1 ? "Courses" : "Course", value: courseObjs.length ? courseObjs.map((c) => `${c.name}${c.amount ? ` · ${fmtFull(c.amount)}` : ""}`).join(", ") : null },
+                    { icon: Mail,  label: "Email",   value: askEmail ? null : (leadEmail || existingStudent?.email) },
+                    { icon: BookOpen, label: knownCourses.length > 1 ? "Courses" : "Course", value: courseLine },
                     { icon: User2, label: "Counsellor", value: assignedName },
                   ].filter((r) => r.value).map(({ icon: Icon, label, value }) => (
                     <div key={label} className="flex items-center gap-3 px-3 py-2.5">
                       <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <span className="text-[11px] text-muted-foreground w-20 shrink-0">{label}</span>
-                      <span className="text-xs font-medium text-foreground truncate">{value}</span>
+                      {/* min-w-0, or a long course name widens the whole dialog
+                          past its edge. The courses wrap rather than truncate:
+                          a bundle's second course is the one that would be cut. */}
+                      <span className={cn(
+                        "min-w-0 flex-1 text-xs font-medium text-foreground",
+                        label.startsWith("Course") ? "line-clamp-3 break-words" : "truncate",
+                      )}>{value}</span>
                     </div>
                   ))}
+                  {/* Asked here, where it would have shown, when the lead has
+                      none that works — finance cannot invoice without it. */}
+                  {askEmail && (
+                    <div className="flex items-start gap-3 px-3 py-2">
+                      <Mail className="mt-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="mt-1.5 text-[11px] text-muted-foreground w-20 shrink-0">Email *</span>
+                      <div className="flex-1 space-y-1">
+                        <Input
+                          type="email" value={emailInput}
+                          onChange={(e) => setEmailInput(e.target.value)}
+                          placeholder="client@example.com" className="h-8 text-xs"
+                          aria-label="Client email"
+                        />
+                        <p className={cn("text-[10px]", emailMissing && emailInput ? "text-amber-400" : "text-muted-foreground")}>
+                          {emailMissing && emailInput
+                            ? "That is not an email address finance will take."
+                            : "This lead has no email. Finance needs one for the invoice; it is saved on the lead too."}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
 
@@ -200,9 +411,40 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
                     </div>
                     <div className="rounded-lg bg-card p-2 border border-border/30">
                       <p className={cn("text-sm font-bold", pending > 0 ? "text-amber-400" : "text-green-400")}>{fmtFull(pending)}</p>
-                      <p className="text-[10px] text-muted-foreground">Pending</p>
+                      <p className="text-[10px] text-muted-foreground">Balance</p>
                     </div>
                   </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Balance = total fee − paid. A bonus is never part of it.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <p className="text-[11px] text-muted-foreground">Total fee</p>
+                      <Input
+                        type="number" min="0" step="0.01" value={feeInput}
+                        onChange={(e) => setFeeInput(e.target.value)}
+                        placeholder="0" className="h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[11px] text-muted-foreground">
+                        Collected now{alreadyPaid > 0 ? ` · ${fmtFull(alreadyPaid)} already` : ""}
+                      </p>
+                      <Input
+                        type="number" min="0" step="0.01" value={paidNowInput}
+                        onChange={(e) => setPaidNowInput(e.target.value)}
+                        placeholder="0" className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                  {/* What is typed here becomes a payment on the lead, so the
+                      money is recorded in one place rather than two that can
+                      disagree. */}
+                  {paidNow > 0 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {fmtFull(paidNow)} will be added to this lead&apos;s payments.
+                    </p>
+                  )}
                   {totalFee > 0 && (
                     <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                       <motion.div
@@ -213,12 +455,191 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
                       />
                     </div>
                   )}
+
+                  {/* The bonus: asked, answered, and kept beside the money. */}
+                  <div className="space-y-1.5 border-t border-border/30 pt-2">
+                    <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                      <Gift className="h-3 w-3" /> Bonus given?{!editing && " *"}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {(["no", "yes"] as const).map((choice) => (
+                        <button
+                          key={choice}
+                          type="button"
+                          onClick={() => setBonusChoice(choice)}
+                          className={cn(
+                            "h-8 rounded-md border px-3 text-xs font-medium transition-colors",
+                            bonusChoice === choice
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border/60 text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                          )}
+                        >
+                          {choice === "yes" ? "Yes" : "No"}
+                        </button>
+                      ))}
+                      <AnimatePresence>
+                        {bonusChoice === "yes" && (
+                          <motion.div
+                            initial={{ opacity: 0, x: -6 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -6 }}
+                            className="flex-1"
+                          >
+                            <Input
+                              type="number" min="0" step="0.01" value={bonusInput}
+                              onChange={(e) => setBonusInput(e.target.value)}
+                              placeholder="Bonus amount" className="h-8 text-xs"
+                              aria-label="Bonus amount"
+                            />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    {/* Where the answer goes. After the close an edit stays in
+                        the CRM: finance only takes a changed enrolment when it
+                        has sent it back to be corrected. */}
+                    {bonusChoice && (
+                      <p className="text-[10px] text-muted-foreground">
+                        {editing
+                          ? "Saved here. Finance sees a change only if it sends this enrolment back for correction."
+                          : bonusChoice === "yes"
+                            ? `${bonusAmount > 0 ? fmtFull(bonusAmount) : "The"} bonus goes to finance with the enrolment, and on to the LMS — outside the fee and balance.`
+                            : "No bonus — recorded as such with the enrolment."}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </motion.div>
 
               {/* Editable fields */}
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="space-y-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Enrollment</p>
+
+                {/* Only when nothing names a course. One that does shows it in
+                    the details strip above; asking again there would be two
+                    answers to the same question. More than one can be picked:
+                    a bundle is several courses on one invoice. */}
+                {!knownCourses.length && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <BookOpen className="h-3 w-3" /> Course *
+                    </p>
+                    {coursesLoading ? (
+                      <p className="text-[11px] text-muted-foreground">Loading courses…</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {courses.map((c) => {
+                          const on = courseIds.includes(c._id);
+                          return (
+                            <motion.button
+                              key={c._id}
+                              type="button"
+                              whileTap={{ scale: 0.97 }}
+                              onClick={() => toggleCourse(c._id)}
+                              aria-pressed={on}
+                              className={cn(
+                                "rounded-md border px-2.5 py-1.5 text-left text-[11px] transition-colors",
+                                on
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-border/60 text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                              )}
+                            >
+                              {c.name}{c.amount ? ` · ${fmtFull(c.amount)}` : ""}
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {courseMissing && !coursesLoading && (
+                      <p className="text-[10px] text-amber-400">
+                        This lead has no course. Pick one or more — the fee and the invoice come from them.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* What finance is given about the sale. Side by side because
+                    they are two halves of one question: what was sold, and how
+                    it was paid for. */}
+                {!editing && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Language *</p>
+                      <Select value={language} onValueChange={(v) => setLanguage(v as EnrolmentLanguage)}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Taught in…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ENROLMENT_LANGUAGES.map((l) => (
+                            <SelectItem key={l} value={l} className="text-xs">{l}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Payment method *</p>
+                      <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as EnrolmentPaymentMethod)}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Paid by…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ENROLMENT_PAYMENT_METHODS.map((m) => (
+                            <SelectItem key={m} value={m} className="text-xs">
+                              {PAYMENT_METHOD_LABELS[m]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {!editing && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Payment receipt *</p>
+                    {receipt ? (
+                      <div className="flex items-center gap-2 rounded-md border border-border/50 bg-muted/20 px-2.5 py-2">
+                        <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <a
+                          href={receipt.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex-1 truncate text-xs hover:underline"
+                        >
+                          {receipt.name}
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => setReceipt(null)}
+                          className="text-[10px] text-muted-foreground hover:text-red-400"
+                        >
+                          Replace
+                        </button>
+                      </div>
+                    ) : (
+                      <label
+                        className={cn(
+                          "flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-border/60 px-3 py-3 text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                          uploading && "pointer-events-none opacity-60",
+                        )}
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        {uploading ? "Uploading…" : "Attach the receipt — photo or PDF"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) void handleReceipt(f);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                    )}
+                    {uploadError && <p className="text-[10px] text-red-400">{uploadError}</p>}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
@@ -236,7 +657,7 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <DollarSign className="h-3 w-3" /> Fee Status
                     </p>
-                    <Select value={feeStatus} onValueChange={(v) => setFeeStatus(v as FeeStatus)}>
+                    <Select value={effectiveFeeStatus} onValueChange={(v) => { setFeeStatus(v as FeeStatus); setFeeStatusTouched(true); }}>
                       <SelectTrigger className="h-8 text-xs">
                         <SelectValue />
                       </SelectTrigger>
@@ -244,37 +665,6 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
                         <SelectItem value="paid"    className="text-xs"><span className="text-green-400">Paid</span></SelectItem>
                         <SelectItem value="partial" className="text-xs"><span className="text-amber-400">Partial</span></SelectItem>
                         <SelectItem value="pending" className="text-xs"><span className="text-muted-foreground">Pending</span></SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Both required — finance's own intake refuses an enrolment
-                    missing either, and asking now is the only chance to. */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Language *</p>
-                    <Select value={language} onValueChange={(v) => setLanguage(v as EnrolmentLanguage)}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Choose one" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ENROLMENT_LANGUAGES.map((l) => (
-                          <SelectItem key={l} value={l} className="text-xs">{l}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Payment Method *</p>
-                    <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as EnrolmentPaymentMethod)}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Choose one" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ENROLMENT_PAYMENT_METHODS.map((m) => (
-                          <SelectItem key={m} value={m} className="text-xs">{PAYMENT_METHOD_LABELS[m]}</SelectItem>
-                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -301,28 +691,39 @@ export function CreateStudentModal({ open, lead, onClose, onCreated }: Props) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
               /*
-               * No "skip". Closing a lead used to be reachable by pressing
-               * this and never filling in the enrolment — the lead moved to
-               * "closed" anyway, with no student record behind it, which is
-               * a sale nobody downstream (finance, the LMS) can ever be told
-               * about. Cancelling still works, by the ✕ or the backdrop; it
-               * leaves the lead exactly where it was, which is the one thing
-               * a cancel should do.
+               * No "skip". Closing a lead used to be reachable without filling
+               * in the enrolment — the lead moved to "closed" anyway, with no
+               * student record behind it, which is a sale nobody downstream
+               * (finance, the LMS) can ever be told about. Cancelling still
+               * works, by the ✕ or the backdrop; it leaves the lead exactly
+               * where it was, which is the one thing a cancel should do.
                */
-              className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-border/50 bg-card px-5 py-3"
+              className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border/50 bg-card px-5 py-3"
             >
-              <Button
-                size="sm"
-                className="gap-2"
-                onClick={handleCreate}
-                disabled={createMut.isPending || !language || !paymentMethod}
-              >
-                {createMut.isPending ? (
-                  <span className="flex items-center gap-1.5"><span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> Creating…</span>
-                ) : (
-                  <><CheckCircle2 className="h-4 w-4" /> Create Student</>
-                )}
-              </Button>
+              {/* Named rather than left to a greyed-out button: a control that
+                  will not respond and does not say why is the worst of both. */}
+              <span className="text-[11px] text-muted-foreground">
+                {missing.length
+                  ? `Still needed: ${missing.join(", ")}.`
+                  : editing
+                    ? "Changes apply to this enrolment."
+                    : "Saving closes the lead and sends it to finance for approval."}
+              </span>
+              <motion.div whileTap={{ scale: 0.97 }} className="shrink-0">
+                <Button
+                  size="sm"
+                  className="gap-2"
+                  // A failed save has already said why, in its own toast.
+                  onClick={() => void handleCreate().catch(() => undefined)}
+                  disabled={saving || missing.length > 0 || uploading}
+                >
+                  {saving ? (
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> {editing ? "Saving…" : "Creating…"}</span>
+                  ) : (
+                    <><CheckCircle2 className="h-4 w-4" /> {editing ? "Save enrolment" : "Create Student"}</>
+                  )}
+                </Button>
+              </motion.div>
             </motion.div>
           </DialogContent>
         </Dialog>

@@ -51,6 +51,26 @@ const envSchema = z.object({
   FINANCE_CLIENT_ID:          z.string().default(""),
   FINANCE_INTEGRATION_SECRET: z.string().default(""),
   FINANCE_ORG_ID:             z.string().default(""),
+
+  /**
+   * Object storage for payment receipts.
+   *
+   * Deliberately the same bucket finance uses, with the same variable names —
+   * and the same values the Delta CRM holds. A receipt taken at the close has
+   * to end up attached to the invoice an approver is looking at, and one
+   * bucket means one object: the CRM writes it, the handover passes the key,
+   * and finance points at the same file rather than being sent a second copy.
+   *
+   * Unset, a receipt cannot be taken and closing says so rather than losing
+   * the file quietly.
+   */
+  R2_ACCOUNT_ID:        z.string().default(""),
+  R2_ACCESS_KEY_ID:     z.string().default(""),
+  R2_SECRET_ACCESS_KEY: z.string().default(""),
+  R2_BUCKET_NAME:       z.string().default(""),
+  R2_PUBLIC_URL:        z.string().default(""),
+  /** Another S3-compatible endpoint in place of R2's, for a local stand-in in tests. Unset in production. */
+  R2_ENDPOINT:          z.string().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);

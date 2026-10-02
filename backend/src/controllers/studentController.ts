@@ -5,10 +5,53 @@ import { sendSuccess, sendError } from "../utils/response.js";
 
 const svc = new StudentService();
 
-export const createStudent = async (req: Request, res: Response, next: NextFunction) => {
+export const createStudent = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const student = await svc.createStudent(req.body);
+    // Who closed it, for the lead's history when the close fills in its email.
+    const student = await svc.createStudent(req.body, req.user?.userId);
     sendSuccess(res, "Student created", student, 201);
+  } catch (err) { next(err); }
+};
+
+/**
+ * Take the payment receipt, before the enrolment that will carry it exists.
+ *
+ * Uploaded on its own rather than as part of the close, because the close
+ * creates a student and hands it to finance in one go, and a multipart body
+ * carrying both a file and the enrolment would have to be unpicked before
+ * either could be validated. This returns a stored file; the close is then the
+ * same JSON it always was, with the receipt named in it.
+ *
+ * Keyed under the lead, since that is what exists at the time.
+ */
+export const uploadPaymentReceipt = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const file = req.file;
+    if (!file) return sendError(res, "No file was uploaded", 400);
+
+    const { storageConfigured, uploadFile } = await import("../lib/storage.js");
+    if (!storageConfigured()) {
+      return sendError(res, "File storage is not configured, so a receipt cannot be taken", 503);
+    }
+
+    // The uploader's filename never becomes the key. It is theirs to choose,
+    // and a key built from it could otherwise reach outside this prefix.
+    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+    const leadId = String(req.params.leadId ?? "unfiled").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
+    const uploaded = await uploadFile({
+      key: `enrolment-receipts/${leadId}/${Date.now()}-${safe}`,
+      buffer: file.buffer,
+      mimeType: file.mimetype,
+      originalName: file.originalname,
+    });
+
+    sendSuccess(res, "Receipt uploaded", {
+      name: file.originalname.slice(0, 200),
+      url: uploaded.url,
+      key: uploaded.key,
+      size: uploaded.size,
+      mimeType: uploaded.mimeType,
+    });
   } catch (err) { next(err); }
 };
 

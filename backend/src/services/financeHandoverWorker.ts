@@ -5,21 +5,26 @@ import { financeConfigured, sendEnrolment, fetchEnrolmentStatuses } from "./fina
 /**
  * Delivers queued enrolments to Delta Finance.
  *
- * Runs on a timer rather than in the request that created the student, because
- * the whole point of the outbox is that closing a lead does not wait for
- * another server. A finance outage delays an invoice; it does not stop a sale.
+ * Never in the request that created the student, because the whole point of
+ * the outbox is that closing a lead does not wait for another server. A
+ * finance outage delays an invoice; it does not stop a sale.
+ *
+ * Sent straight after it is queued (kickFinanceHandover), in the background,
+ * so finance has it within a second or two; the timer is the safety net that
+ * retries whatever that could not deliver.
  */
 
 const INTERVAL_MS = 60_000;
 const BATCH = 10;
 
 /**
- * How long to wait after each failure: a minute, then four, then nine, up to an
- * hour. Long enough that a restart is not hammered, short enough that a brief
- * outage clears on its own without anybody being told.
+ * How long to wait after each failure: a minute, then four, then nine, up to a
+ * quarter of an hour. Long enough that a restart is not hammered, short enough
+ * that an outage clears on its own soon after it ends — capped at an hour, an
+ * enrolment could sit for most of one after finance was already back.
  */
 function backoffMs(attempts: number): number {
-  return Math.min(60 * 60_000, attempts * attempts * 60_000);
+  return Math.min(15 * 60_000, attempts * attempts * 60_000);
 }
 
 /** Nothing here may throw: an unhandled rejection in a timer kills the process. */
@@ -175,6 +180,42 @@ export async function pollFinanceOutcomes(): Promise<void> {
   }
 }
 
+/*
+ * One delivery pass at a time in this process, whether the timer or a kick
+ * started it. A kick that lands while a pass is running asks for one more, so
+ * the enrolment it queued goes out now rather than on the next tick.
+ */
+let draining = false;
+let again = false;
+
+async function drainNow(): Promise<void> {
+  if (draining) {
+    again = true;
+    return;
+  }
+  draining = true;
+  try {
+    do {
+      again = false;
+      await drainFinanceHandovers();
+    } while (again);
+  } catch (err) {
+    console.error("[finance] handover sweep failed", err);
+  } finally {
+    draining = false;
+  }
+}
+
+/**
+ * Deliver what was just queued, now, in the background. Called after an
+ * enrolment is queued; never awaited by the request and never throws. Anything
+ * it cannot deliver stays pending for the timer to retry.
+ */
+export function kickFinanceHandover(): void {
+  if (!financeConfigured()) return;
+  setImmediate(() => void drainNow());
+}
+
 export function startFinanceHandoverWorker(): void {
   if (!financeConfigured()) {
     console.log("[finance] integration not configured — enrolments will not be handed over");
@@ -183,9 +224,7 @@ export function startFinanceHandoverWorker(): void {
   console.log("[finance] handover worker started");
   // Not on the first tick: give the process a moment to finish starting.
   setInterval(() => {
-    void drainFinanceHandovers().catch((err) =>
-      console.error("[finance] handover sweep failed", err),
-    );
+    void drainNow();
     void pollFinanceOutcomes().catch((err) =>
       console.error("[finance] outcome sweep failed", err),
     );

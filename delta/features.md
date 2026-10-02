@@ -632,3 +632,10 @@ Copy the template at the top and place it in the correct module section.
 - **Dialog**: `components/courses/MapCourseDialog.tsx`
 - **Backend**: `GET /api/v1/courses/finance-items`, `GET /api/v1/courses/lms-courses`, `PUT /api/v1/courses/:id` with `financeItemId` / `lmsCourseSlugs`
 - **Why**: an enrolment bills against the mapped finance product, and its approval opens every mapped LMS course (a bundle opens two)
+
+## Enrolment at the close (like Delta CRM)
+
+- **Dialog**: `components/students/CreateStudentModal.tsx`, opened through `components/students/CloseLeadDialog.tsx` from every way of closing (status menu, lead page, Kanban drop, bulk on the leads and team pages — one after another)
+- **Asks**: course(s), client email (when missing), language, payment method, receipt, bonus (yes/no + amount); shows the balance
+- **Backend**: `POST /api/v1/students/receipts/:leadId`, `POST /api/v1/students` (refuses an incomplete close)
+- **Why**: a close is a sale, and finance (Delta HQ) can only invoice and approve it with all of this; a lead closed any other way was a sale nobody downstream heard of

@@ -539,3 +539,11 @@ All `/api/v1/mentors/*` routes require `authenticate`. Meeting ownership and Sup
 | `PUT /api/v1/courses/:id` (existing) | `authenticate` → `checkPermission("leads", "edit")` | Now also accepts `financeItemId` and `lmsCourseSlugs` |
 
 Both GET routes are registered **before** `/:id` in `courseRoutes.ts` — otherwise `/:id` takes "finance-items" for a course id (Bugs #6, #7).
+
+### Receipt upload route (2026-10-02)
+
+| Route | Chain | Notes |
+|-------|-------|-------|
+| `POST /api/v1/students/receipts/:leadId` | `authenticate` → `checkPermission("students", "create")` → `takeReceipt` (multer, memory, 10 MB) → `uploadPaymentReceipt` | JPG/PNG/WebP/HEIC/PDF only. A wrong type is 415 and too large 413, each saying so — left to the error handler they were a 500, which production reports as "Internal server error" |
+
+Registered **before** the `/:id` routes in `studentRoutes.ts` (Bugs #6, #7).

@@ -47,9 +47,24 @@ export interface Student {
   status:         StudentStatus;
   language?: EnrolmentLanguage;
   paymentMethod?: EnrolmentPaymentMethod;
+  /** Taken at the close, and required there. Absent on older enrolments. */
+  paymentReceipt?: StoredReceipt | null;
   notes?: string;
+  /** Whether a bonus was given at the close. Absent on enrolments from before it was asked. */
+  hasBonus?: boolean | null;
+  /** The bonus, in the fee's currency; 0 when none. Never part of the balance. */
+  bonusAmount?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A receipt, once it is in storage. */
+export interface StoredReceipt {
+  name: string;
+  url: string;
+  key: string;
+  size?: number;
+  mimeType?: string;
 }
 
 /** What the outbox knows: whether the enrolment reached finance at all. */
@@ -139,4 +154,7 @@ export interface CreateStudentInput {
   notes?: string;
   language?: string;
   paymentMethod?: string;
+  paymentReceipt?: StoredReceipt | null;
+  hasBonus?: boolean;
+  bonusAmount?: number;
 }

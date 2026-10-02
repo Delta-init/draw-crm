@@ -244,3 +244,11 @@ router.patch("/:teamId/leads/:leadId/assign", authenticate, checkPermission("tea
 **Bug:** When adding `getTeamReminders` aggregation pipeline, typed as `object[]` instead of `PipelineStage[]`. Mongoose aggregation requires the stricter `PipelineStage[]` type from mongoose.
 **Fix:** `import { type PipelineStage } from "mongoose"` and typed pipeline as `PipelineStage[]`.
 **Also:** `preserveNullAndEmpty` is not valid — correct key is `preserveNullAndEmptyArrays` in `$unwind` stage.
+
+---
+
+## [2026-10-02] A close with no course was saved and never reached finance
+
+**Bug:** The close dialog took the courses from the lead and had no way to pick one, so a lead with none closed as an enrolment with no courses. `buildHandoverPayload` returns null without a course, so `queueFinanceHandover` queued nothing — silently. The sale was never invoiced, and "Generate invoice" on My Enrolments then answered "Queued for finance" while still queuing nothing.
+**Fix:** The dialog asks for the course(s) when the lead has none; `createStudent` refuses a close without a course that exists (422); `requestInvoice` says there is no course instead of "Queued".
+**Rule:** A step that can only fail quietly (an outbox payload that comes back null) has to be made impossible where the data is entered — and a "queued" answer must mean something was queued.

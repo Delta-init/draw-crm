@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/axios";
 import { toast } from "@/lib/toast";
 import type { ApiResponse } from "@/types";
-import type { Student, StudentFilters, CreateStudentInput } from "@/types/student";
+import type { Student, StudentFilters, CreateStudentInput, StoredReceipt } from "@/types/student";
 
 const KEY = ["students"] as const;
 
@@ -93,3 +93,30 @@ export const useDeleteStudent = () => {
     onError: () => toast.error("Failed to delete student"),
   });
 };
+
+/**
+ * Put a payment receipt in storage, before the enrolment that will carry it.
+ *
+ * Its own request rather than part of the close: the close creates a student
+ * and hands it to finance in one go, and a multipart body carrying both a file
+ * and the enrolment would have to be unpicked before either could be checked.
+ * This returns a stored file; the close stays the JSON it always was, naming it.
+ *
+ * Throws with the server's own reason (wrong kind of file, too large, storage
+ * not set up) so the dialog can say it beside the upload.
+ */
+export async function uploadReceipt(leadId: string, file: File): Promise<StoredReceipt> {
+  const body = new FormData();
+  body.append("file", file);
+  try {
+    const res = await api.post<{ success: boolean; data: StoredReceipt }>(
+      `/students/receipts/${leadId}`,
+      body,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    );
+    return res.data.data;
+  } catch (err) {
+    const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+    throw new Error(msg ?? "Could not upload that file");
+  }
+}

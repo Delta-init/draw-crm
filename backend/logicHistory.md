@@ -643,3 +643,17 @@ One rule everywhere a report shows money per person or team: **a payment counts 
 - **Pending / due** is all time, not per period: per (team × member), `max(0, Σ(sellingAmount ?? Σ course amounts) − Σ every payment)`. The agreed selling amount wins over the course's list price. Netted per person, so an overpaid lead offsets an unpaid one. (The Revenue tab's "Total Pending" KPI is the one exception: the same formula over leads created in the period.)
 - **Lead flow** — lead counts, status mix, conversion — stays on leads *created* in the period.
 - Not yet on this rule: the team PDF export (`exportTeamPdf`) still adds up the payments on leads created in the period for its member rows.
+
+---
+
+## Closing a lead — what finance needs, and when it is sent (2026-10-02)
+
+Every way of closing — the status menu, the lead page, a Kanban card dropped on Closed, bulk Change Status → Closed on the leads and team pages — opens the enrolment dialog; only a saved enrolment closes the lead, and a dismissed one leaves it as it was. Several leads open one after another ("2 of 5").
+
+A close needs, all at once or refused together (422): a course (or several — a bundle is one invoice with a line each), the client's email (asked for when the lead has none, and kept on the lead), language, payment method, the receipt, and whether a bonus was given (and how much). Older enrolments without these still load and can be edited.
+
+Money: the fee starts from the enrolment, else the lead's agreed `sellingAmount`, else the courses' list prices, and can be changed. "Collected now" is recorded as a payment on the lead before the enrolment is saved. Balance = fee − paid; the bonus is never in it. The fee is split across the courses in proportion to their list prices (the last line takes the rounding).
+
+Finance: queued and sent at once (the timer retries). Billed into **Delta HQ** — `FINANCE_ORG_ID` is Delta HQ's, the client id and secret are Delta CRM's — as `source: "draw-crm"`, and it waits in finance's Approvals like any CRM enrolment. Approval opens the LMS courses; Draw students are not sent to Tetra Commission. Edits after the close stay in the CRM until finance sends the enrolment back.
+
+End-to-end test: `backend/scripts/enrolment-close-e2e.sh`.

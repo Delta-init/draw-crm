@@ -64,12 +64,11 @@ const studentSchema = new Schema<IStudent>(
       enum: ["cash", "bank_transfer", "cheque", "card", "easebuzz_emi", "tabby", "tamara", "billexpro"],
     },
     /**
-     * Proof the money was taken, once this CRM has somewhere to put one.
+     * Proof the money was taken, uploaded at the close and required there.
      *
-     * Optional rather than required, unlike Delta's — this application has no
-     * object storage wired yet, so there is nowhere yet to upload a receipt
-     * to. The field and finance's schema both accept one; nothing here can
-     * produce one until that gap is closed.
+     * Optional on the model all the same: enrolments from before this CRM had
+     * storage to put one in have none, and must keep loading. The requirement
+     * lives at the close (StudentService.createStudent), as Delta CRM's does.
      */
     paymentReceipt: {
       name: { type: String },
@@ -80,6 +79,16 @@ const studentSchema = new Schema<IStudent>(
       uploadedAt: { type: Date },
     },
     notes: { type: String, trim: true, maxlength: 2000 },
+    /**
+     * Whether the client was given a bonus with this enrolment, and how much.
+     *
+     * Asked at the close, and required there — yes or no, with the amount when
+     * yes. Information beside the money, never in it: the bonus is not part of
+     * the fee, of what was paid, or of the balance (fee − paid). Unset on
+     * enrolments from before it was asked, which is different from "no".
+     */
+    hasBonus: { type: Boolean },
+    bonusAmount: { type: Number, min: 0, default: 0 },
   },
   {
     timestamps: true,

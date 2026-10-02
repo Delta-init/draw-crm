@@ -618,3 +618,33 @@ This file documents every service in `backend/src/services/`. Read this before w
 
 #### Scripts — `src/scripts/mapFinanceItems.ts`, `src/scripts/mapLmsCourses.ts`
 - Bulk mapping on the server; dry run by default, `--apply` writes exact name matches only, `--set "COURSE=value"` for anything else (LMS: several courses separated by commas), `--force` to overwrite an existing mapping
+
+---
+
+## Enrolment at the close — like Delta CRM (2026-10-02)
+
+#### `StudentService.createStudent(data, performedBy?)` — `src/services/studentService.ts`
+- Refuses (422, one message naming everything missing) a close without: a course that exists, a valid client email, a language from `ENROLMENT_LANGUAGES`, a payment method from `ENROLMENT_PAYMENT_METHODS`, a stored receipt (`key` + `url`), and `hasBonus` (with a `bonusAmount` of at least 0.01 when true)
+- Stores the email lower-cased, the courses de-duplicated, `hasBonus` / `bonusAmount` (0 when no bonus)
+- `performedBy` (the closing user, passed by the controller) goes on the lead's history
+
+#### `StudentService.fillLeadEmail(leadId, email, performedBy?)` — private
+- Sets the lead's email only when it has none — an `updateOne`, so an older lead's other fields are not re-validated — and logs `lead_updated` "Email added at the close"; never fails the close
+
+#### `StudentService.updateStudent(id, data)`
+- Takes `hasBonus` / `bonusAmount` (a yes with no amount → 422; no bonus → amount 0); a `feeStatus` sent explicitly is now kept
+
+#### `StudentService.buildHandoverPayload(studentId)`
+- Adds `balanceMinor` (fee − paid in fils, never negative) and `bonus { given, amountMinor }` (only when the question was answered)
+
+#### `StudentService.queueFinanceHandover` / `requestInvoice`
+- Queuing now calls `kickFinanceHandover()`, so finance has the enrolment within seconds; `requestInvoice` answers that there is no course, instead of "Queued", for an enrolment with none
+
+#### `kickFinanceHandover()` / `drainNow()` — `src/services/financeHandoverWorker.ts`
+- One delivery pass at a time; a kick during a pass asks for another. Back-off now capped at 15 minutes (was an hour). As Delta CRM's worker
+
+#### `storageConfigured()`, `uploadFile()`, `deleteFile()`, `headerSafeName()` — `src/lib/storage.ts` (new)
+- R2 through `@aws-sdk/client-s3`, the bucket finance reads; `R2_ENDPOINT` points it at a stand-in in tests
+
+#### `uploadPaymentReceipt` — `src/controllers/studentController.ts`
+- 400 no file, 503 storage not configured; key `enrolment-receipts/<leadId>/<time>-<safe name>`; returns `{ name, url, key, size, mimeType }`

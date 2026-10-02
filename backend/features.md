@@ -532,3 +532,21 @@ Each feature documents:
 **Tests**: `scripts/course-mapping-e2e.sh` — throwaway mongod, no `.env`, stand-in finance and LMS; the four cases.
 
 **Change Log**: 2026-09-29 — added.
+
+---
+
+## 20. Enrolment at the close — the way Delta CRM closes (2026-10-02)
+
+**Description**: Closing a lead takes the enrolment finance needs, the same as Delta CRM's close: at least one course, the client's email (kept on the lead when it had none), language, payment method, the payment receipt (uploaded to the bucket finance reads), and whether a bonus was given, with its amount. The enrolment goes to Delta Finance straight away — billed into Delta HQ, `source: "draw-crm"` — with the balance (fee − paid, the bonus never in it) and the bonus beside it, and waits in finance's Approvals like any CRM enrolment.
+
+**Routes**: `POST /api/v1/students/receipts/:leadId` (new — multipart `file`, JPG/PNG/WebP/HEIC/PDF, ≤ 10 MB; `authenticate` → `checkPermission("students", "create")`); `POST /api/v1/students` now refuses a close missing any of the above (422, all named at once); `PUT /api/v1/students/:id` takes `hasBonus` / `bonusAmount` and keeps a `feeStatus` set by hand.
+
+**Services**: `StudentService.createStudent` (required fields, `fillLeadEmail`), `updateStudent` (bonus), `buildHandoverPayload` (`balanceMinor`, `bonus`), `queueFinanceHandover` (sends at once via `kickFinanceHandover`), `requestInvoice` (says so when an enrolment has no course); `lib/storage.ts` (R2 — the same bucket and variable names as finance and Delta CRM).
+
+**Model**: `Student.hasBonus` (unset on enrolments from before it was asked), `Student.bonusAmount`.
+
+**Env**: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` — the values Delta CRM's backend holds (`R2_ENDPOINT` is for tests only). Unset, a receipt cannot be taken, so nobody can close. Finance as before: `FINANCE_API_URL`, `FINANCE_CLIENT_ID`, `FINANCE_INTEGRATION_SECRET` (Delta CRM's values) and `FINANCE_ORG_ID` = Delta HQ.
+
+**Tests**: `scripts/enrolment-close-e2e.sh` — throwaway mongod, two backends (with and without storage), stand-in finance and bucket; the four cases, 53 checks.
+
+**Change Log**: 2026-10-02 — added.

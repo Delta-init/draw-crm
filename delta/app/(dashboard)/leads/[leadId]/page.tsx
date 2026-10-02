@@ -52,7 +52,7 @@ import { ClickToCall } from "@/components/leads/ClickToCall";
 import { fmtFull } from "@/lib/currency";
 import { INITIAL_RESPONSE_CONFIG, PRIMARY_CONCERN_CONFIG, FOLLOWUP_STRATEGY_CONFIG } from "@/lib/leadConfig";
 import { LEAD_STATUSES, STATUS_META } from "@/lib/statusConfig";
-import { CreateStudentModal } from "@/components/students/CreateStudentModal";
+import { CloseLeadDialog } from "@/components/students/CloseLeadDialog";
 import { useStudentByLeadId } from "@/hooks/useStudents";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -463,7 +463,8 @@ export default function LeadDetailPage() {
 
   const updateStatus = useUpdateLeadStatus();
   const updateLead = useUpdateLead();
-  const { data: existingStudent } = useStudentByLeadId(lead?._id ?? "");
+  // Loaded ahead, so the enrolment dialog opens at once when Closed is picked.
+  useStudentByLeadId(lead?._id ?? "");
   const [showStudentModal, setShowStudentModal] = useState(false);
   const assignLead = useAssignLead();
   const assignToTeam = useAssignLeadToTeam();
@@ -866,7 +867,7 @@ export default function LeadDetailPage() {
                       <Select
                         value={lead.status}
                         onValueChange={(val) => {
-                          if (val === "closed" && !existingStudent) {
+                          if (val === "closed") {
                             /*
                              * Held, not written.
                              *
@@ -878,6 +879,12 @@ export default function LeadDetailPage() {
                              * finance or the LMS could ever be told about.
                              * The status is applied now only when the
                              * enrolment is actually saved, in onCreated below.
+                             *
+                             * Shown whether or not this lead is already
+                             * enrolled — closing one a second time fell
+                             * through to a bare status update, so the dialog
+                             * never appeared and the close looked like it had
+                             * done nothing.
                              */
                             setShowStudentModal(true);
                           } else {
@@ -1331,15 +1338,18 @@ export default function LeadDetailPage() {
         mode="edit"
       />
 
-      {/* Create Student Modal — fires when status → closed and no student yet.
-          Dismissing leaves the lead exactly as it was; only a saved
-          enrolment moves it to closed. */}
-      {showStudentModal && !existingStudent && (
-        <CreateStudentModal
-          open
+      {/* Enrolment — fires when status → closed. Shown for a lead that is
+          already enrolled too: closing one a second time, after it went to
+          follow-up and came back, showed nothing at all. Dismissing leaves
+          the lead exactly as it was; only a saved enrolment moves it to
+          closed. Through CloseLeadDialog, which waits for the enrolment to
+          load, so a quick pick cannot open a fresh form over one that exists. */}
+      {showStudentModal && (
+        <CloseLeadDialog
+          key={lead._id}
           lead={lead}
           onClose={() => setShowStudentModal(false)}
-          onCreated={() => {
+          onClosed={() => {
             setShowStudentModal(false);
             if (lead.status !== "closed") updateStatus.mutate({ id: lead._id, status: "closed" });
           }}

@@ -1350,3 +1350,17 @@ All routes require authentication and call the Draw backend, which proxies the L
 | `useMapCourse()` | invalidates `["courses"]` | `PUT /api/v1/courses/:id` | Body `{ financeItemId, lmsCourseSlugs }` — `""` / `[]` unmap; toasts "Mapping saved" |
 
 **Used by:** `MapCourseDialog`. Both lists are fetched only while the dialog is open (`enabled = open`), and need `leads.edit`.
+
+---
+
+## Enrolment at the close (added 2026-10-02)
+
+**File:** `hooks/useStudents.ts`
+
+| Function / hook | Endpoint | Notes |
+|-----------------|----------|-------|
+| `uploadReceipt(leadId, file)` | `POST /api/v1/students/receipts/:leadId` (multipart `file`) | Returns `StoredReceipt { name, url, key, size, mimeType }`; throws with the server's reason (wrong type 415, too large 413, storage not set up 503) |
+| `useCreateStudent()` (existing) | `POST /api/v1/students` | Body now also carries `email`, `courses`, `paymentReceipt`, `hasBonus`, `bonusAmount`; a 422 names whatever is missing |
+| `useUpdateStudent()` (existing) | `PUT /api/v1/students/:id` | Also `hasBonus`, `bonusAmount`, and `feeStatus` (kept as sent) |
+
+**Types:** `types/student.ts` — `StoredReceipt`; `Student.paymentReceipt`, `hasBonus`, `bonusAmount`; `CreateStudentInput.paymentReceipt`, `hasBonus`, `bonusAmount`.
