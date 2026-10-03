@@ -547,3 +547,15 @@ Both GET routes are registered **before** `/:id` in `courseRoutes.ts` — otherw
 | `POST /api/v1/students/receipts/:leadId` | `authenticate` → `checkPermission("students", "create")` → `takeReceipt` (multer, memory, 10 MB) → `uploadPaymentReceipt` | JPG/PNG/WebP/HEIC/PDF only. A wrong type is 415 and too large 413, each saying so — left to the error handler they were a 500, which production reports as "Internal server error" |
 
 Registered **before** the `/:id` routes in `studentRoutes.ts` (Bugs #6, #7).
+
+### Pages every role has — Mentors, My Tracker, My Enrolments (2026-10-03)
+
+| Route | Chain | Notes |
+|-------|-------|-------|
+| `GET /api/v1/my-tracker/me` | `authenticate` | Was `checkPermission("tracker", "view")`. Always the signed-in user's own row |
+| `PUT /api/v1/my-tracker/me` | `authenticate` | Was `checkPermission("tracker", "edit")` |
+| `GET /api/v1/students/enrolments/mine` | `authenticate` | Was `checkPermission("students", "view")`. Own sales for every role; `mine=false` (everyone's) only for Super Admin or `students.view` — `getMyEnrolments` forces `mine` for anyone else |
+| `POST /api/v1/students/:id/invoice` | unchanged — `checkPermission("students", "edit")` | Correcting and (re)sending an invoice stays with Students → edit |
+| `/api/v1/mentors/*` | unchanged — `authenticate` | |
+
+`tracker` stays in `CRM_MODULES` (role documents keep the field), but nothing checks it any more and the Roles & Permissions matrix no longer shows it.

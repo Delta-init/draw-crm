@@ -104,8 +104,15 @@ export const getMyEnrolments = async (req: AuthenticatedRequest, res: Response, 
   try {
     const userId = req.user?.userId;
     if (!userId) return sendError(res, "Not authenticated", 401);
+    // Every role sees its own sales; everyone's ("mine=false") only a role that
+    // may see students — the same rule the Students page goes by.
+    const role = req.user?.role;
+    const seesEveryone = !!role && (
+      (role.isSystemRole && role.roleName === "Super Admin") || role.permissions?.students?.view === true
+    );
     const result = await svc.listEnrolments({
       ...(req.query as Record<string, string>),
+      ...(seesEveryone ? {} : { mine: "true" }),
       userId,
     });
     res.json({

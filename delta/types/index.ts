@@ -20,7 +20,6 @@ export const CRM_MODULES = [
   "reminders",
   "reports",
   "settings",
-  "tracker",
 ] as const;
 
 export type CrmModule = (typeof CRM_MODULES)[number];
@@ -35,7 +34,6 @@ export const MODULE_LABELS: Record<CrmModule, string> = {
   reminders: "Reminders",
   reports: "Reports",
   settings: "Settings",
-  tracker: "Daily Tracker",
 };
 
 export type PermissionsMap = Partial<Record<CrmModule, ModulePermissions>>;

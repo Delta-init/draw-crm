@@ -53,7 +53,9 @@ router.post(
 
 // The enrolments screen: a counsellor's own sales, with the state of each
 // invoice beside them, so the question does not have to be taken to finance.
-router.get("/enrolments/mine", authenticate, checkPermission("students", "view"), getMyEnrolments);
+// Every role has it (2026-10-03); everyone's sales only with Students → view,
+// which getMyEnrolments checks.
+router.get("/enrolments/mine", authenticate, getMyEnrolments);
 
 // Generate the invoice — the same handover that runs when a lead closes,
 // asked for by hand when it never ran or did not get through.

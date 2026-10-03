@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { fmtFull } from "@/lib/currency";
 import { useMyEnrolments, useRequestInvoice } from "@/hooks/useEnrolments";
+import { useAuthStore } from "@/lib/store/authStore";
 import type { Enrolment } from "@/types/student";
 import { AfterApproval } from "@/components/students/AfterApproval";
 import type { Course } from "@/types/course";
@@ -30,9 +31,14 @@ export default function EnrolmentsPage() {
   const [mine, setMine] = useState(true);
   const [page, setPage] = useState(1);
   const [tab, setTab] = useState<"all" | "returned">("all");
+  // Every role has this page for its own sales. Everyone's sales, and
+  // correcting or (re)sending an invoice, stay with the Students permissions.
+  const { hasPermission } = useAuthStore();
+  const canSeeEveryone = hasPermission("students", "view");
+  const canInvoice = hasPermission("students", "edit");
 
   const { data, isLoading, isFetching, refetch } = useMyEnrolments({
-    mine, search, page, limit: 20,
+    mine: mine || !canSeeEveryone, search, page, limit: 20,
     ...(tab === "returned" ? { state: "returned" } : {}),
   });
   const invoiceMut = useRequestInvoice();
@@ -57,9 +63,11 @@ export default function EnrolmentsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => { setMine(!mine); setPage(1); }} className="gap-2">
-            {mine ? "Show everyone's" : "Show only mine"}
-          </Button>
+          {canSeeEveryone && (
+            <Button variant="outline" size="sm" onClick={() => { setMine(!mine); setPage(1); }} className="gap-2">
+              {mine ? "Show everyone's" : "Show only mine"}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-2">
             <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
             Refresh
@@ -145,6 +153,7 @@ export default function EnrolmentsPage() {
             <EnrolmentRow
               key={e._id}
               enrolment={e}
+              canInvoice={canInvoice}
               onGenerate={() => invoiceMut.mutate(e._id)}
               generating={invoiceMut.isPending && invoiceMut.variables === e._id}
             />
@@ -189,8 +198,8 @@ function Stat({ icon: Icon, label, value, tone }: {
   );
 }
 
-function EnrolmentRow({ enrolment: e, onGenerate, generating }: {
-  enrolment: Enrolment; onGenerate: () => void; generating: boolean;
+function EnrolmentRow({ enrolment: e, canInvoice, onGenerate, generating }: {
+  enrolment: Enrolment; canInvoice: boolean; onGenerate: () => void; generating: boolean;
 }) {
   // Draw's enrolments hold an array of courses, unlike Delta's one — named in
   // full rather than picking a "primary", since the sale genuinely is all of
@@ -260,16 +269,24 @@ function EnrolmentRow({ enrolment: e, onGenerate, generating }: {
           {sentBack ? (
             <div className="flex flex-col items-end gap-1.5">
               {inv && <p className="text-xs font-semibold">{inv.invoiceNumber}</p>}
-              <Button size="sm" variant="outline" className="gap-2" asChild>
-                <Link href={`/students/${e._id}`}>
-                  <Pencil className="h-3.5 w-3.5" /> Correct it
-                </Link>
-              </Button>
-              <Button size="sm" className="gap-2" onClick={onGenerate} disabled={generating}>
-                {generating
-                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending…</>
-                  : <><Undo2 className="h-3.5 w-3.5" /> Send again</>}
-              </Button>
+              {canInvoice ? (
+                <>
+                  <Button size="sm" variant="outline" className="gap-2" asChild>
+                    <Link href={`/students/${e._id}`}>
+                      <Pencil className="h-3.5 w-3.5" /> Correct it
+                    </Link>
+                  </Button>
+                  <Button size="sm" className="gap-2" onClick={onGenerate} disabled={generating}>
+                    {generating
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending…</>
+                      : <><Undo2 className="h-3.5 w-3.5" /> Send again</>}
+                  </Button>
+                </>
+              ) : (
+                <p className="max-w-[180px] text-right text-[10px] text-muted-foreground">
+                  Someone with Students access corrects and re-sends it.
+                </p>
+              )}
             </div>
           ) : inv ? (
             <div className="text-right">
@@ -280,7 +297,7 @@ function EnrolmentRow({ enrolment: e, onGenerate, generating }: {
             </div>
           ) : h?.status === "pending" ? (
             <span className="text-[11px] text-muted-foreground">Sending…</span>
-          ) : (
+          ) : !canInvoice ? null : (
             <Button size="sm" variant="outline" className="gap-2" onClick={onGenerate} disabled={generating}>
               {generating
                 ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending…</>

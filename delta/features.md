@@ -624,6 +624,13 @@ Copy the template at the top and place it in the correct module section.
 - **Backend**: Authenticated `/api/v1/mentors/*` routes; schedule and meetings are served by the configured LMS.
 - **State**: React Query keys use the `mentors` prefix; meeting changes invalidate the schedule.
 
+## Pages every role has (2026-10-03)
+
+- **Pages**: Mentors (`/mentors`), My Tracker (`/my-tracker`), My Enrolments (`/enrolments`) — in every role's sidebar (`permModule: null` in `components/layout/Sidebar.tsx`), and the page guard in `app/(dashboard)/layout.tsx` lets every role open them
+- **Guard rule** (`canOpen`): a path named after a permission module (`CRM_MODULES`) needs that module's view; any other sidebar page needs its item's `permModule` — Calls is Leads — or nothing
+- **My Enrolments**: own sales for everyone; "Show everyone's" with Students → view; "Generate invoice", "Correct it" and "Send again" with Students → edit
+- **Roles & Permissions**: no "Daily Tracker" row — My Tracker is everyone's, so nothing checked it
+
 ---
 
 ## Course mapping (finance products + LMS courses)

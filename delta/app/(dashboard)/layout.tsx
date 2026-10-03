@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { useAuthStore } from "@/lib/store/authStore";
 import { navItems } from "@/components/layout/Sidebar";
+import { CRM_MODULES } from "@/types";
 import { useReminderNotifications } from "@/hooks/useReminderNotifications";
 import { RecentPageTracker } from "@/components/shared/CommandPalette";
 
@@ -27,11 +28,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const pathname = usePathname();
 
+  // Whether this role may open a page. A path named after a permission module
+  // needs that module's "view" (/leads/…, /settings). Other sidebar pages take
+  // what their sidebar item names — /calls is Leads — or nothing: Mentors,
+  // My Tracker and My Enrolments are every role's. Reading the path alone sent
+  // everyone but Super Admin away from those three, there being no "mentors",
+  // "my-tracker" or "enrolments" permission to have.
+  const canOpen = (path: string) => {
+    const segment = path.split("/")[1] ?? "";
+    if ((CRM_MODULES as readonly string[]).includes(segment)) return hasPermission(segment, "view");
+    const item = navItems.find((n) => n.href === `/${segment}`);
+    if (item) return item.permModule === null || hasPermission(item.permModule, "view");
+    return hasPermission(segment, "view");
+  };
+
   const redirectPermisionPage = useCallback(() => {
     if (typeof window == "undefined") return;
     for (let i = 0; i < navItems.length; i++) {
       const item = navItems[i];
-      if (hasPermission(item.href.split("/")[1], "view")) {
+      if (canOpen(item.href)) {
         router.push(item.href);
         break;
       }
@@ -39,7 +54,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [hasPermission]);
   useEffect(() => {
     if (pathname == "/login" || pathname == "/profile") return;
-    if (!hasPermission(pathname.split("/")[1], "view")) {
+    if (!canOpen(pathname)) {
       redirectPermisionPage();
     }
   }, [pathname]);

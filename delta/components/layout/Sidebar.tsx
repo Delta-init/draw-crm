@@ -46,7 +46,7 @@ import { getSocket } from "@/lib/socket";
 
 export const navItems: { href: string; label: string; icon: React.ElementType; permModule: string | null }[] = [
   { href: "/dashboard", label: "Dashboard",          icon: LayoutDashboard, permModule: "dashboard" },
-  { href: "/my-tracker",label: "My Tracker",         icon: ClipboardCheck,  permModule: "tracker"   },
+  { href: "/my-tracker",label: "My Tracker",         icon: ClipboardCheck,  permModule: null        },
   { href: "/leads",     label: "Leads",              icon: FileText,        permModule: "leads"     },
   { href: "/calls",     label: "Calls",              icon: PhoneCall,       permModule: "leads"     },
   { href: "/mentors",   label: "Mentors",            icon: CalendarDays,    permModule: null        },
@@ -56,7 +56,7 @@ export const navItems: { href: string; label: string; icon: React.ElementType; p
   { href: "/reports",   label: "Reports",            icon: BarChart2,       permModule: "reports"   },
   { href: "/users",     label: "Users",              icon: Users,           permModule: "users"     },
   { href: "/students",  label: "Students",           icon: GraduationCap,   permModule: "students"  },
-  { href: "/enrolments",label: "My Enrolments",      icon: Receipt,         permModule: "students"  },
+  { href: "/enrolments",label: "My Enrolments",      icon: Receipt,         permModule: null        },
   { href: "/roles",     label: "Roles & Permissions",icon: Shield,          permModule: "roles"     },
   { href: "/settings",  label: "Settings",           icon: Settings,        permModule: null        },
 ];
