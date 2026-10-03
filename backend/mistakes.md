@@ -252,3 +252,11 @@ router.patch("/:teamId/leads/:leadId/assign", authenticate, checkPermission("tea
 **Bug:** The close dialog took the courses from the lead and had no way to pick one, so a lead with none closed as an enrolment with no courses. `buildHandoverPayload` returns null without a course, so `queueFinanceHandover` queued nothing — silently. The sale was never invoiced, and "Generate invoice" on My Enrolments then answered "Queued for finance" while still queuing nothing.
 **Fix:** The dialog asks for the course(s) when the lead has none; `createStudent` refuses a close without a course that exists (422); `requestInvoice` says there is no course instead of "Queued".
 **Rule:** A step that can only fail quietly (an outbox payload that comes back null) has to be made impossible where the data is entered — and a "queued" answer must mean something was queued.
+
+---
+
+## [2026-10-03] Date filters and report charts counted UTC days
+
+**Bug:** Every date filter read `YYYY-MM-DD` as a UTC day (`T00:00:00.000Z` / `setUTCHours`), and every report bucket grouped with `$dateToString` / `$month` / `$isoWeek` in UTC. For Draw's team a UTC day runs from the early morning to the early morning, so a lead or payment between local midnight and then counted on the day before — a month-end's last hours in the new month — and the revenue card's Today / This Month came from the server's clock.
+**Fix:** `utils/drawTime.ts` (`DRAW_TZ`, `drawDayRange`, `drawDayStart` / `drawDayEnd`, `drawMonthStart`): every range in reportService, exportController, leadService, teamService and the revenue card is whole days on Draw's calendar, and every bucket carries `timezone: DRAW_TZ`. `scripts/draw-dates-e2e.sh` places data in the hours the calendars disagree; 4 of its 5 checks fail on the old code.
+**Rule:** A calendar date from a filter is a day on Draw's clock, never `new Date(date + "T00:00:00.000Z")`; a `$dateToString` / `$month` / `$isoWeek` always names its timezone.

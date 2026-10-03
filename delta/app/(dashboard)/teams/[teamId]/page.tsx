@@ -134,6 +134,7 @@ import type { RevenuePeriod, TeamRevenueMember } from "@/types/reports";
 import { useAuthStore } from "@/lib/store/authStore";
 import { useTeamSocket } from "@/hooks/useTeamSocket";
 import { cn, formatDate, getInitials } from "@/lib/utils";
+import { drawDate, drawRange } from "@/lib/drawDates";
 import { TeamDialog } from "@/components/teams/TeamDialog";
 import TeamRemindersTab from "@/components/teams/TeamRemindersTab";
 import { TeamMemberKanban } from "@/components/teams/TeamMemberKanban";
@@ -320,28 +321,9 @@ const fullUSD = fmtFull;
 
 type RevQuickPeriod = "today" | "week" | "month" | "quarter" | "year" | "custom";
 
+/* On Draw's calendar, whatever the browser's clock (lib/drawDates.ts). */
 function getRevRange(p: RevQuickPeriod): { from: string; to: string } {
-  const now   = new Date();
-  const today = now.toISOString().slice(0, 10);
-  switch (p) {
-    case "today":   return { from: today, to: today };
-    case "week": {
-      const mon = new Date(now);
-      mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-      return { from: mon.toISOString().slice(0, 10), to: today };
-    }
-    case "month": {
-      const first = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { from: first.toISOString().slice(0, 10), to: today };
-    }
-    case "quarter": {
-      const first = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-      return { from: first.toISOString().slice(0, 10), to: today };
-    }
-    case "year":
-      return { from: new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10), to: today };
-    default: return { from: "", to: "" };
-  }
+  return p === "custom" ? { from: "", to: "" } : drawRange(p);
 }
 
 function RevTooltip({ active, payload, label }: {
@@ -1069,7 +1051,7 @@ function LeadsTab({
   const [dateTo, setDateTo] = useState<string>("");
   const [unassignedOnly, setUnassignedOnly] = useState(false);
 
-  function todayISO() { return new Date().toISOString().slice(0, 10); }
+  function todayISO() { return drawDate(); }   // Draw's today, whatever the browser's clock
   const isTodayActive = dateFrom === todayISO() && dateTo === todayISO();
   function applyToday() {
     const today = todayISO();
@@ -1352,14 +1334,9 @@ function LeadsTab({
                     <div className="flex flex-wrap gap-1.5">
                       {(["today", "week", "month", "year"] as const).map((p) => {
                         const labels = { today: "Today", week: "This Week", month: "This Month", year: "This Year" };
-                        const getRangeFor = (period: string) => {
-                          const now = new Date(); const t = now.toISOString().slice(0,10);
-                          if (period === "today") return { f: t, t };
-                          if (period === "week") { const m = new Date(now); m.setDate(now.getDate()-((now.getDay()+6)%7)); return { f: m.toISOString().slice(0,10), t }; }
-                          if (period === "month") return { f: new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10), t };
-                          return { f: new Date(now.getFullYear(),0,1).toISOString().slice(0,10), t };
-                        };
-                        const range = getRangeFor(p);
+                        // On Draw's calendar, whatever the browser's clock (lib/drawDates.ts).
+                        const r = drawRange(p);
+                        const range = { f: r.from, t: r.to };
                         const isActive = dateFrom === range.f && dateTo === range.t;
                         return (
                           <button
@@ -2649,18 +2626,16 @@ const ACTION_META: Record<string, { icon: React.ElementType; color: string; bg: 
 // }
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
+// On Draw's calendar, whatever the browser's clock (lib/drawDates.ts).
+// This one's week has always started on Sunday; it still does.
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return drawDate();
 }
 function weekStartISO() {
-  const d = new Date();
-  d.setDate(d.getDate() - d.getDay());
-  return d.toISOString().slice(0, 10);
+  return drawRange("week", { weekStartsOn: 0 }).from;
 }
 function monthStartISO() {
-  const d = new Date();
-  d.setDate(1);
-  return d.toISOString().slice(0, 10);
+  return drawRange("month").from;
 }
 
 type DatePreset = "today" | "week" | "month" | "custom";
@@ -3204,26 +3179,9 @@ function ActivityRow({ item }: { item: TeamActivityItem }) {
 
 type ReportPeriod = "today" | "week" | "month" | "year" | "custom";
 
-function toISODate(d: Date) { return d.toISOString().slice(0, 10); }
-
+/* On Draw's calendar, whatever the browser's clock (lib/drawDates.ts). */
 function getReportRange(p: ReportPeriod): { from: string; to: string } {
-  const now = new Date();
-  const today = toISODate(now);
-  switch (p) {
-    case "today": return { from: today, to: today };
-    case "week": {
-      const mon = new Date(now);
-      mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-      return { from: toISODate(mon), to: today };
-    }
-    case "month": {
-      return { from: toISODate(new Date(now.getFullYear(), now.getMonth(), 1)), to: today };
-    }
-    case "year": {
-      return { from: toISODate(new Date(now.getFullYear(), 0, 1)), to: today };
-    }
-    default: return { from: "", to: "" };
-  }
+  return p === "custom" ? { from: "", to: "" } : drawRange(p);
 }
 
 const REPORT_PERIODS: { value: ReportPeriod; label: string }[] = [

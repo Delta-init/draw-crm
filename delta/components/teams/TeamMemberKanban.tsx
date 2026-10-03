@@ -28,6 +28,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { getInitials } from "@/lib/utils";
+import { drawDate, drawRange } from "@/lib/drawDates";
 import type { Lead } from "@/types/lead";
 import { LEAD_STATUSES, STATUS_META, type LeadStatus } from "@/lib/statusConfig";
 import type { Team } from "@/types/team";
@@ -79,14 +80,12 @@ function getMemberName(user: User | string | null | undefined): string {
   if (!user) return "";
   return typeof user === "object" ? user.name : user;
 }
-function todayISO() { return new Date().toISOString().slice(0, 10); }
+// On Draw's calendar, whatever the browser's clock (lib/drawDates.ts).
+function todayISO() { return drawDate(); }
 
 function getRangeFor(period: string): { f: string; t: string } {
-  const now = new Date(); const t = now.toISOString().slice(0, 10);
-  if (period === "today") return { f: t, t };
-  if (period === "week")  { const m = new Date(now); m.setDate(now.getDate() - ((now.getDay() + 6) % 7)); return { f: m.toISOString().slice(0, 10), t }; }
-  if (period === "month") return { f: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10), t };
-  return { f: new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10), t };
+  const r = drawRange(period === "today" || period === "week" || period === "month" ? period : "year");
+  return { f: r.from, t: r.to };
 }
 
 function getColorForIdx(idx: number) {

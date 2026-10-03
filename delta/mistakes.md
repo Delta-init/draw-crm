@@ -382,9 +382,19 @@ No `min` attribute on `datetime-local` input, and no frontend validation.
 
 ---
 
+---
+
+## [2026-10-03] "This Month" began on the last day of the month before
+
+**Bug:** Date presets built a local `Date` (the 1st, Monday, today) and wrote it with `toISOString().slice(0, 10)`, which is the UTC date — in India and the UAE the day before until the early morning. "This Month" ran from the last day of the previous month, so a month-end's sales showed in the new month; "Today" was yesterday in the small hours.
+**Fix:** `lib/drawDates.ts` (`drawDate`, `drawRange`) reads Draw's calendar (`DRAW_TZ`, the same as the backend's `utils/drawTime.ts`) whatever the browser's clock; the Reports page, its PDF export, the Leads filter, the Teams and team-member pages use it.
+**Rule:** Never `toISOString().slice(0, 10)` for "today" or a preset's start — use `drawDate()` / `drawRange()`.
+
+---
+
 ## ➕ Adding a New Mistake
 
 Copy the template at the top and place it at the **top** of the correct category section.
 
-**Entry count**: 11
+**Entry count**: 12
 *(Increment every time you add a mistake)*

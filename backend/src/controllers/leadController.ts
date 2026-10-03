@@ -10,6 +10,7 @@ import { emitToUser } from "../socket.js";
 import { Lead } from "../models/Lead.js";
 import { User } from "../models/User.js";
 import { Team } from "../models/Team.js";
+import { drawDayEnd, drawDayStart, drawToday } from "../utils/drawTime.js";
 import mongoose from "mongoose";
 
 const leadService = new LeadService();
@@ -864,27 +865,27 @@ export const getUserRevenue = async (
     const { userId } = req.params;
     const { period, from, to } = req.query as Record<string, string>;
 
-    // Build date range
-    const now = new Date();
+    // Build date range — whole days on Draw's calendar, whatever the server's clock (utils/drawTime.ts)
+    const today = drawToday();
+    const [y, m, d] = today.split("-").map(Number) as [number, number, number];
+    const ymd = (t: number) => new Date(t).toISOString().slice(0, 10);   // a UTC-midnight date's calendar date
     let dateFrom: Date;
-    let dateTo: Date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    let dateTo: Date = drawDayEnd(today)!;
 
     if (period === "today") {
-      dateFrom = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      dateFrom = drawDayStart(today)!;
     } else if (period === "week") {
-      const day = now.getDay();
-      const diff = (day === 0 ? -6 : 1 - day); // Monday start
-      dateFrom = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff, 0, 0, 0, 0);
+      const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+      dateFrom = drawDayStart(ymd(Date.UTC(y, m - 1, d - ((dow + 6) % 7))))!;   // Monday start
     } else if (period === "month") {
-      dateFrom = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-      dateTo   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      dateFrom = drawDayStart(ymd(Date.UTC(y, m - 1, 1)))!;
+      dateTo   = drawDayEnd(ymd(Date.UTC(y, m, 0)))!;   // the month's last day
     } else if (period === "year") {
-      dateFrom = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-      dateTo   = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
-    } else if (period === "custom" && from && to) {
-      dateFrom = new Date(from);
-      dateTo   = new Date(to);
-      dateTo.setHours(23, 59, 59, 999);
+      dateFrom = drawDayStart(`${y}-01-01`)!;
+      dateTo   = drawDayEnd(`${y}-12-31`)!;
+    } else if (period === "custom" && from && to && drawDayStart(from) && drawDayEnd(to)) {
+      dateFrom = drawDayStart(from)!;
+      dateTo   = drawDayEnd(to)!;
     } else {
       // Default: all time
       dateFrom = new Date(0);

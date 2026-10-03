@@ -4,6 +4,7 @@ import { Lead } from "../models/Lead.js";
 import { User } from "../models/User.js";
 import { TeamMessage } from "../models/TeamMessage.js";
 import { buildPagination } from "../utils/response.js";
+import { drawDayRange, drawMonthStart } from "../utils/drawTime.js";
 import type { TeamFilters, ITeam, IUser } from "../types/index.js";
 import { emitToUser } from "../socket.js";
 import { notifyLeadAssignment, notifyBulkLeadAssignment } from "./pushService.js";
@@ -74,8 +75,7 @@ export class TeamService {
 
     // Append lead counts per team
     const teamIds = teams.map((t) => (t as unknown as ITeam & { _id: { toString(): string } })._id.toString());
-    const now = new Date();
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const monthStart = drawMonthStart();   // this month, on Draw's calendar
     const leadCounts = await Promise.all(
       teamIds.map(async (id) => ({
         teamId:     id,
@@ -99,8 +99,7 @@ export class TeamService {
     const team = await populatedTeam(id);
     if (!team) throw Object.assign(new Error("Team not found"), { statusCode: 404 });
 
-    const now2 = new Date();
-    const monthStart2 = new Date(Date.UTC(now2.getUTCFullYear(), now2.getUTCMonth(), 1));
+    const monthStart2 = drawMonthStart();   // this month, on Draw's calendar
     const [total, unassigned, thisMonth] = await Promise.all([
       Lead.countDocuments({ team: id }),
       Lead.countDocuments({ team: id, assignedTo: null }),
@@ -176,19 +175,9 @@ export class TeamService {
       query.$or = [{ name: regex }, { email: regex }, { phone: regex }];
     }
 
-    // Date range filter (UTC-normalised, same as main leads)
+    // Date range filter: whole days on Draw's calendar, the same as the main leads (utils/drawTime.ts)
     if (filters.dateFrom || filters.dateTo) {
-      const dateRange: Record<string, Date> = {};
-      if (filters.dateFrom) {
-        const from = new Date(filters.dateFrom);
-        from.setUTCHours(0, 0, 0, 0);
-        if (!isNaN(from.getTime())) dateRange.$gte = from;
-      }
-      if (filters.dateTo) {
-        const to = new Date(filters.dateTo);
-        to.setUTCHours(23, 59, 59, 999);
-        if (!isNaN(to.getTime())) dateRange.$lte = to;
-      }
+      const dateRange = drawDayRange(filters.dateFrom, filters.dateTo);
       if (Object.keys(dateRange).length > 0) query.createdAt = dateRange;
     }
 
@@ -214,10 +203,8 @@ export class TeamService {
     // Build date range filter on createdAt
     const dateMatch: Record<string, unknown> = {};
     if (dateFrom || dateTo) {
-      const range: Record<string, Date> = {};
-      if (dateFrom) range.$gte = new Date(dateFrom + "T00:00:00.000Z");
-      if (dateTo)   range.$lte = new Date(dateTo   + "T23:59:59.999Z");
-      dateMatch.createdAt = range;
+      const range = drawDayRange(dateFrom, dateTo);
+      if (Object.keys(range).length > 0) dateMatch.createdAt = range;
     }
 
     const ALL_STATUSES = [
@@ -568,14 +555,12 @@ export class TeamService {
 
     // Always-current-month window for the thisMonth stat
     const dashNow = new Date();
-    const dashMonthStart = new Date(Date.UTC(dashNow.getUTCFullYear(), dashNow.getUTCMonth(), 1));
+    const dashMonthStart = drawMonthStart(dashNow);   // this month, on Draw's calendar
 
     // Optional date range filter applied to all other counts
     const dateFilter: Record<string, unknown> = {};
     if (dateFrom || dateTo) {
-      const range: Record<string, Date> = {};
-      if (dateFrom) { const d = new Date(dateFrom); d.setUTCHours(0, 0, 0, 0); if (!isNaN(d.getTime())) range.$gte = d; }
-      if (dateTo)   { const d = new Date(dateTo);   d.setUTCHours(23, 59, 59, 999); if (!isNaN(d.getTime())) range.$lte = d; }
+      const range = drawDayRange(dateFrom, dateTo);
       if (Object.keys(range).length) dateFilter.createdAt = range;
     }
     const base = { team: teamId, ...dateFilter };

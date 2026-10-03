@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { useTeamMember, useTeamMemberLeads } from "@/hooks/useTeams";
 import { formatDate, getInitials } from "@/lib/utils";
+import { drawDate } from "@/lib/drawDates";
 import { LeadsDateFilter, TodayLeadsButton } from "@/components/leads/LeadsDateFilter";
 import Link from "next/link";
 import type { LeadStatus } from "@/lib/statusConfig";
@@ -79,7 +80,7 @@ export default function TeamMemberPage() {
   const [dateTo, setDateTo]           = useState("");
   const [showDateFilter, setShowDateFilter] = useState(false);
 
-  function todayISO() { return new Date().toISOString().slice(0, 10); }
+  function todayISO() { return drawDate(); }   // Draw's today, whatever the browser's clock
   const isTodayActive = dateFrom === todayISO() && dateTo === todayISO();
 
   function applyToday() {

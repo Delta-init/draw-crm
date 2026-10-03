@@ -6,6 +6,7 @@ import { CalendarDays, X, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { drawRange } from "@/lib/drawDates";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -23,26 +24,9 @@ export interface LeadsDateFilterProps {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function toISO(d: Date) { return d.toISOString().slice(0, 10); }
-
+/* On Draw's calendar, whatever the browser's clock (lib/drawDates.ts). */
 function resolveRange(period: QuickPeriod): { from: string; to: string } {
-  const now   = new Date();
-  const today = toISO(now);
-  switch (period) {
-    case "today":
-      return { from: today, to: today };
-    case "week": {
-      const mon = new Date(now);
-      mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-      return { from: toISO(mon), to: today };
-    }
-    case "month":
-      return { from: toISO(new Date(now.getFullYear(), now.getMonth(), 1)), to: today };
-    case "year":
-      return { from: toISO(new Date(now.getFullYear(), 0, 1)), to: today };
-    default:
-      return { from: "", to: "" };
-  }
+  return period === "custom" || period === "" ? { from: "", to: "" } : drawRange(period);
 }
 
 const QUICK_BTNS: { id: QuickPeriod; label: string }[] = [

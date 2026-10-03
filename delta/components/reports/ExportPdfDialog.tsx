@@ -12,6 +12,7 @@ import {
   ResponsiveDialogFooter,
 } from "@/components/ui/responsive-dialog";
 import { cn } from "@/lib/utils";
+import { drawDate, drawRange } from "@/lib/drawDates";
 import api from "@/lib/axios";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -28,26 +29,9 @@ interface ExportPdfDialogProps {
 
 // ── Period helpers ─────────────────────────────────────────────────────────────
 
-function toISO(d: Date) { return d.toISOString().slice(0, 10); }
-
+/* On Draw's calendar, whatever the browser's clock (lib/drawDates.ts). */
 function getRange(p: QuickPeriod): { from: string; to: string } {
-  const now   = new Date();
-  const today = toISO(now);
-  switch (p) {
-    case "today":
-      return { from: today, to: today };
-    case "week": {
-      const mon = new Date(now);
-      mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-      return { from: toISO(mon), to: today };
-    }
-    case "month":
-      return { from: toISO(new Date(now.getFullYear(), now.getMonth(), 1)), to: today };
-    case "year":
-      return { from: toISO(new Date(now.getFullYear(), 0, 1)), to: today };
-    default:
-      return { from: "", to: "" };
-  }
+  return p === "custom" ? { from: "", to: "" } : drawRange(p);
 }
 
 const QUICK_BTNS: { id: QuickPeriod; label: string }[] = [
@@ -107,7 +91,7 @@ export function ExportPdfDialog({
       const a    = document.createElement("a");
       a.href     = href;
       const { from, to } = computeRange();
-      const label = from && to ? `${from}_${to}` : new Date().toISOString().slice(0, 10);
+      const label = from && to ? `${from}_${to}` : drawDate();
       const slug  = entityName
         ? entityName.toLowerCase().replace(/\s+/g, "-") + "-"
         : "";

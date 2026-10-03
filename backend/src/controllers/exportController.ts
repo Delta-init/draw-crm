@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { drawDayRange } from "../utils/drawTime.js";
 import * as XLSX from "xlsx";
 import PDFDocument from "pdfkit";
 import { ReportService } from "../services/reportService.js";
@@ -340,12 +341,10 @@ const STATUS_COLORS_EX: Record<string, string> = {
   rnr:"#f59e0b", callback:"#0ea5e9", whatsapp:"#25d366", student:"#6366f1",
 };
 
+// Whole days on Draw's calendar, as the web's presets and pickers mean them (utils/drawTime.ts).
 function buildDateMatch(dateFrom?: string, dateTo?: string): Record<string, unknown> {
-  if (!dateFrom && !dateTo) return {};
-  const f: Record<string, Date> = {};
-  if (dateFrom) f["$gte"] = new Date(dateFrom + "T00:00:00.000Z");
-  if (dateTo)   f["$lte"] = new Date(dateTo   + "T23:59:59.999Z");
-  return { createdAt: f };
+  const range = drawDayRange(dateFrom, dateTo);
+  return Object.keys(range).length ? { createdAt: range } : {};
 }
 
 function sendPdf(res: Response, buf: Buffer, name: string) {

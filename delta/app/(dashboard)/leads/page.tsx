@@ -38,6 +38,7 @@ import { useUsers } from "@/hooks/useUsers";
 import { useTeams } from "@/hooks/useTeams";
 import { useAuthStore } from "@/lib/store/authStore";
 import { formatDate } from "@/lib/utils";
+import { drawDate, drawRange } from "@/lib/drawDates";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Lead } from "@/types/lead";
 import type { LeadStatus } from "@/lib/statusConfig";
@@ -536,7 +537,7 @@ function LeadsPageContent() {
     setPage(1);
   }
 
-  function todayISO() { return new Date().toISOString().slice(0, 10); }
+  function todayISO() { return drawDate(); }   // Draw's today, whatever the browser's clock
   const isTodayActive = dateFrom === todayISO() && dateTo === todayISO();
   function applyToday() {
     const today = todayISO();
@@ -1069,14 +1070,9 @@ function LeadsPageContent() {
                       <div className="flex flex-wrap gap-1.5">
                         {(["today", "week", "month", "year"] as const).map((p) => {
                           const labels = { today: "Today", week: "This Week", month: "This Month", year: "This Year" };
-                          const getRangeFor = (period: string) => {
-                            const now = new Date(); const t = now.toISOString().slice(0, 10);
-                            if (period === "today") return { f: t, t };
-                            if (period === "week") { const m = new Date(now); m.setDate(now.getDate() - ((now.getDay() + 6) % 7)); return { f: m.toISOString().slice(0, 10), t }; }
-                            if (period === "month") return { f: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10), t };
-                            return { f: new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10), t };
-                          };
-                          const range = getRangeFor(p);
+                          // On Draw's calendar, whatever the browser's clock (lib/drawDates.ts).
+                          const r = drawRange(p);
+                          const range = { f: r.from, t: r.to };
                           const isActive = dateFrom === range.f && dateTo === range.t;
                           return (
                             <button

@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { Lead } from "../models/Lead.js";
+import { DRAW_TZ, drawDayRange } from "../utils/drawTime.js";
 import { Team } from "../models/Team.js";
 import { User } from "../models/User.js";
 
@@ -17,12 +18,10 @@ interface DateFilter {
 export class ReportService {
   // ── Date helpers ────────────────────────────────────────────────────────────
 
+  // Whole days on Draw's calendar, as the web's presets and pickers mean them (utils/drawTime.ts).
   private buildDateFilter(dateFrom?: string, dateTo?: string): DateFilter {
-    if (!dateFrom && !dateTo) return {};
-    const f: { $gte?: Date; $lte?: Date } = {};
-    if (dateFrom) f.$gte = new Date(dateFrom + "T00:00:00.000Z");
-    if (dateTo)   f.$lte = new Date(dateTo   + "T23:59:59.999Z");
-    return { createdAt: f };
+    const range = drawDayRange(dateFrom, dateTo);
+    return Object.keys(range).length ? { createdAt: range } : {};
   }
 
   // Build per-status $sum expressions for $group stage
@@ -110,16 +109,16 @@ export class ReportService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let groupId: any;
     if (period === "daily") {
-      groupId = { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } };
+      groupId = { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: DRAW_TZ } };
     } else if (period === "weekly") {
       groupId = {
-        year: { $isoWeekYear: "$createdAt" },
-        week: { $isoWeek: "$createdAt" },
+        year: { $isoWeekYear: { date: "$createdAt", timezone: DRAW_TZ } },
+        week: { $isoWeek: { date: "$createdAt", timezone: DRAW_TZ } },
       };
     } else {
       groupId = {
-        year:  { $year:  "$createdAt" },
-        month: { $month: "$createdAt" },
+        year:  { $year: { date: "$createdAt", timezone: DRAW_TZ } },
+        month: { $month: { date: "$createdAt", timezone: DRAW_TZ } },
       };
     }
 
@@ -378,13 +377,13 @@ export class ReportService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let bucketId: any;
     if (period === "daily") {
-      bucketId = { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } };
+      bucketId = { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: DRAW_TZ } };
     } else if (period === "weekly") {
-      bucketId = { year: { $isoWeekYear: "$createdAt" }, week: { $isoWeek: "$createdAt" } };
+      bucketId = { year: { $isoWeekYear: { date: "$createdAt", timezone: DRAW_TZ } }, week: { $isoWeek: { date: "$createdAt", timezone: DRAW_TZ } } };
     } else if (period === "monthly") {
-      bucketId = { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } };
+      bucketId = { year: { $year: { date: "$createdAt", timezone: DRAW_TZ } }, month: { $month: { date: "$createdAt", timezone: DRAW_TZ } } };
     } else {
-      bucketId = { year: { $year: "$createdAt" } };
+      bucketId = { year: { $year: { date: "$createdAt", timezone: DRAW_TZ } } };
     }
 
     // Aggregate: per (time-bucket, team) → count + status breakdown
@@ -496,11 +495,8 @@ export class ReportService {
 
   /** Build a match filter on payments.paidAt (used after $unwind: "$payments") */
   private buildPaymentDateFilter(dateFrom?: string, dateTo?: string): Record<string, unknown> {
-    if (!dateFrom && !dateTo) return {};
-    const f: { $gte?: Date; $lte?: Date } = {};
-    if (dateFrom) f.$gte = new Date(dateFrom + "T00:00:00.000Z");
-    if (dateTo)   f.$lte = new Date(dateTo   + "T23:59:59.999Z");
-    return { "payments.paidAt": f };
+    const range = drawDayRange(dateFrom, dateTo);
+    return Object.keys(range).length ? { "payments.paidAt": range } : {};
   }
 
   // ── 6. Revenue overview ───────────────────────────────────────────────────────
@@ -675,13 +671,13 @@ export class ReportService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let bucketId: any;
     if (period === "daily") {
-      bucketId = { $dateToString: { format: "%Y-%m-%d", date: "$payments.paidAt" } };
+      bucketId = { $dateToString: { format: "%Y-%m-%d", date: "$payments.paidAt", timezone: DRAW_TZ } };
     } else if (period === "weekly") {
-      bucketId = { year: { $isoWeekYear: "$payments.paidAt" }, week: { $isoWeek: "$payments.paidAt" } };
+      bucketId = { year: { $isoWeekYear: { date: "$payments.paidAt", timezone: DRAW_TZ } }, week: { $isoWeek: { date: "$payments.paidAt", timezone: DRAW_TZ } } };
     } else if (period === "monthly") {
-      bucketId = { year: { $year: "$payments.paidAt" }, month: { $month: "$payments.paidAt" } };
+      bucketId = { year: { $year: { date: "$payments.paidAt", timezone: DRAW_TZ } }, month: { $month: { date: "$payments.paidAt", timezone: DRAW_TZ } } };
     } else {
-      bucketId = { year: { $year: "$payments.paidAt" } };
+      bucketId = { year: { $year: { date: "$payments.paidAt", timezone: DRAW_TZ } } };
     }
 
     const agg = await Lead.aggregate([
@@ -1078,13 +1074,13 @@ export class ReportService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let bucketId: any;
     if (period === "daily") {
-      bucketId = { $dateToString: { format: "%Y-%m-%d", date: "$payments.paidAt" } };
+      bucketId = { $dateToString: { format: "%Y-%m-%d", date: "$payments.paidAt", timezone: DRAW_TZ } };
     } else if (period === "weekly") {
-      bucketId = { year: { $isoWeekYear: "$payments.paidAt" }, week: { $isoWeek: "$payments.paidAt" } };
+      bucketId = { year: { $isoWeekYear: { date: "$payments.paidAt", timezone: DRAW_TZ } }, week: { $isoWeek: { date: "$payments.paidAt", timezone: DRAW_TZ } } };
     } else if (period === "monthly") {
-      bucketId = { year: { $year: "$payments.paidAt" }, month: { $month: "$payments.paidAt" } };
+      bucketId = { year: { $year: { date: "$payments.paidAt", timezone: DRAW_TZ } }, month: { $month: { date: "$payments.paidAt", timezone: DRAW_TZ } } };
     } else {
-      bucketId = { year: { $year: "$payments.paidAt" } };
+      bucketId = { year: { $year: { date: "$payments.paidAt", timezone: DRAW_TZ } } };
     }
 
     const agg = await Lead.aggregate([
@@ -1238,10 +1234,10 @@ export class ReportService {
 
     const groupId =
       period === "daily"
-        ? { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }
+        ? { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: DRAW_TZ } }
         : period === "weekly"
-        ? { year: { $isoWeekYear: "$createdAt" }, week: { $isoWeek: "$createdAt" } }
-        : { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } };
+        ? { year: { $isoWeekYear: { date: "$createdAt", timezone: DRAW_TZ } }, week: { $isoWeek: { date: "$createdAt", timezone: DRAW_TZ } } }
+        : { year: { $year: { date: "$createdAt", timezone: DRAW_TZ } }, month: { $month: { date: "$createdAt", timezone: DRAW_TZ } } };
 
     return Lead.aggregate([
       { $match: match },

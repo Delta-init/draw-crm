@@ -1,4 +1,5 @@
 import { Lead } from "../models/Lead.js";
+import { drawDayRange } from "../utils/drawTime.js";
 import { User } from "../models/User.js";
 import { Team } from "../models/Team.js";
 import { buildPagination } from "../utils/response.js";
@@ -380,19 +381,8 @@ export class LeadService {
 
     // ── Date range filter on createdAt ──────────────────────────────────────────
     if (filters.dateFrom || filters.dateTo) {
-      const dateRange: Record<string, Date> = {};
-      if (filters.dateFrom) {
-        const from = new Date(filters.dateFrom);
-        // Start of the given day (00:00:00 UTC)
-        from.setUTCHours(0, 0, 0, 0);
-        if (!isNaN(from.getTime())) dateRange.$gte = from;
-      }
-      if (filters.dateTo) {
-        const to = new Date(filters.dateTo);
-        // End of the given day (23:59:59.999 UTC)
-        to.setUTCHours(23, 59, 59, 999);
-        if (!isNaN(to.getTime())) dateRange.$lte = to;
-      }
+      // Whole days on Draw's calendar, as the web's presets and pickers mean them (utils/drawTime.ts).
+      const dateRange = drawDayRange(filters.dateFrom, filters.dateTo);
       if (Object.keys(dateRange).length > 0) {
         query.createdAt = dateRange;
       }

@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { drawRange } from "@/lib/drawDates";
 import { ExportPdfDialog } from "@/components/reports/ExportPdfDialog";
 import { AiChatPanel } from "@/components/leads/AiChatPanel";
 import {
@@ -85,30 +86,10 @@ const TEAM_PALETTE = [
 
 type QuickPeriod = "today" | "week" | "month" | "quarter" | "year" | "custom";
 
-function toISO(d: Date) { return d.toISOString().slice(0, 10); }
-
+/* On Draw's calendar, whatever the browser's clock: "This Month" is the 1st
+   to today, not from the last day of the month before (lib/drawDates.ts). */
 function getQuickRange(p: QuickPeriod): { from: string; to: string } {
-  const now   = new Date();
-  const today = toISO(now);
-  switch (p) {
-    case "today":   return { from: today, to: today };
-    case "week": {
-      const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-      return { from: toISO(mon), to: today };
-    }
-    case "month": {
-      const first = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { from: toISO(first), to: today };
-    }
-    case "quarter": {
-      const first = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-      return { from: toISO(first), to: today };
-    }
-    case "year": {
-      return { from: toISO(new Date(now.getFullYear(), 0, 1)), to: today };
-    }
-    default: return { from: "", to: "" };
-  }
+  return p === "custom" ? { from: "", to: "" } : drawRange(p);
 }
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
