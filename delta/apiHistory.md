@@ -1393,3 +1393,14 @@ All routes require authentication and call the Draw backend, which proxies the L
 | `useUpdateCommissionSettings()` | invalidates `["commission"]` | `PUT /api/v1/commission/settings` | Super Admin |
 
 **Types:** `types/commission.ts`; `Course.commission` in `types/course.ts`. **Helpers:** `lib/commission.ts` (AED/USD formatting, UAE months, `TL_RULE` — must match the backend's).
+
+---
+
+## Enrolment steps (added 2026-10-04)
+
+| Hook | Query key | Endpoint | Notes |
+|------|-----------|----------|-------|
+| `useMyEnrolments()` (existing) | `["enrolments", …]` | `GET /api/v1/students/enrolments/mine` | Each row now has `steps` |
+| `useEnrolment(id)` | `["enrolments", "one", id]` | `GET /api/v1/students/enrolments/:id` | The enrolment's own page: steps with who/when, commission |
+
+**Types:** `EnrolmentStep`, `EnrolmentDetail` in `hooks/useEnrolments.ts`; `EnrolmentCommission.onboarded / bonus`.

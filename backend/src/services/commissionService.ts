@@ -7,6 +7,7 @@ import { Course } from "../models/Course.js";
 import { Team } from "../models/Team.js";
 import { User } from "../models/User.js";
 import { fetchEnrolmentStatuses } from "./financeClient.js";
+import { stepsOf, allDone, waitingOn } from "./enrolmentSteps.js";
 import { env } from "../config/env.js";
 import type {
   CommissionRole,
@@ -30,9 +31,12 @@ import type {
  *   - sales closed under a shared login (root user, superadmin, developer)
  *     earn nobody anything.
  *
- * Recorded when this CRM sees finance approve the enrolment, with the amounts
- * of that day, and counted in the month the sale was made (UAE time). A sale
- * whose invoice finance later voids is reversed.
+ * Counted once the sale's five steps are all done (the user, 2026-10-04):
+ * finance approved, LMS account, CS assigned, onboarded, and the MT5 bonus a
+ * broker admin approved — approved by itself when none was promised. With the
+ * amounts of that day, in the month the sale was made (UAE time), for sales
+ * closed from 1 October 2026 on. Until then the sale is "progress", saying
+ * which step it waits on. A sale whose invoice finance voids is reversed.
  */
 
 /**
@@ -232,7 +236,12 @@ export async function resolveSale(
 
 // ─── The sweep ────────────────────────────────────────────────────────────────
 
-const BATCH = 50;
+/**
+ * Commission counts sales closed from here on (the user, 2026-10-04: "this
+ * month onwards") — 1 October 2026, 00:00 UAE.
+ */
+export const COUNT_FROM = new Date("2026-10-01T00:00:00+04:00");
+const TRACK_MS = 2 * 60_000;
 const VOID_CHECK_MS = 10 * 60_000;
 /** How far back a voided invoice still takes a sale's commission back. */
 const VOID_WINDOW_MS = 120 * 24 * 60 * 60_000;
@@ -250,65 +259,118 @@ type StudentLite = {
   financeInvoiceNumber?: string | null;
 };
 
-/** Every approval not yet recorded becomes a sale, once. */
-export async function recordApprovedSales(config: CommissionConfig, names: Names): Promise<number> {
-  const due = await FinanceHandover.find({ approvedAt: { $ne: null }, commissionAt: null })
-    .sort({ approvedAt: 1 })
-    .limit(BATCH);
-  let recorded = 0;
+/**
+ * Every sale closed since COUNT_FROM, followed until its five steps are done
+ * (enrolmentSteps.ts): finance approved, LMS account, CS, onboarded, MT5 bonus.
+ * Until then it is "progress", saying which step it waits on; once all are
+ * done, who earns what is decided with the plan of that day — counted, held
+ * (waiting) or excluded — and never redone by this. A sale counted by the rule
+ * before this one (at finance's approval, with no `stepsDoneAt`) is followed
+ * again until its steps are done too.
+ */
+export async function trackSales(config: CommissionConfig, names: Names): Promise<number> {
+  const handed = await FinanceHandover.find({ status: "sent" }).select("studentId invoiceNumber approvedAt").lean();
+  if (!handed.length) return 0;
+  const handoverOf = new Map(handed.map((h) => [String(h.studentId), h]));
+  const students = (await Student.find({ _id: { $in: handed.map((h) => h.studentId) }, enrollmentDate: { $gte: COUNT_FROM } })
+    .select("name enrollmentNumber courses team assignedTo enrollmentDate createdAt financeInvoiceNumber")
+    .lean()) as StudentLite[];
+  const sales = await CommissionSale.find({ student: { $in: students.map((s) => s._id) } }).lean();
+  const saleOf = new Map(sales.map((x) => [String(x.student), x]));
+  const open = students.filter((s) => {
+    const sale = saleOf.get(String(s._id));
+    return !sale || sale.state === "progress" || (sale.state === "counted" && !sale.stepsDoneAt);
+  }).slice(0, 200);
+  if (!open.length) return 0;
 
-  for (const row of due) {
+  const statuses = await fetchEnrolmentStatuses(open.map((s) => String(s._id)));
+  if (!statuses.length) return 0;                       // finance unreachable: ask again next time
+  const statusOf = new Map(statuses.map((st) => [st.externalId, st]));
+  let changed = 0;
+
+  for (const student of open) {
     try {
-      const student = (await Student.findById(row.get("studentId"))
-        .select("name enrollmentNumber courses team assignedTo enrollmentDate createdAt financeInvoiceNumber")
-        .lean()) as StudentLite | null;
+      const st = statusOf.get(String(student._id));
+      if (!st) continue;                                 // finance has no invoice for it (yet)
+      const sale = saleOf.get(String(student._id));
+      const h = handoverOf.get(String(student._id));
+      const closer = idOf(student.assignedTo);
+      const saleDate = student.enrollmentDate ?? student.createdAt ?? new Date();
+      // Draw: one invoice, a line per course — the sale earns every course's row, added up.
+      const ids = (student.courses ?? []).map(idOf).filter((id) => Types.ObjectId.isValid(id));
+      const found = ids.length ? await Course.find({ _id: { $in: ids } }).select("name commission").lean() : [];
+      const sold = ids.map((id) => found.find((c) => String(c._id) === id)).filter(Boolean) as typeof found;
+      const course = sold[0] ?? null;
+      const salePlan = planOfAll(sold);
+      const base = {
+        student: student._id,
+        studentName: student.name ?? "",
+        enrollmentNumber: student.enrollmentNumber,
+        invoiceNumber: st.invoiceNumber || (h?.invoiceNumber as string | undefined) || student.financeInvoiceNumber || "",
+        course: course?._id ?? null,
+        courseName: sold.map((c) => c.name).join(" + "),
+        closer: closer && Types.ObjectId.isValid(closer) ? new Types.ObjectId(closer) : null,
+        closerName: closer ? await names.of(closer) : "",
+        saleDate,
+        month: uaeMonthOf(saleDate),
+        ...(h?.approvedAt ? { approvedAt: h.approvedAt } : {}),
+      };
 
-      // A student deleted before finance approved them has nobody left to pay.
-      if (student) {
-        const ids = (student.courses ?? []).map(idOf).filter((id) => Types.ObjectId.isValid(id));
-        const found = ids.length ? await Course.find({ _id: { $in: ids } }).select("name commission").lean() : [];
-        // In the order they were sold, so the name reads as the invoice does.
-        const sold = ids.map((id) => found.find((c) => String(c._id) === id)).filter(Boolean) as typeof found;
-        const course = sold[0] ?? null;
-        const plan = planOfAll(sold);
-        const approvedAt = row.get("approvedAt") as Date;
-        const saleDate = student.enrollmentDate ?? student.createdAt ?? approvedAt;
-        const resolved = await resolveSale({ closer: student.assignedTo, saleTeam: student.team, plan }, config, names);
-        const closer = idOf(student.assignedTo);
-
-        // Insert-only: a sale recorded by an earlier pass is left exactly as it was.
-        const result = await CommissionSale.updateOne(
-          { student: student._id },
-          {
-            $setOnInsert: {
-              student: student._id,
-              studentName: student.name ?? "",
-              enrollmentNumber: student.enrollmentNumber,
-              invoiceNumber: (row.get("invoiceNumber") as string) || student.financeInvoiceNumber || "",
-              course: course?._id ?? null,
-              courseName: sold.map((c) => c.name).join(" + "),
-              closer: closer && Types.ObjectId.isValid(closer) ? new Types.ObjectId(closer) : null,
-              closerName: closer ? await names.of(closer) : "",
-              saleDate,
-              month: uaeMonthOf(saleDate),
-              approvedAt,
-              plan,
-              ...resolved,
-              ...(resolved.state === "counted" ? { countedAt: new Date() } : {}),
+      if (st.status === "void") {
+        if (sale) {
+          await CommissionSale.updateOne({ _id: sale._id }, {
+            $set: {
+              state: "reversed",
+              reversedAt: new Date(),
+              reason: st.invoiceNumber ? `Invoice ${st.invoiceNumber} was voided in finance` : "Its invoice was voided in finance",
             },
-          },
-          { upsert: true },
-        );
-        if (result.upsertedCount) recorded++;
+          });
+          changed++;
+        }
+        continue;
       }
 
-      row.set("commissionAt", new Date());
-      await row.save();
+      // Closed under a shared login: nobody earns it, whatever its steps.
+      if (closer && config.excluded.has(closer)) {
+        const resolved = await resolveSale({ closer, saleTeam: student.team, plan: salePlan }, config, names);
+        await CommissionSale.updateOne({ student: student._id }, { $set: { ...base, ...resolved, plan: salePlan } }, { upsert: true });
+        changed++;
+        continue;
+      }
+
+      const steps = stepsOf(st, h ? { status: "sent", approvedAt: h.approvedAt as Date | undefined } : null);
+      if (!allDone(steps)) {
+        const reason = waitingOn(steps);
+        if (sale?.state === "progress" && sale.reason === reason) continue;
+        await CommissionSale.updateOne(
+          { student: student._id },
+          { $set: { ...base, state: "progress", reason, lines: [], plan: salePlan }, $unset: { countedAt: "", team: "", teamName: "" } },
+          { upsert: true },
+        );
+        changed++;
+        continue;
+      }
+
+      // Every step done: who earns what, at the plan of today.
+      const plan = salePlan;
+      const resolved = await resolveSale({ closer: student.assignedTo, saleTeam: student.team, plan }, config, names);
+      await CommissionSale.updateOne(
+        { student: student._id },
+        {
+          $set: {
+            ...base, ...resolved, plan, stepsDoneAt: new Date(),
+            ...(resolved.state === "counted" ? { countedAt: new Date() } : {}),
+            ...(base.approvedAt ? {} : { approvedAt: new Date() }),
+          },
+        },
+        { upsert: true },
+      );
+      changed++;
     } catch (err) {
-      console.error(`[commission] could not record the sale for student ${String(row.get("studentId"))}`, err);
+      console.error(`[commission] could not follow the sale of student ${String(student._id)}`, err);
     }
   }
-  return recorded;
+  return changed;
 }
 
 /**
@@ -334,6 +396,13 @@ export async function settlePendingSales(config: CommissionConfig, names: Names)
       const closerId = idOf(closer);
       const sameCloser = closerId === idOf(sale.closer);
       if (resolved.state === sale.state && resolved.reason === sale.reason && sameCloser) continue;
+      // No longer excluded, but its steps were never followed: back to following them.
+      if (sale.state === "excluded" && resolved.state !== "excluded" && !sale.stepsDoneAt) {
+        sale.set({ state: "progress", reason: "Next step: its steps are being checked", lines: [] });
+        await sale.save();
+        changed++;
+        continue;
+      }
 
       sale.set({
         ...resolved,
@@ -351,14 +420,15 @@ export async function settlePendingSales(config: CommissionConfig, names: Names)
 }
 
 /**
- * Sales whose invoice finance has voided since, taken back. Asked of finance
- * for the last few months' sales only — a void long after is somebody's
- * correction to make by hand, not a reason to ask about every sale forever.
+ * Counted and held sales whose invoice finance has voided since, taken back.
+ * Asked of finance for the last few months' sales only — a void long after is
+ * somebody's correction to make by hand, not a reason to ask about every sale
+ * forever. (Sales still in progress are watched for this by trackSales.)
  */
 export async function reverseVoidedSales(): Promise<number> {
   const live = await CommissionSale.find({
-    state: { $ne: "reversed" },
-    approvedAt: { $gte: new Date(Date.now() - VOID_WINDOW_MS) },
+    state: { $in: ["counted", "waiting", "excluded"] },
+    saleDate: { $gte: new Date(Date.now() - VOID_WINDOW_MS) },
   })
     .select("student")
     .lean();
@@ -388,12 +458,14 @@ export async function reverseVoidedSales(): Promise<number> {
 }
 
 let sweeping = false;
+let lastTrack = 0;
 let lastVoidCheck = 0;
 
 /**
- * One pass: record new approvals, settle what waits, and — every ten minutes —
- * take back voided sales. Run by the finance worker every minute. Never throws:
- * it runs in a timer, where an unhandled rejection kills the process.
+ * One pass: follow open sales' steps (every two minutes), settle what is held,
+ * and — every ten minutes — take back voided sales. Run by the finance worker
+ * every minute. Never throws: it runs in a timer, where an unhandled rejection
+ * kills the process.
  */
 export async function sweepCommission(): Promise<void> {
   if (sweeping) return;
@@ -401,7 +473,10 @@ export async function sweepCommission(): Promise<void> {
   try {
     const config = await loadConfig();
     const names = new Names();
-    await recordApprovedSales(config, names);
+    if (Date.now() - lastTrack >= TRACK_MS) {
+      lastTrack = Date.now();
+      await trackSales(config, names);
+    }
     await settlePendingSales(config, names);
     if (Date.now() - lastVoidCheck >= VOID_CHECK_MS) {
       lastVoidCheck = Date.now();
@@ -412,6 +487,12 @@ export async function sweepCommission(): Promise<void> {
   } finally {
     sweeping = false;
   }
+}
+
+/** Test hook: the next sweep follows every open sale at once, not on its two-minute beat. */
+export function followNow(): void {
+  lastTrack = 0;
+  lastVoidCheck = 0;
 }
 
 // ─── Reading it ───────────────────────────────────────────────────────────────
@@ -587,6 +668,7 @@ export class CommissionService {
         waiting: count("waiting"),
         excluded: count("excluded"),
         reversed: count("reversed"),
+        progress: count("progress"),
       },
     };
   }

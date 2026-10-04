@@ -5,7 +5,8 @@ import { checkPermission } from "../middleware/permissions.js";
 import {
   createStudent, getStudents, getStudentById,
   getStudentByLeadId, updateStudent, deleteStudent,
-  getMyEnrolments, requestInvoice, uploadPaymentReceipt,
+  getMyEnrolments,
+  getEnrolment, requestInvoice, uploadPaymentReceipt,
 } from "../controllers/studentController.js";
 
 const router = Router();
@@ -56,6 +57,9 @@ router.post(
 // Every role has it (2026-10-03); everyone's sales only with Students → view,
 // which getMyEnrolments checks.
 router.get("/enrolments/mine", authenticate, getMyEnrolments);
+// One enrolment, for its own page — every role, like My Enrolments; the service lets the closer, or anyone who may
+// view students, see it. Before "/:id", which would take "enrolments" for a student id.
+router.get("/enrolments/:id", authenticate, getEnrolment);
 
 // Generate the invoice — the same handover that runs when a lead closes,
 // asked for by hand when it never ran or did not get through.

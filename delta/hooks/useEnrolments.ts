@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/axios";
 import { toast } from "@/lib/toast";
-import type { Enrolment, EnrolmentCounts } from "@/types/student";
+import type { Enrolment, EnrolmentCounts, EnrolmentDetail } from "@/types/student";
 
 const KEY = ["enrolments"] as const;
 
@@ -24,6 +24,18 @@ export const useMyEnrolments = (filters: { mine?: boolean; search?: string; stat
       return res.data;
     },
     // Approval happens in another system, on somebody else's schedule.
+    refetchInterval: 30_000,
+  });
+
+/** One enrolment, for its own page. */
+export const useEnrolment = (id: string) =>
+  useQuery({
+    queryKey: [...KEY, "one", id],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: EnrolmentDetail }>(`/students/enrolments/${id}`);
+      return res.data.data;
+    },
+    enabled: Boolean(id),
     refetchInterval: 30_000,
   });
 

@@ -676,3 +676,11 @@ A course says what bonus comes with it (`Course.bonusAmount`, the course's curre
 - **Reversal**: a sale whose invoice finance voids (asked every 10 minutes, for the last 120 days) is reversed — kept, no longer counted.
 - **Who sees what**: Super Admins and the Sales Manager everything; a team leader their teams' sales (without the SM's line) and their own lines; everyone else their own.
 - **Several courses on one sale** (Draw only): a student's `courses` are one invoice with a line each; the sale earns every course's plan row, added up, and is named "A + B". The closing dialog's preview takes every course picked (`?courses=a,b`).
+
+---
+
+## Five steps before commission (2026-10-04)
+
+- A sale's commission counts only once: finance approved it; the LMS has the student; Tetra Commission gave them a CS; their CS sent the welcome (onboarded); and the MT5 bonus promised at the close was approved by a broker admin — "none" promised is approved by itself. A course Tetra Commission doesn't take (not Forex) needs only the first two.
+- Until then: `CommissionSale.state = "progress"`, `reason` = the first step not done ("Next step: …", or "Stopped at: …" when rejected/refused). Nothing is paid on a guess: Tetra Commission not answering leaves a step unknown.
+- From 1 October 2026 (UAE) on, in the month of the close; amounts frozen the day the steps complete.
