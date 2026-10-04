@@ -38,14 +38,16 @@ cleanup() {
   rm -rf "$WORK"
   exit $code
 }
-trap cleanup EXIT INT TERM
 
 for port in "$MONGO_PORT" "$API_PORT"; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     echo "Port $port is already in use." >&2
+    rm -rf "$WORK"
     exit 1
   fi
 done
+# Only now: a port somebody else holds must make this stop, not get killed by the cleanup.
+trap cleanup EXIT INT TERM
 
 mkdir -p "$WORK/db"
 echo "Starting a throwaway mongod on :$MONGO_PORT"
