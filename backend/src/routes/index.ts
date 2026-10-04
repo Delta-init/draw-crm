@@ -15,6 +15,7 @@ import studentRoutes from "./studentRoutes.js";
 import callRoutes from "./callRoutes.js";
 import portalRoutes from "./portalRoutes.js";
 import mentorRoutes from "./mentorRoutes.js";
+import commissionRoutes from "./commissionRoutes.js";
 
 const router = Router();
 
@@ -37,6 +38,8 @@ router.use("/ai",       aiRoutes);
 router.use("/students", studentRoutes);
 router.use("/calls",    callRoutes);
 router.use("/mentors", mentorRoutes);
+// Sales commission: the plan per course, and what each approved sale earns.
+router.use("/commission", commissionRoutes);
 
 // Health check
 router.get("/health", (_req, res) => {

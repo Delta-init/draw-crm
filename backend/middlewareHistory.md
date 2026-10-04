@@ -559,3 +559,9 @@ Registered **before** the `/:id` routes in `studentRoutes.ts` (Bugs #6, #7).
 | `/api/v1/mentors/*` | unchanged — `authenticate` | |
 
 `tracker` stays in `CRM_MODULES` (role documents keep the field), but nothing checks it any more and the Roles & Permissions matrix no longer shows it.
+
+---
+
+## Commission routes (2026-10-04)
+
+Not a permission module: `authenticate` only, like Mentors — a module would start every role but Super Admin with no access to their own pay. The service narrows what each person sees (own / team / all). Changing the plan or its settings is `requireSuperAdmin` (in `commissionController`): `role.isSystemRole && roleName === "Super Admin"`, else 403.

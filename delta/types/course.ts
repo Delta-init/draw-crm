@@ -1,3 +1,5 @@
+import type { CoursePlan } from "@/types/commission";
+
 export interface Course {
   _id: string;
   name: string;
@@ -12,6 +14,8 @@ export interface Course {
   lmsCourseSlug?: string;
   /** Every LMS course it opens, in order — two for a bundle. */
   lmsCourseSlugs?: string[];
+  /** What selling it earns (AED per approved sale) — set on the Commission plan. */
+  commission?: CoursePlan;
   createdAt: string;
   updatedAt: string;
 }

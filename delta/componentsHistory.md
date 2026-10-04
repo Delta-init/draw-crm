@@ -1038,3 +1038,13 @@ A Bonus field (the course's currency, 0 for none) on Add and Edit, with "What a 
 ## CreateStudentModal (changed 2026-10-04)
 
 A new close starts "Bonus given?" at yes with the chosen courses' bonuses added up, marked "From the course — change it if this sale differs"; picking other courses moves it until the seller answers or types an amount (`bonusTouched`). Editing an enrolment never takes it.
+
+---
+
+## Commission page (added 2026-10-04)
+
+**Route:** `app/(dashboard)/commission/page.tsx` — tabs Earnings / Plan; in the sidebar for every role (`permModule: null`).
+**EarningsTab** (`components/commission/EarningsTab.tsx`): month picker (UAE months), totals, each person's Sales Staff / TL / SM, and every sale with its lines or why it is on hold, excluded or reversed.
+**PlanTab** (`components/commission/PlanTab.tsx`): how it's paid (per `TL_RULE`), a card per course (Super Admins edit and save each row), the Sales Manager, excluded logins, team leaders to fix, sales on hold.
+**CommissionPreview** (`components/commission/CommissionPreview.tsx`): props `courseId`, `teamId`, `closerId` — what the counsellor earns on the sale, in the closing dialog; never blocks a close.
+**Changed:** the course card shows its commission (Sales / TL / SM, MT5 credit) and links to the plan; `CreateStudentModal` shows `CommissionPreview` after the fee.

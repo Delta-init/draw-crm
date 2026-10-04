@@ -19,6 +19,15 @@ const envSchema = z.object({
   SUPER_ADMIN_EMAIL: z.string().email().default("superadmin@crm.com"),
   SUPER_ADMIN_PASSWORD: z.string().default("SuperAdmin@123"),
   CLIENT_URL: z.string().default("http://localhost:3000"),
+  /**
+   * Whether this process records sales commission on its timer. Set false in a
+   * local copy pointed at real data, so it does not write people's pay with
+   * code that is not deployed. (The other timed jobs here do not read it yet.)
+   */
+  RUN_SCHEDULERS: z
+    .string()
+    .default("true")
+    .transform((v) => v !== "false" && v !== "0"),
   VAPID_PUBLIC_KEY:    z.string().default(""),
   VAPID_PRIVATE_KEY:   z.string().default(""),
   VAPID_SUBJECT:       z.string().default("mailto:admin@carltoncrm.com"),

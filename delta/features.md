@@ -654,3 +654,13 @@ Copy the template at the top and place it in the correct module section.
 - **Close**: `components/students/CreateStudentModal.tsx` — a new close starts "Bonus given?" at yes with the courses' bonuses added up ("From the course — change it if this sale differs"); picking other courses moves it until the seller answers it
 - **Backend**: `POST` / `PUT /api/v1/courses` with `bonusAmount`
 - **Why**: what a course comes with is set once, where the course is, rather than typed at every close
+
+---
+
+## Commission (2026-10-04)
+
+- **Page**: `app/(dashboard)/commission/page.tsx` — Earnings (a month: totals, per person, every sale) and Plan (each course's amounts, Sales Manager, excluded logins)
+- **Courses**: each card shows what the course pays
+- **Close**: the enrolment dialog shows what the counsellor earns on the sale, once finance approves it
+- **Backend**: `/api/v1/commission/*`
+- **Why**: the owner's commission plan per course, per CRM, with what each person earned

@@ -564,3 +564,17 @@ Each feature documents:
 **Tests**: `scripts/course-bonus-e2e.sh` — throwaway mongod, no `.env`; the four cases.
 
 **Change Log**: 2026-10-04 — added (the owner: "bonus adding option in the course create and edit", in all three sales CRMs).
+
+---
+
+## Commission (2026-10-04)
+
+**Description**: A commission plan per course — Sales Staff / TL / SM in AED per approved sale, and the MT5 credit (USD) the course comes with — and what each sale finance approves earns. Recorded once, when the finance worker sees the enrolment approved, with the plan of that day; counted in the month the sale was made (UAE time). TL_RULE "never": no TL is paid: a sale pays its closer (Sales Staff) and the Sales Manager (SM) only, and needs no team or team leader; the SM who closes earns Sales Staff too. Shared logins (settings) earn nobody anything; a voided invoice reverses the sale.
+
+**Routes** (`authenticate` only — everyone sees their own; the service narrows it): `GET /api/v1/commission/plan`, `GET /api/v1/commission/earnings?month=YYYY-MM` (own / team / all), `GET /api/v1/commission/preview?course=&team=&closer=` (for the closing dialog, nothing saved); Super Admin only: `PUT /api/v1/commission/plan/:courseId` `{ sales, tl, sm, creditUsd }`, `PUT /api/v1/commission/settings` `{ salesManager, excludedUsers }`.
+
+**Models**: `Course.commission`, `CommissionSettings` (`commissionsettings`, key "default"), `CommissionSale` (`commissionsales`, one per student), `FinanceHandover.approvedAt` / `commissionAt`.
+
+**Tests**: `scripts/commission-check.sh` — throwaway mongod, no `.env`, a stand-in for finance; rules, scoping, preview and the API's refusals (follows TL_RULE).
+
+**Change Log**: 2026-10-04 — added (the owner: commission per portal from the "Course Commission Plans" image; Sales Manager Maneesh Babusenan; excluded logins Super Admin (superadmin@crm.com), Sample BDE (bde@crm.com), root user).

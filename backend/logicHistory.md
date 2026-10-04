@@ -663,3 +663,16 @@ End-to-end test: `backend/scripts/enrolment-close-e2e.sh`.
 ## A course's bonus — where a close starts (2026-10-04)
 
 A course says what bonus comes with it (`Course.bonusAmount`, the course's currency, 0 for none), set on the Courses page. It is a starting point, never a rule: a new close answers "Bonus given?" yes with the chosen courses' bonuses added up, and the seller changes the amount or says no for a sale that differs. Picking other courses moves it along until the seller answers it themselves; an enrolment being edited is never changed by it. What is stored and sent to finance is still the close's own `hasBonus` / `bonusAmount` — outside the fee and the balance, as before. End-to-end test: `backend/scripts/course-bonus-e2e.sh`.
+
+---
+
+## Commission — who earns what on an approved sale (2026-10-04)
+
+- **When**: the finance worker sees the enrolment approved (`approvedAt`); the sale is recorded once (`CommissionSale`, unique per student) with the plan row of that day — a plan changed later never rewrites a past month. Counted in the month of `enrollmentDate`, UAE time.
+- **Who** (TL_RULE "never"): no TL is paid: a sale pays its closer (Sales Staff) and the Sales Manager (SM) only, and needs no team or team leader; the SM who closes earns Sales Staff too.
+- **Sales Manager**: the one in `CommissionSettings` (Maneesh Babusenan); while none is set, sales wait.
+- **Excluded logins** (Super Admin (superadmin@crm.com), Sample BDE (bde@crm.com), root user): a sale closed under one earns nobody anything; given to its real closer, it is counted.
+- **Held sales** settle on their own: each minute they are looked at again (the student's current closer and team), at the plan of their approval.
+- **Reversal**: a sale whose invoice finance voids (asked every 10 minutes, for the last 120 days) is reversed — kept, no longer counted.
+- **Who sees what**: Super Admins and the Sales Manager everything; a team leader their teams' sales (without the SM's line) and their own lines; everyone else their own.
+- **Several courses on one sale** (Draw only): a student's `courses` are one invoice with a line each; the sale earns every course's plan row, added up, and is named "A + B". The closing dialog's preview takes every course picked (`?courses=a,b`).
