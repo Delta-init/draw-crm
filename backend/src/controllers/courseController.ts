@@ -21,10 +21,14 @@ const mappingSchema = {
     .optional(),
 };
 
+/** The bonus a client gets with the course, in its amount's currency; 0 for none. */
+const bonusAmountSchema = z.number().min(0, "Bonus cannot be negative").optional();
+
 const createCourseSchema = z.object({
   name: z.string().min(1, "Course name is required").max(150),
   description: z.string().max(1000).optional(),
   amount: z.number().min(0, "Amount cannot be negative"),
+  bonusAmount: bonusAmountSchema,
   status: z.enum(["active", "inactive"]).optional(),
   ...mappingSchema,
 });
@@ -33,6 +37,7 @@ const updateCourseSchema = z.object({
   name: z.string().min(1).max(150).optional(),
   description: z.string().max(1000).optional().nullable(),
   amount: z.number().min(0).optional(),
+  bonusAmount: bonusAmountSchema,
   status: z.enum(["active", "inactive"]).optional(),
   ...mappingSchema,
 });

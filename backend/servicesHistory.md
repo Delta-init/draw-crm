@@ -657,3 +657,14 @@ This file documents every service in `backend/src/services/`. Read this before w
 - Now also sends `crm: "draw"` — which sales CRM sold it ("Draw"). Finance stores it on the enrolment and shows it as a tag, and passes it on to the LMS and Tetra Commission, which show the same tag.
 - Not the `source`: the Remote CRM began as a copy of Delta's and also sends `"crm"` there, and the source is part of finance's idempotency key, so it cannot change for enrolments already sent.
 - Test: `scripts/closing-fields-check.ts` / `scripts/enrolment-close-e2e.sh` check it is sent.
+
+---
+
+## A course's bonus (2026-10-04)
+
+#### `CourseService.createCourse(data)` / `updateCourse(id, data)` — `src/services/courseService.ts`
+- Also take `bonusAmount` (validated in `courseController`: a number ≥ 0); stored on the course, 0 when not given
+
+#### `LeadService` — `src/services/leadService.ts`
+- The lead reads (`buildPopulatedQuery`, `getLeads`) populate `bonusAmount` on the lead's courses, so the close starts from it
+- Test: `scripts/course-bonus-e2e.sh`.

@@ -1364,3 +1364,16 @@ All routes require authentication and call the Draw backend, which proxies the L
 | `useUpdateStudent()` (existing) | `PUT /api/v1/students/:id` | Also `hasBonus`, `bonusAmount`, and `feeStatus` (kept as sent) |
 
 **Types:** `types/student.ts` — `StoredReceipt`; `Student.paymentReceipt`, `hasBonus`, `bonusAmount`; `CreateStudentInput.paymentReceipt`, `hasBonus`, `bonusAmount`.
+
+---
+
+## A course's bonus (added 2026-10-04)
+
+**File:** `hooks/useCourses.ts`
+
+| Hook | Endpoint | Notes |
+|------|----------|-------|
+| `useCreateCourse()` (existing) | `POST /api/v1/courses` | Body may carry `bonusAmount` (≥ 0) |
+| `useUpdateCourse()` (existing) | `PUT /api/v1/courses/:id` | Same |
+
+**Types:** `types/course.ts` — `Course.bonusAmount?` (missing on a course from before = none).

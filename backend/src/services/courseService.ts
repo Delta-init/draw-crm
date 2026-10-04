@@ -35,7 +35,7 @@ export interface CourseFilters {
 
 export class CourseService {
   // ── Create ──────────────────────────────────────────────────────────────────
-  async createCourse(data: { name: string; description?: string; amount: number; status?: string } & CourseMapping) {
+  async createCourse(data: { name: string; description?: string; amount: number; bonusAmount?: number; status?: string } & CourseMapping) {
     const { financeItemId, lmsCourseSlugs, ...rest } = data;
     const course = await Course.create({ ...rest, ...mappingFields({ financeItemId, lmsCourseSlugs }) });
     return course;
@@ -82,7 +82,7 @@ export class CourseService {
   }
 
   // ── Update ───────────────────────────────────────────────────────────────────
-  async updateCourse(id: string, data: Partial<{ name: string; description: string; amount: number; status: string }> & CourseMapping) {
+  async updateCourse(id: string, data: Partial<{ name: string; description: string; amount: number; bonusAmount: number; status: string }> & CourseMapping) {
     const course = await Course.findById(id);
     if (!course)
       throw Object.assign(new Error("Course not found"), { statusCode: 404 });

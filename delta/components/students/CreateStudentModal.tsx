@@ -51,6 +51,8 @@ const courseObjects = (list?: (Course | string)[] | null): Course[] =>
   (list ?? []).filter((c): c is Course => typeof c === "object" && c !== null);
 
 const sumOf = (list: Course[]) => list.reduce((s, c) => s + (c.amount ?? 0), 0);
+/** The bonus the courses come with, added up — what a new close starts from. */
+const bonusOf = (list: Course[]) => list.reduce((s, c) => s + (c.bonusAmount ?? 0), 0);
 
 export function CreateStudentModal({ open, lead, existingStudent, progress, onClose, onCreated }: Props) {
   const editing = Boolean(existingStudent);
@@ -88,6 +90,12 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
     // number under a new set of courses.
     const listed = sumOf(courses.filter((c) => next.includes(c._id)));
     if (listed > 0) setFeeInput(String(listed));
+    // So does the bonus they come with, until the seller has answered it.
+    if (!editing && !bonusTouched) {
+      const bonus = bonusOf(courses.filter((c) => next.includes(c._id)));
+      setBonusChoice(bonus > 0 ? "yes" : "");
+      setBonusInput(bonus > 0 ? String(bonus) : "");
+    }
   }
 
   /** What was collected before today, from the payments already on the lead. */
@@ -153,13 +161,24 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
    * promised. Beside the money, never in it: the balance above is the fee less
    * what was paid, whatever the bonus. An enrolment from before this was asked
    * starts unanswered, and can be answered here.
+   *
+   * A new close starts from the bonus its courses come with (set on the
+   * Courses page): yes, with that amount, until the seller answers otherwise.
+   * An enrolment being edited keeps what it has.
    */
+  const coursesBonus = editing ? 0 : bonusOf(knownCourses);
   const [bonusChoice, setBonusChoice] = useState<"" | "yes" | "no">(
-    existingStudent?.hasBonus === true ? "yes" : existingStudent?.hasBonus === false ? "no" : "",
+    existingStudent?.hasBonus === true ? "yes"
+    : existingStudent?.hasBonus === false ? "no"
+    : coursesBonus > 0 ? "yes" : "",
   );
   const [bonusInput, setBonusInput] = useState(
-    existingStudent?.hasBonus ? String(existingStudent.bonusAmount || "") : "",
+    existingStudent?.hasBonus ? String(existingStudent.bonusAmount || "")
+    : coursesBonus > 0 ? String(coursesBonus) : "",
   );
+  const [bonusTouched, setBonusTouched] = useState(false);
+  /** The bonus shown is the courses' own, not one the seller set. */
+  const bonusFromCourses = !editing && !bonusTouched && bonusChoice === "yes" && bonusOf(pickedCourses) > 0;
   const bonusAmount = Math.max(0, Number(bonusInput) || 0);
   // At least one fils: finance refuses a bonus that rounds to nothing.
   const bonusAmountMissing = bonusChoice === "yes" && !(Math.round(bonusAmount * 100) > 0);
@@ -466,7 +485,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                         <button
                           key={choice}
                           type="button"
-                          onClick={() => setBonusChoice(choice)}
+                          onClick={() => { setBonusChoice(choice); setBonusTouched(true); }}
                           className={cn(
                             "h-8 rounded-md border px-3 text-xs font-medium transition-colors",
                             bonusChoice === choice
@@ -487,7 +506,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                           >
                             <Input
                               type="number" min="0" step="0.01" value={bonusInput}
-                              onChange={(e) => setBonusInput(e.target.value)}
+                              onChange={(e) => { setBonusInput(e.target.value); setBonusTouched(true); }}
                               placeholder="Bonus amount" className="h-8 text-xs"
                               aria-label="Bonus amount"
                             />
@@ -495,6 +514,11 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                         )}
                       </AnimatePresence>
                     </div>
+                    {bonusFromCourses && (
+                      <p className="text-[10px] text-primary">
+                        From the course{pickedCourses.length > 1 ? "s" : ""} — change it if this sale differs.
+                      </p>
+                    )}
                     {/* Where the answer goes. After the close an edit stays in
                         the CRM: finance only takes a changed enrolment when it
                         has sent it back to be corrected. */}

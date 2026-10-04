@@ -149,6 +149,8 @@ export interface ICourse extends Document {
   name: string;
   description?: string;
   amount: number;
+  /** The bonus a client gets with it, in the amount's currency; 0 for none. A new close starts from it. */
+  bonusAmount?: number;
   status: "active" | "inactive";
   /** The finance catalogue item this course bills against, once mapped. */
   financeItemId?: string | null;

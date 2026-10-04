@@ -646,3 +646,11 @@ Copy the template at the top and place it in the correct module section.
 - **Asks**: course(s), client email (when missing), language, payment method, receipt, bonus (yes/no + amount); shows the balance
 - **Backend**: `POST /api/v1/students/receipts/:leadId`, `POST /api/v1/students` (refuses an incomplete close)
 - **Why**: a close is a sale, and finance (Delta HQ) can only invoice and approve it with all of this; a lead closed any other way was a sale nobody downstream heard of
+
+## A course's bonus (2026-10-04)
+
+- **Page**: `app/(dashboard)/courses/page.tsx` — the card says "Course fee · $500 bonus" when a course has one
+- **Dialog**: `components/courses/CourseDialog.tsx` — a Bonus field on Add and Edit (0 for none)
+- **Close**: `components/students/CreateStudentModal.tsx` — a new close starts "Bonus given?" at yes with the courses' bonuses added up ("From the course — change it if this sale differs"); picking other courses moves it until the seller answers it
+- **Backend**: `POST` / `PUT /api/v1/courses` with `bonusAmount`
+- **Why**: what a course comes with is set once, where the course is, rather than typed at every close

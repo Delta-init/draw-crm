@@ -657,3 +657,9 @@ Money: the fee starts from the enrolment, else the lead's agreed `sellingAmount`
 Finance: queued and sent at once (the timer retries). Billed into **Delta HQ** — `FINANCE_ORG_ID` is Delta HQ's, the client id and secret are Delta CRM's — as `source: "draw-crm"`, and it waits in finance's Approvals like any CRM enrolment. Approval opens the LMS courses; Draw students are not sent to Tetra Commission. Edits after the close stay in the CRM until finance sends the enrolment back.
 
 End-to-end test: `backend/scripts/enrolment-close-e2e.sh`.
+
+---
+
+## A course's bonus — where a close starts (2026-10-04)
+
+A course says what bonus comes with it (`Course.bonusAmount`, the course's currency, 0 for none), set on the Courses page. It is a starting point, never a rule: a new close answers "Bonus given?" yes with the chosen courses' bonuses added up, and the seller changes the amount or says no for a sale that differs. Picking other courses moves it along until the seller answers it themselves; an enrolment being edited is never changed by it. What is stored and sent to finance is still the close's own `hasBonus` / `bonusAmount` — outside the fee and the balance, as before. End-to-end test: `backend/scripts/course-bonus-e2e.sh`.

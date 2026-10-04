@@ -1030,3 +1030,11 @@
 ## EditStudentModal (changed 2026-10-02)
 
 Bonus given? (Not answered / No / Yes) + amount; only an answer is sent.
+
+## CourseDialog (changed 2026-10-04)
+
+A Bonus field (the course's currency, 0 for none) on Add and Edit, with "What a client gets with this course — a new close starts from it". The course card shows "· $X bonus" beside the fee.
+
+## CreateStudentModal (changed 2026-10-04)
+
+A new close starts "Bonus given?" at yes with the chosen courses' bonuses added up, marked "From the course — change it if this sale differs"; picking other courses moves it until the seller answers or types an amount (`bonusTouched`). Editing an enrolment never takes it.
