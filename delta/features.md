@@ -697,3 +697,20 @@ how it was paid. Editing an enrolment keeps its single "collected now" figure, a
 
 **Change Log**:
 - 1.0.0 — Initial build
+
+## Notifications keep arriving (2026-10-05)
+
+**What it does**: New-lead notifications and browser notifications kept failing (the user, 2026-10-05).
+- **Live notifications** (the bell, the sidebar's counts, reminders, team rooms): one live connection per tab
+  (`lib/socket.ts`; `useSocket` hands out the same one), which never gives up — it used to stop after five quick tries,
+  so after a server restart, a dropped network or a sleeping laptop the bell stayed quiet until the page was reloaded.
+  Every try signs in with the latest token; it tries again at once when the tab is looked at again or the network comes
+  back; somebody else signing in on the tab gets their own connection. Team rooms are joined again on every reconnect.
+- **Browser notifications**: with notifications allowed, every visit makes sure the server has this device (it used to
+  only on pressing Enable, so a device the server had dropped stayed silent) — and if the server's VAPID key has
+  changed since the device registered (`lib/pushKey.ts`), it is registered again with the new key.
+- **Test notifications** at the foot of the bell panel: whether this device has notifications on, with Enable; a test
+  shown by this browser; and "Send a test to all my devices" (`POST /push/test`), which reaches the installed phone app
+  even when it's closed.
+
+**API**: `GET /push/vapid-public-key`, `POST /push/subscribe`, `DELETE /push/unsubscribe`, `POST /push/test`.
