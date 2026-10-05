@@ -684,3 +684,23 @@ A course says what bonus comes with it (`Course.bonusAmount`, the course's curre
 - A sale's commission counts only once: finance approved it; the LMS has the student; Tetra Commission gave them a CS; their CS sent the welcome (onboarded); and the MT5 bonus promised at the close was approved by a broker admin — "none" promised is approved by itself. A course Tetra Commission doesn't take (not Forex) needs only the first two.
 - Until then: `CommissionSale.state = "progress"`, `reason` = the first step not done ("Next step: …", or "Stopped at: …" when rejected/refused). Nothing is paid on a guess: Tetra Commission not answering leaves a step unknown.
 - From 1 October 2026 (UAE) on, in the month of the close; amounts frozen the day the steps complete.
+
+## View as (impersonation) (2026-10-05)
+
+**Files**: `models/Impersonation.ts`, `services/impersonationService.ts`, `controllers/impersonationController.ts`,
+`middleware/auth.ts`, `middleware/permissions.ts` (`requireSuperAdmin`), `utils/jwt.ts`, `utils/requestMeta.ts`,
+`routes/userRoutes.ts`, `routes/authRoutes.ts` — the Remote CRM's (dilshad-crm 343947d).
+
+1. **Who**: a super admin, for an active user who is neither themselves nor a super admin (404 unknown / 400 self / 403 super
+   admin / 409 deactivated).
+2. **The pass**: an access token for the target (`userId`, `email`, `roleId` — so their permissions) plus `impersonation: { id, by }`,
+   30 minutes (`IMPERSONATION_TTL_SECONDS`), signed with `JWT_SECRET`. No refresh token, and a refresh can't take it (other secret).
+3. **The session** is an `Impersonation` record made before the pass. `authenticate` accepts the pass only while the record is open
+   (`endedAt` null) and unexpired, names the same target and admin, and the admin is still active and still a super admin —
+   otherwise 401. `POST /auth/impersonation/stop` sets `endedAt`, so "Back to my account" ends the pass at once.
+4. **View only**: with a pass, `authenticate` refuses every method but GET/HEAD/OPTIONS with 403 "View only…" (leads, notes,
+   status, calls, notifications, push subscribe, password, a nested View as) — bar the stop route (`authenticateViewAsExit`). No GET
+   route here changes data (checked 2026-10-05; `GET /calls/webhook` is 3CX's, not a signed-in route).
+5. A target deactivated mid-session answers 401 while viewing (the app goes back to the admin) instead of the usual 403.
+6. **The app** keeps the admin's own tokens aside (`crm-own-auth`) and returns to them on Back, at zero and on any 401. Logout ends
+   the session and signs out completely (sign-out here is the browser's alone — the server keeps no record of it).

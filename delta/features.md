@@ -672,3 +672,16 @@ Copy the template at the top and place it in the correct module section.
 - **My Enrolments**: every card ends with Finance approved → LMS account → CS assigned → Onboarded → MT5 bonus, green / yellow / red, and what it waits on
 - **Enrolment page**: `/enrolments/[id]` — the steps with who did each and when, and what the sale earns
 - **Commission**: a sale counts once every step is done; until then it's "In progress" with its next step
+
+## View as (2026-10-05)
+
+**What it does**: A super admin opens the CRM as one of their people — "View as" (eye icon) on a Users row or the user's page, for
+any active user who is not a super admin. For 30 minutes the CRM is exactly theirs (pages, leads, permissions), read only, under an
+amber bar: "Viewing as … · View only · 29:12 left · Back to my account". Back, the time running out or any sign-in error returns to
+the admin's own account (Users page); Logout ends it and signs the admin out. The browser's push setting is left alone. The Remote
+CRM's "View as", brought here unchanged.
+
+**API**: `POST /users/:id/impersonate`, `POST /auth/impersonation/stop`.
+
+**Change Log**:
+- 1.0.0 — Initial build

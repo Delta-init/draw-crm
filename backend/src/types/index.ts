@@ -65,6 +65,8 @@ export interface JwtPayload {
   userId: string;
   email: string;
   roleId: string;
+  /** Only on a super admin's "View as" pass: the session it belongs to and who started it. */
+  impersonation?: { id: string; by: string };
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -73,6 +75,8 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     roleId: string;
     role?: IRole;
+    /** Set while a super admin is viewing the CRM as this user (view only). */
+    impersonatedBy?: { id: string; name: string; email: string; sessionId: string };
   };
 }
 
@@ -470,4 +474,21 @@ export interface ExcelParseResult {
 export interface AutoAssignResult {
   assigned: number;
   results: { leadId: string; assignedTo: string }[];
+}
+
+/** A super admin viewing the CRM as someone else ("View as"): 30 minutes, view only. */
+export interface IImpersonation {
+  _id: Types.ObjectId;
+  admin: Types.ObjectId;
+  adminEmail: string;
+  target: Types.ObjectId;
+  targetEmail: string;
+  startedAt: Date;
+  expiresAt: Date;
+  /** "Back to my account" (or signing out while viewing); null if it ran out instead. */
+  endedAt: Date | null;
+  ip: string;
+  userAgent: string;
+  device: string;
+  createdAt: Date;
 }

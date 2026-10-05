@@ -565,3 +565,16 @@ Registered **before** the `/:id` routes in `studentRoutes.ts` (Bugs #6, #7).
 ## Commission routes (2026-10-04)
 
 Not a permission module: `authenticate` only, like Mentors — a module would start every role but Super Admin with no access to their own pay. The service narrows what each person sees (own / team / all). Changing the plan or its settings is `requireSuperAdmin` (in `commissionController`): `role.isSystemRole && roleName === "Super Admin"`, else 403.
+
+### View as (2026-10-05)
+
+| Method | Route | Chain |
+|--------|-------|-------|
+| POST | `/api/v1/users/:id/impersonate` | `authenticate` → `requireSuperAdmin` → `startImpersonation` |
+| POST | `/api/v1/auth/impersonation/stop` | `authenticateViewAsExit` → `stopImpersonation` (400 with an ordinary sign-in) |
+
+`authenticate` also takes a "View as" pass (a token carrying `impersonation: { id, by }`): it checks the session record and the
+admin (401 when ended, expired, mismatched, or the admin is no longer an active super admin), sets `req.user.impersonatedBy`, and
+refuses anything but GET/HEAD/OPTIONS with 403 "View only…". `authenticateViewAsExit` is the same without that refusal — only the
+stop route uses it. Ordinary tokens take exactly the old path. `requireSuperAdmin` (new, `permissions.ts`): the Super Admin only —
+not a module a role can be granted.

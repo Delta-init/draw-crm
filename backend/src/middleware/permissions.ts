@@ -72,3 +72,16 @@ export const requireModule = (module: CrmModule) => {
     next();
   };
 };
+
+/**
+ * Only the Super Admin — for actions that are theirs alone, like "View as".
+ * Not a module a role can be granted.
+ */
+export const requireSuperAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+  const role = req.user?.role;
+  if (role?.isSystemRole && role.roleName === "Super Admin") {
+    next();
+    return;
+  }
+  sendError(res, "Access denied: only a super admin can do this", 403);
+};

@@ -592,3 +592,22 @@ Each feature documents:
 **Tests**: `scripts/commission-check.sh` — the steps, one at a time; no bonus; not Forex; Tetra Commission silent; counted early under the old rule; void; finance down; the enrolment endpoint.
 
 **Change Log**: 2026-10-04 — added (the owner: "finance approved => lms created account => commission portal get cs => onboarded => mt5 bonus approved, then only they get the commission").
+
+## View as — a super admin sees the CRM as someone else (2026-10-05)
+
+**Description**: A super admin opens the CRM as any active user who is not a super admin, for 30 minutes, read only: every page
+answers exactly as it does for that person, and every change is refused ("View only…"). The Remote CRM's "View as"
+(dilshad-crm 343947d), brought here unchanged.
+
+**Routes**: see middlewareHistory.md → "View as (2026-10-05)".
+
+**Service Methods**: `impersonationService.start / stop`; `checkImpersonation` in `middleware/auth.ts`;
+`utils/jwt.signImpersonationToken`; `utils/requestMeta` (`clientIp`, `describeDevice` — for the session record);
+`requireSuperAdmin` in `middleware/permissions.ts`.
+
+**Models Used**: `Impersonation` (new — the session: admin, target, IP, device, start, expiry, end; kept a year); `User`, `Role`.
+
+**Tests**: `scripts/view-as-check.sh` — 39 checks in the four cases, on a throwaway database.
+
+**Change Log**:
+- 1.0.0 — Initial build. No screen lists past sessions yet (they are in the `impersonations` collection).

@@ -1055,3 +1055,13 @@ A new close starts "Bonus given?" at yes with the chosen courses' bonuses added 
 
 **File:** `components/students/EnrolmentSteps.tsx` — `EnrolmentStepsStrip({ steps })` (five pills at the foot of a My Enrolments card, details on hover, and "Next step: …" / "Every step done") and `EnrolmentStepsList({ steps })` (the enrolment page: each step with its detail, who and when). Green done, amber waiting, red stopped, grey unknown / not needed.
 **Page:** `app/(dashboard)/enrolments/[id]/page.tsx` — opened from the student's name on a card; the steps and the sale's commission.
+
+### Change log — 2026-10-05 (View as)
+- `ImpersonationBanner` (new, `components/shared/`) — the amber bar while viewing as someone: name, email (wider screens), "View
+  only", m:ss left, "Back to my account"; goes back on its own at zero. Rendered by `Header` above the header bar. Its fade-in is
+  defined in the file (this app keeps animation variants per component).
+- `lib/impersonation.ts` (new) — `getViewAs`, `canViewAs`, `beginViewAs`, `endViewAs`, `leaveViewAsForSignOut`; localStorage
+  `crm-view-as`, `crm-own-auth`.
+- Users list (row actions) and user page (next to Export PDF) — "View as" for super admins (`canViewAs`).
+- `lib/axios.ts` — a 401 while viewing goes back to the admin's account, not /login. `useLogout` ends the session first;
+  `usePushNotification` won't subscribe or unsubscribe while viewing, and `NotificationBell` doesn't ask for push then.
