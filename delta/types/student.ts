@@ -81,6 +81,9 @@ export interface Handover {
   approvalState: "pending" | "approved" | "returned" | "not_required" | "unknown";
   returnedReason: string;
   returnedAt: string | null;
+  /** When it was last sent again after a send-back, and how many times; absent from a server from before. */
+  resentAt?: string | null;
+  resends?: number;
 }
 
 /** What finance knows: whether anybody has approved it. Null when finance
@@ -155,6 +158,46 @@ export interface EnrolmentDetail extends Enrolment {
     countedAt: string | null;
     lines: { role: "sales" | "tl" | "sm"; userName: string; amount: number; note: string }[];
   } | null;
+}
+
+/**
+ * What correcting a sent-back enrolment starts from: the enrolment, whether
+ * finance has it sent back and why, the money the lead holds of its own (a
+ * payment of its own on the form, at that figure), and — for whoever may move
+ * a sale — the counsellors and teams.
+ */
+export interface EnrolmentCorrectionStart {
+  sentBack: boolean;
+  returnedReason: string;
+  invoiceNumber: string;
+  /** What the outbox last heard, and when it was last sent again — for the student page. */
+  approvalState?: Handover["approvalState"];
+  resentAt?: string | null;
+  resends?: number;
+  mayMove: boolean;
+  ownOnLead: number;
+  counsellors?: { _id: string; name: string }[];
+  teams?: { _id: string; name: string }[];
+  student: Student;
+}
+
+/** Everything a close took, sent again as the correction. */
+export interface EnrolmentCorrectionInput {
+  name: string;
+  phone: string;
+  email: string;
+  courses: string[];
+  team?: string | null;
+  assignedTo?: string | null;
+  enrollmentDate: string;
+  feeStatus: string;
+  totalFee: number;
+  paidAmount: number;
+  notes: string;
+  language: string;
+  payments: { method: string; amount: number; receipt: StoredReceipt | null; paidAt: string; collectedBefore?: boolean }[];
+  hasBonus: boolean;
+  bonusAmount: number;
 }
 
 export interface EnrolmentCounts {

@@ -1,12 +1,12 @@
 import { Router, type RequestHandler } from "express";
 import multer from "multer";
 import { authenticate } from "../middleware/auth.js";
-import { checkPermission } from "../middleware/permissions.js";
+import { checkAnyPermission, checkPermission } from "../middleware/permissions.js";
 import {
   createStudent, getStudents, getStudentById,
   getStudentByLeadId, updateStudent, deleteStudent,
   getMyEnrolments,
-  getEnrolment, requestInvoice, uploadPaymentReceipt,
+  getEnrolment, requestInvoice, getCorrection, correctEnrolment, uploadPaymentReceipt,
 } from "../controllers/studentController.js";
 
 const router = Router();
@@ -42,12 +42,13 @@ const takeReceipt: RequestHandler = (req, res, next) => {
 // Static before parameterized
 router.get("/by-lead/:leadId", authenticate, checkPermission("students", "view"), getStudentByLeadId);
 
-// The receipt for a close, taken before the enrolment exists. Before "/:id",
-// or Express reads "receipts" as a student id.
+// The receipt for a close, taken before the enrolment exists — and for the
+// correction of one finance sent back. Before "/:id", or Express reads
+// "receipts" as a student id.
 router.post(
   "/receipts/:leadId",
   authenticate,
-  checkPermission("students", "create"),
+  checkAnyPermission(["students", "create"], ["students", "edit"]),
   takeReceipt,
   uploadPaymentReceipt,
 );
@@ -64,6 +65,10 @@ router.get("/enrolments/:id", authenticate, getEnrolment);
 // Generate the invoice — the same handover that runs when a lead closes,
 // asked for by hand when it never ran or did not get through.
 router.post("/:id/invoice", authenticate, checkPermission("students", "edit"), requestInvoice);
+// Correct an enrolment finance sent back — everything the close took — and send
+// it again in the same step; with the same permission as sending it again.
+router.get("/:id/correction", authenticate, checkPermission("students", "edit"), getCorrection);
+router.put("/:id/correction", authenticate, checkPermission("students", "edit"), correctEnrolment);
 
 router.get("/",    authenticate, checkPermission("students", "view"),   getStudents);
 router.post("/",   authenticate, checkPermission("students", "create"), createStudent);

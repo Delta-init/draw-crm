@@ -5,13 +5,14 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   GraduationCap, Search, Receipt, RefreshCw, CheckCircle2, Clock,
-  Undo2, AlertTriangle, FileWarning, Loader2, ExternalLink, Pencil,
+  Undo2, AlertTriangle, FileWarning, Loader2, ExternalLink, Pencil, Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { fmtFull } from "@/lib/currency";
-import { useMyEnrolments, useRequestInvoice } from "@/hooks/useEnrolments";
+import { useMyEnrolments, useRequestInvoice, sendBackState, uaeTime } from "@/hooks/useEnrolments";
+import { CorrectEnrolmentDialog } from "@/components/students/CorrectEnrolmentDialog";
 import { useAuthStore } from "@/lib/store/authStore";
 import type { Enrolment } from "@/types/student";
 import { EnrolmentStepsStrip } from "@/components/students/EnrolmentSteps";
@@ -42,6 +43,8 @@ export default function EnrolmentsPage() {
     ...(tab === "returned" ? { state: "returned" } : {}),
   });
   const invoiceMut = useRequestInvoice();
+  /** The sent-back enrolment being corrected, if any. */
+  const [correcting, setCorrecting] = useState<string | null>(null);
 
   const rows = data?.data ?? [];
   const counts = data?.counts;
@@ -155,11 +158,15 @@ export default function EnrolmentsPage() {
               enrolment={e}
               canInvoice={canInvoice}
               onGenerate={() => invoiceMut.mutate(e._id)}
+              onCorrect={() => setCorrecting(e._id)}
               generating={invoiceMut.isPending && invoiceMut.variables === e._id}
             />
           ))}
         </div>
       )}
+
+      {/* Everything the close took, corrected and sent to finance again in one step. */}
+      {correcting && <CorrectEnrolmentDialog studentId={correcting} open onClose={() => setCorrecting(null)} />}
 
       {data && data.pagination.pages > 1 && (
         <div className="flex items-center justify-between">
@@ -198,8 +205,8 @@ function Stat({ icon: Icon, label, value, tone }: {
   );
 }
 
-function EnrolmentRow({ enrolment: e, canInvoice, onGenerate, generating }: {
-  enrolment: Enrolment; canInvoice: boolean; onGenerate: () => void; generating: boolean;
+function EnrolmentRow({ enrolment: e, canInvoice, onGenerate, onCorrect, generating }: {
+  enrolment: Enrolment; canInvoice: boolean; onGenerate: () => void; onCorrect: () => void; generating: boolean;
 }) {
   // Draw's enrolments hold an array of courses, unlike Delta's one — named in
   // full rather than picking a "primary", since the sale genuinely is all of
@@ -210,8 +217,10 @@ function EnrolmentRow({ enrolment: e, canInvoice, onGenerate, generating }: {
   const courseNames = courseObjs.length ? courseObjs.map((c) => c.name).join(", ") : "No course";
   const inv = e.invoice;
   const h = e.handover;
-  const sentBack = (inv?.approval ?? h?.approvalState) === "returned";
-  const reason = inv?.returnedReason || h?.returnedReason || "";
+  /* Finance if it answered, the outbox's own record if it did not — and one on
+     its way back to finance is sent again, not sent back, whatever finance
+     still says until it arrives. */
+  const { sentBack, resending, sentAgain, reason } = sendBackState(e);
 
   return (
     <motion.div
@@ -230,6 +239,16 @@ function EnrolmentRow({ enrolment: e, canInvoice, onGenerate, generating }: {
           <p className="mt-0.5 text-xs text-muted-foreground">
             {courseNames} · {fmtFull(e.totalFee)} · enrolled {String(e.enrollmentDate).slice(0, 10)}
           </p>
+
+          {/* Sent again after a send-back: said, with when (the user, 2026-10-05). */}
+          {(resending || sentAgain) && h?.resentAt && (
+            <p className="mt-1 flex items-center gap-1.5 text-[11px] text-sky-400">
+              <Send className="h-3 w-3 shrink-0" />
+              Sent again {uaeTime(h.resentAt)}
+              {(h.resends ?? 0) > 1 ? ` · ${h.resends} times` : ""}
+              {resending ? " — on its way to finance" : inv?.approval === "pending" ? " — waiting for approval" : ""}
+            </p>
+          )}
 
           {h?.flags?.length ? (
             <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/5 px-2.5 py-1.5">
@@ -270,10 +289,10 @@ function EnrolmentRow({ enrolment: e, canInvoice, onGenerate, generating }: {
               {inv && <p className="text-xs font-semibold">{inv.invoiceNumber}</p>}
               {canInvoice ? (
                 <>
-                  <Button size="sm" variant="outline" className="gap-2" asChild>
-                    <Link href={`/students/${e._id}`}>
-                      <Pencil className="h-3.5 w-3.5" /> Correct it
-                    </Link>
+                  {/* Everything the close took — courses, fee, payments and their
+                      receipts, the client — and saving sends it again. */}
+                  <Button size="sm" variant="outline" className="gap-2" onClick={onCorrect}>
+                    <Pencil className="h-3.5 w-3.5" /> Correct it
                   </Button>
                   <Button size="sm" className="gap-2" onClick={onGenerate} disabled={generating}>
                     {generating
@@ -286,6 +305,13 @@ function EnrolmentRow({ enrolment: e, canInvoice, onGenerate, generating }: {
                   Someone with Students access corrects and re-sends it.
                 </p>
               )}
+            </div>
+          ) : resending ? (
+            <div className="text-right">
+              {inv && <p className="text-xs font-semibold">{inv.invoiceNumber}</p>}
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-sky-400">
+                <Loader2 className="h-3 w-3 animate-spin" /> Sending again…
+              </span>
             </div>
           ) : inv ? (
             <div className="text-right">
@@ -314,6 +340,16 @@ function EnrolmentRow({ enrolment: e, canInvoice, onGenerate, generating }: {
 
 function ApprovalBadge({ enrolment: e }: { enrolment: Enrolment }) {
   const base = "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium";
+  const sky = "border-sky-500/20 bg-sky-500/10 text-sky-400";
+  const { resending, sentAgain } = sendBackState(e);
+
+  // Sent again after a send-back, shown as plainly as the send-back was.
+  if (resending) {
+    return <span className={cn(base, sky)}><Loader2 className="h-2.5 w-2.5 animate-spin" /> Sending again</span>;
+  }
+  if (sentAgain && e.invoice?.approval === "pending") {
+    return <span className={cn(base, sky)}><Send className="h-2.5 w-2.5" /> Sent again</span>;
+  }
 
   if (!e.invoice) {
     if (e.handover?.status === "failed") {

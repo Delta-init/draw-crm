@@ -648,3 +648,32 @@ socket.io connection for the website side).
 
 **Change Log**:
 - 1.0.0 — Initial build, ported from the Sales CRM.
+
+## Correcting a sent-back enrolment, and "sent again" (2026-10-05)
+
+**Description**: As in the Sales CRM. When finance sends an enrolment back, everything the close took can be corrected —
+the client's name, phone and email, the courses (one or more), the date, the fee, each payment with its receipt, the
+language, the bonus and the notes, and who closed it and for which team — and saving sends it to finance again in the
+same step, as the same invoice with the same number (the user: "if send it back we can edit the course and amount also,
+all details"). Checked as a close is. Only while finance has it sent back (the outbox's record, or finance asked when
+the outbox hasn't heard yet). Here it takes Students → edit, as "Send again" always has.
+
+The money the lead holds of its own stays a payment of its own, at what it comes to now; the close's "Collected at
+enrolment" payments on the lead are replaced by the corrected ones. An email the lead never had is kept there too, as
+at the close.
+
+Sent again — corrected, or with "Send again" — is recorded on the outbox row (`resentAt`, `resends`) and shown: "Sent
+again 5 Oct, 3:42 pm — on its way to finance", then "— waiting for accounts to approve it" (the user: "if send again
+show that also"). "Send again" goes out at once. And the "Sent back" tab now lists only what finance sent back — the
+screen has asked for that (`state=returned`) all along, and the list never applied it.
+
+**Routes** (`authenticate`, `students:edit`): `GET /api/v1/students/:id/correction`, `PUT /api/v1/students/:id/correction`
+(`{ name, phone, email, courses[], team?, assignedTo?, enrollmentDate, feeStatus, totalFee, paidAmount, notes, language,
+payments[], hasBonus, bonusAmount }`). `POST /students/receipts/:leadId` also takes `students:edit`.
+
+**Service Methods**: `StudentService.getCorrection`, `correctEnrolment`, `sendBackOf`, `resendCorrected`;
+`enrolmentSteps.stepsOf` (sent again); `middleware/permissions.checkAnyPermission`.
+
+**Models Used**: `FinanceHandover.resentAt` / `resends` (new), `Student`, `Lead.payments` / `email`, `Course`, `Team`, `User`.
+
+**Tests**: `scripts/enrolment-correction-check.sh` — 62 checks against a stand-in finance.

@@ -714,3 +714,16 @@ how it was paid. Editing an enrolment keeps its single "collected now" figure, a
   even when it's closed.
 
 **API**: `GET /push/vapid-public-key`, `POST /push/subscribe`, `DELETE /push/unsubscribe`, `POST /push/test`.
+
+## Correct a sent-back enrolment, and see it was sent again (2026-10-05)
+
+**What it does**: As in the Sales CRM. When finance sends an enrolment back, "Correct it" (My Enrolments, the enrolment's
+page, and a banner on the student's page — for whoever has Students → edit) opens the whole closing form, filled in:
+the client's name, phone and email, the courses (one or more), the fee, each payment with its receipt, the language,
+the date, the fee status, the bonus, the notes, and who closed it and for which team. "Save & send again" saves it and
+sends it to finance in one step, as the same invoice.
+
+Once sent again — corrected, or with "Send again" — the card says so: "Sending again" while it is on its way, then
+"Sent again" with the time (and how many times), "waiting for approval"; the steps line and the enrolment's page too.
+
+**API**: `GET /students/:id/correction`, `PUT /students/:id/correction`; `handover.resentAt` / `resends` on the lists.
