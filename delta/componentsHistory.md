@@ -1065,3 +1065,9 @@ A new close starts "Bonus given?" at yes with the chosen courses' bonuses added 
 - Users list (row actions) and user page (next to Export PDF) — "View as" for super admins (`canViewAs`).
 - `lib/axios.ts` — a 401 while viewing goes back to the admin's account, not /login. `useLogout` ends the session first;
   `usePushNotification` won't subscribe or unsubscribe while viewing, and `NotificationBell` doesn't ask for push then.
+
+### Change log — 2026-10-05 (split payments)
+- `PaymentRowsEditor` (new, `components/students/`) — one row per payment at the close: method, amount (fixed for the money
+  already on the lead), its own receipt upload; add / remove rows. Exports `newPaymentRow`, `rowAmount`, `missingInRows`.
+- `CreateStudentModal` — a new close uses the rows instead of one method and one receipt; red "more than the fee" and a blocked
+  save when collected is above the fee (edit mode too).

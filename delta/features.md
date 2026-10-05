@@ -685,3 +685,15 @@ CRM's "View as", brought here unchanged.
 
 **Change Log**:
 - 1.0.0 — Initial build
+
+## Split payments at the close (2026-10-05)
+
+**What it does**: The closing dialog takes each payment as its own row — method, amount and receipt — with "Add another
+payment" (up to 10). Money already recorded on the lead is the first row, its amount fixed. The fee summary adds them up, and
+saving is blocked, in red, when collected is more than the fee. Each new payment is also added to the lead's payments, saying
+how it was paid. Editing an enrolment keeps its single "collected now" figure, and refuses more than the fee too.
+
+**API**: `POST /students` with `payments[]`; `PUT /students/:id`.
+
+**Change Log**:
+- 1.0.0 — Initial build

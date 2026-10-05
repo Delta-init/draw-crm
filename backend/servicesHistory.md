@@ -705,3 +705,10 @@ This file documents every service in `backend/src/services/`. Read this before w
 - `stop(sessionId)` — sets `endedAt` while still open; ending one already over is fine.
 - `checkImpersonation(decoded)` (`middleware/auth.ts`) — the session open, unexpired and matching; the admin active and a super
   admin; gives `req.user.impersonatedBy = { id, name, email, sessionId }`, or the refusal message.
+
+## Split payments (added 2026-10-05)
+
+- `checkedPayments(list, paidAmount, enrolledOn)` — validates a close's `payments[]` (see logicHistory) and returns them ready to
+  store, or null when none were sent.
+- `assertNotOverFee(totalFee, paidAmount)` — 422 when what was collected is more than the fee.
+- `buildHandoverPayload` — adds `payments: [{ method, amountMinor, paidOn, receipt }]` when the enrolment has them.

@@ -704,3 +704,15 @@ A course says what bonus comes with it (`Course.bonusAmount`, the course's curre
 5. A target deactivated mid-session answers 401 while viewing (the app goes back to the admin) instead of the usual 403.
 6. **The app** keeps the admin's own tokens aside (`crm-own-auth`) and returns to them on Back, at zero and on any 401. Logout ends
    the session and signs out completely (sign-out here is the browser's alone — the server keeps no record of it).
+
+## Split payments at the close (2026-10-05)
+
+1. **The payments**: `payments[]` on a close — 1 to 10, each with a method this CRM takes, an amount above zero and its receipt
+   (key + url). They must add up to `paidAmount` to the fil (`minor()`), or 422. None sent = an older screen: one method, one
+   receipt, as before.
+2. **The money already on the lead** before the close is a payment of its own (`collectedBefore`), its amount fixed by the dialog.
+3. **Never above the fee** (the user, 2026-10-05: "block"): `assertNotOverFee` on every close, and on an edit that changes
+   `totalFee` or `paidAmount` — an enrolment already over it from before can still have other fields edited.
+4. **Compatibility**: the first payment is also `paymentMethod` / `paymentReceipt`, and finance still gets `declaredPaidMinor`,
+   `declaredPaymentMethod` and `receipt` beside `payments[]`.
+5. **Finance** records each payment against the invoice with its receipt when accounts approve (finance-delta).

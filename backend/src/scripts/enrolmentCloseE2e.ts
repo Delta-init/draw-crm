@@ -232,8 +232,15 @@ check("the invoice number is kept against the enrolment", h1?.invoiceNumber === 
 
 // ── Case 2 ──────────────────────────────────────────────────────────────────
 step("Case 2 — edge: no bonus, paid in full, a lead's own email, a second close, corrections");
+// Collecting more than the fee is refused at the close (the user, 2026-10-05: "block").
 r = await call("POST", "/students", closeBody(L2, {
   name: "Priya Nair", email: "priya@draw-e2e.test", courses: [String(c3._id)], totalFee: 1837, paidAmount: 2000,
+  hasBonus: false,
+}), counsellor);
+check("collecting more than the fee is refused: 422, and nothing saved", r.status === 422 && /more than the fee/.test(r.body.message ?? "")
+  && !(await Student.findOne({ leadId: L2 }).lean()), show(r));
+r = await call("POST", "/students", closeBody(L2, {
+  name: "Priya Nair", email: "priya@draw-e2e.test", courses: [String(c3._id)], totalFee: 1837, paidAmount: 1837,
   hasBonus: false, bonusAmount: 99,
 }), counsellor);
 const s2 = await Student.findOne({ leadId: L2 }).lean();
@@ -242,7 +249,7 @@ check("no bonus is stored as no, with no amount whatever was sent", r.status ===
 await waitFor(async () => received.length >= 2, 8_000);
 const p2 = received[1]?.payload ?? {};
 check("...and finance is told \"no\"", at(p2, "bonus.given") === false && at(p2, "bonus.amountMinor") === 0, JSON.stringify(p2.bonus));
-check("paid more than the fee: the balance is zero, never negative", p2.balanceMinor === 0 && at(p2, "courses.0.amountMinor") === 183_700,
+check("paid in full: the balance is zero", p2.balanceMinor === 0 && at(p2, "courses.0.amountMinor") === 183_700,
   JSON.stringify({ balance: p2.balanceMinor, lines: p2.courses }));
 
 r = await call("POST", "/students", closeBody(L4, { name: "Own Email", email: "other@draw-e2e.test" }), counsellor);
