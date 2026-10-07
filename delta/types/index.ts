@@ -20,6 +20,16 @@ export const CRM_MODULES = [
   "reminders",
   "reports",
   "settings",
+  /*
+   * Rows added 2026-10-07. Students and My Tracker were already modules on the
+   * server but never had a row here; the rest were open to everyone — see
+   * OPEN_BY_DEFAULT.
+   */
+  "students",
+  "tracker",
+  "mentors",
+  "commission",
+  "leaderboard",
 ] as const;
 
 export type CrmModule = (typeof CRM_MODULES)[number];
@@ -34,9 +44,34 @@ export const MODULE_LABELS: Record<CrmModule, string> = {
   reminders: "Reminders",
   reports: "Reports",
   settings: "Settings",
+  students: "Students",
+  tracker: "My Tracker",
+  mentors: "Mentors (booking)",
+  commission: "Commission",
+  leaderboard: "Leaderboard",
 };
 
 export type PermissionsMap = Partial<Record<CrmModule, ModulePermissions>>;
+
+const NONE: ModulePermissions = { view: false, create: false, edit: false, delete: false, approve: false, export: false };
+
+/**
+ * Screens that were open to everyone before they had a row on the Roles screen
+ * (2026-10-07). A role that has never been given a value for one keeps that
+ * access — the same default the server holds — so nothing disappears until
+ * someone unticks the box.
+ */
+export const OPEN_BY_DEFAULT: Partial<Record<CrmModule, Partial<ModulePermissions>>> = {
+  mentors: { view: true, create: true, edit: true, delete: true },
+  commission: { view: true },
+  leaderboard: { view: true },
+  tracker: { view: true, edit: true },
+};
+
+/** A role's permissions on one module — what it was given, or the module's default. */
+export function modulePermissions(perms: PermissionsMap | undefined, mod: CrmModule): ModulePermissions {
+  return perms?.[mod] ?? { ...NONE, ...OPEN_BY_DEFAULT[mod] };
+}
 
 // ─── Role ─────────────────────────────────────────────────────────────────────
 export interface Role {

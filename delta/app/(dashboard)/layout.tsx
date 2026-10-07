@@ -30,10 +30,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Whether this role may open a page. A path named after a permission module
   // needs that module's "view" (/leads/…, /settings). Other sidebar pages take
-  // what their sidebar item names — /calls is Leads — or nothing: Mentors,
-  // My Tracker and My Enrolments are every role's. Reading the path alone sent
-  // everyone but Super Admin away from those three, there being no "mentors",
-  // "my-tracker" or "enrolments" permission to have.
+  // what their sidebar item names — /calls is Leads, /my-tracker is Tracker —
+  // or nothing: My Enrolments is every role's. Mentors, My Tracker, Commission
+  // and Leaderboard have rows on the Roles screen since 2026-10-07.
   const canOpen = (path: string) => {
     const segment = path.split("/")[1] ?? "";
     if ((CRM_MODULES as readonly string[]).includes(segment)) return hasPermission(segment, "view");

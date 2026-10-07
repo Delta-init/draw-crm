@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.js";
+import { checkPermission } from "../middleware/permissions.js";
 import {
   getPlan,
   updateCoursePlan,
@@ -19,10 +20,10 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get("/plan", getPlan);
+router.get("/plan", checkPermission("commission", "view"), getPlan);
 router.put("/plan/:courseId", requireSuperAdmin, updateCoursePlan);
 router.put("/settings", requireSuperAdmin, updateSettings);
-router.get("/earnings", getEarnings);
+router.get("/earnings", checkPermission("commission", "view"), getEarnings);
 // What a sale would earn, for the closing dialog — nothing is saved.
 router.get("/preview", getPreview);
 

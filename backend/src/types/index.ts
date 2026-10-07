@@ -26,9 +26,31 @@ export const CRM_MODULES = [
   "settings",
   "students",
   "tracker",
+  /*
+   * Screens that were open to everyone with no row on the Roles screen to
+   * change it (the owner, 2026-10-07). Mentors: view the calendar, create a
+   * booking, edit one, delete (cancel) one.
+   */
+  "mentors",
+  "commission",
+  "leaderboard",
 ] as const;
 
 export type CrmModule = (typeof CRM_MODULES)[number];
+
+/**
+ * What a role holds on a module it has never been given a value for — today's
+ * access for the screens that were open to everyone, so a role saved before
+ * these rows existed keeps them until someone unticks the box. Every other
+ * module starts with nothing.
+ */
+export const OPEN_BY_DEFAULT: Partial<Record<CrmModule, Partial<ModulePermissions>>> = {
+  mentors: { view: true, create: true, edit: true, delete: true },
+  commission: { view: true },
+  leaderboard: { view: true },
+  // My Tracker was open to everyone here; its row was never on the Roles screen.
+  tracker: { view: true, edit: true },
+};
 
 export type PermissionsMap = {
   [K in CrmModule]?: ModulePermissions;

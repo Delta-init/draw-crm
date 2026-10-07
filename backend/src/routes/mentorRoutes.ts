@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.js";
+import { checkPermission } from "../middleware/permissions.js";
 import {
   mentorSchedule, classDetail, scheduleMeeting, meetingDetail, updateMeeting, cancelMeeting,
 } from "../controllers/mentorController.js";
@@ -21,12 +22,12 @@ const router = Router();
  */
 router.use(authenticate);
 
-router.get("/schedule", mentorSchedule);
-router.post("/meetings", scheduleMeeting);
+router.get("/schedule", checkPermission("mentors", "view"), mentorSchedule);
+router.post("/meetings", checkPermission("mentors", "create"), scheduleMeeting);
 
-router.get("/classes/:classId", classDetail);
-router.get("/meetings/:meetingId", meetingDetail);
-router.patch("/meetings/:meetingId", updateMeeting);
-router.post("/meetings/:meetingId/cancel", cancelMeeting);
+router.get("/classes/:classId", checkPermission("mentors", "view"), classDetail);
+router.get("/meetings/:meetingId", checkPermission("mentors", "view"), meetingDetail);
+router.patch("/meetings/:meetingId", checkPermission("mentors", "edit"), updateMeeting);
+router.post("/meetings/:meetingId/cancel", checkPermission("mentors", "delete"), cancelMeeting);
 
 export default router;

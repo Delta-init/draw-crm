@@ -48,10 +48,10 @@ import { getSocket } from "@/lib/socket";
 
 export const navItems: { href: string; label: string; icon: React.ElementType; permModule: string | null }[] = [
   { href: "/dashboard", label: "Dashboard",          icon: LayoutDashboard, permModule: "dashboard" },
-  { href: "/my-tracker",label: "My Tracker",         icon: ClipboardCheck,  permModule: null        },
+  { href: "/my-tracker",label: "My Tracker",         icon: ClipboardCheck,  permModule: "tracker" },
   { href: "/leads",     label: "Leads",              icon: FileText,        permModule: "leads"     },
   { href: "/calls",     label: "Calls",              icon: PhoneCall,       permModule: "leads"     },
-  { href: "/mentors",   label: "Mentors",            icon: CalendarDays,    permModule: null        },
+  { href: "/mentors",   label: "Mentors",            icon: CalendarDays,    permModule: "mentors" },
   { href: "/reminders", label: "Reminders",          icon: Bell,            permModule: "reminders" },
   { href: "/teams",     label: "Teams",              icon: UsersRound,      permModule: "teams"     },
   { href: "/courses",   label: "Courses",            icon: BookOpen,        permModule: "courses"   },
@@ -59,12 +59,12 @@ export const navItems: { href: string; label: string; icon: React.ElementType; p
   { href: "/users",     label: "Users",              icon: Users,           permModule: "users"     },
   { href: "/students",  label: "Students",           icon: GraduationCap,   permModule: "students"  },
   { href: "/enrolments",label: "My Enrolments",      icon: Receipt,         permModule: null        },
-  /* No permModule — everyone sees their own pay; the server narrows each
-     person to their own, their team's, or everyone's. Only a Super Admin
-     changes the plan, and that is checked on the server too. */
-  { href: "/commission",label: "Commission",         icon: Coins,           permModule: null        },
-  /* No permModule — everyone sees the month's leaderboard (the owner, 2026-10-07). */
-  { href: "/leaderboard",label: "Leaderboard",       icon: Trophy,          permModule: null        },
+  /* Commission, Leaderboard, Mentors and My Tracker were open to everyone and stay open to
+     every role until its box is unticked on the Roles screen (2026-10-07).
+     Commission: the server narrows each person to their own, their team's
+     or everyone's, and only a Super Admin changes the plan or slabs. */
+  { href: "/commission",label: "Commission",         icon: Coins,           permModule: "commission" },
+  { href: "/leaderboard",label: "Leaderboard",       icon: Trophy,          permModule: "leaderboard" },
   { href: "/roles",     label: "Roles & Permissions",icon: Shield,          permModule: "roles"     },
   { href: "/settings",  label: "Settings",           icon: Settings,        permModule: null        },
 ];
