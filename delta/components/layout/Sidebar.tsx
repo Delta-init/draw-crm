@@ -26,6 +26,7 @@ import {
   Receipt,
   Coins,
   Trophy,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/lib/store/uiStore";
@@ -65,6 +66,9 @@ export const navItems: { href: string; label: string; icon: React.ElementType; p
      or everyone's, and only a Super Admin changes the plan or slabs. */
   { href: "/commission",label: "Commission",         icon: Coins,           permModule: "commission" },
   { href: "/leaderboard",label: "Leaderboard",       icon: Trophy,          permModule: "leaderboard" },
+  /* Open to every role by default; the server narrows it to their own month
+     (everyone's for a Super Admin and the Sales Manager). */
+  { href: "/my-pay",    label: "My Pay",             icon: Wallet,          permModule: "pay"       },
   { href: "/roles",     label: "Roles & Permissions",icon: Shield,          permModule: "roles"     },
   { href: "/settings",  label: "Settings",           icon: Settings,        permModule: null        },
 ];

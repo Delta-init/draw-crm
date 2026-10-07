@@ -30,6 +30,7 @@ export const CRM_MODULES = [
   "mentors",
   "commission",
   "leaderboard",
+  "pay",
 ] as const;
 
 export type CrmModule = (typeof CRM_MODULES)[number];
@@ -49,6 +50,7 @@ export const MODULE_LABELS: Record<CrmModule, string> = {
   mentors: "Mentors (booking)",
   commission: "Commission",
   leaderboard: "Leaderboard",
+  pay: "My Pay",
 };
 
 export type PermissionsMap = Partial<Record<CrmModule, ModulePermissions>>;
@@ -65,6 +67,7 @@ export const OPEN_BY_DEFAULT: Partial<Record<CrmModule, Partial<ModulePermission
   mentors: { view: true, create: true, edit: true, delete: true },
   commission: { view: true },
   leaderboard: { view: true },
+  pay: { view: true },
   tracker: { view: true, edit: true },
 };
 
