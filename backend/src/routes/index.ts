@@ -16,6 +16,7 @@ import callRoutes from "./callRoutes.js";
 import portalRoutes from "./portalRoutes.js";
 import mentorRoutes from "./mentorRoutes.js";
 import commissionRoutes from "./commissionRoutes.js";
+import leaderboardRoutes from "./leaderboardRoutes.js";
 
 const router = Router();
 
@@ -40,6 +41,7 @@ router.use("/calls",    callRoutes);
 router.use("/mentors", mentorRoutes);
 // Sales commission: the plan per course, and what each approved sale earns.
 router.use("/commission", commissionRoutes);
+router.use("/leaderboard", leaderboardRoutes);
 
 // Health check
 router.get("/health", (_req, res) => {

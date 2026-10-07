@@ -232,13 +232,14 @@ check("the invoice number is kept against the enrolment", h1?.invoiceNumber === 
 
 // ── Case 2 ──────────────────────────────────────────────────────────────────
 step("Case 2 — edge: no bonus, paid in full, a lead's own email, a second close, corrections");
-// Collecting more than the fee is refused at the close (the user, 2026-10-05: "block").
+// Collecting more than the fee is taken now (the owner, 2026-10-06): a close over its fee that is short of its
+// language is refused for the language, never for the money — and nothing is saved, so L2 stays free.
 r = await call("POST", "/students", closeBody(L2, {
   name: "Priya Nair", email: "priya@draw-e2e.test", courses: [String(c3._id)], totalFee: 1837, paidAmount: 2000,
-  hasBonus: false,
+  hasBonus: false, language: "",
 }), counsellor);
-check("collecting more than the fee is refused: 422, and nothing saved", r.status === 422 && /more than the fee/.test(r.body.message ?? "")
-  && !(await Student.findOne({ leadId: L2 }).lean()), show(r));
+check("over the fee is no reason to refuse: only the missing language is named, nothing saved", r.status === 422 && /language/.test(r.body.message ?? "")
+  && !/more than the fee/.test(r.body.message ?? "") && !(await Student.findOne({ leadId: L2 }).lean()), show(r));
 r = await call("POST", "/students", closeBody(L2, {
   name: "Priya Nair", email: "priya@draw-e2e.test", courses: [String(c3._id)], totalFee: 1837, paidAmount: 1837,
   hasBonus: false, bonusAmount: 99,

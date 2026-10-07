@@ -25,6 +25,7 @@ import {
   CalendarDays,
   Receipt,
   Coins,
+  Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/lib/store/uiStore";
@@ -62,6 +63,8 @@ export const navItems: { href: string; label: string; icon: React.ElementType; p
      person to their own, their team's, or everyone's. Only a Super Admin
      changes the plan, and that is checked on the server too. */
   { href: "/commission",label: "Commission",         icon: Coins,           permModule: null        },
+  /* No permModule — everyone sees the month's leaderboard (the owner, 2026-10-07). */
+  { href: "/leaderboard",label: "Leaderboard",       icon: Trophy,          permModule: null        },
   { href: "/roles",     label: "Roles & Permissions",icon: Shield,          permModule: "roles"     },
   { href: "/settings",  label: "Settings",           icon: Settings,        permModule: null        },
 ];
