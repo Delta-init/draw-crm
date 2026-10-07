@@ -13,6 +13,7 @@ import { useReportTeamRankings } from "@/hooks/useReports";
 import { cn } from "@/lib/utils";
 import { useCurrencyStore } from "@/lib/store/currencyStore";
 import { fmtFull } from "@/lib/currency";
+import { DashboardLeaderboardCard } from "@/components/dashboard/DashboardLeaderboardCard";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -108,6 +109,9 @@ export default function DashboardPage() {
           Here&apos;s an overview of your CRM system.
         </p>
       </motion.div>
+
+      {/* This month's leaderboard */}
+      <DashboardLeaderboardCard />
 
       {/* Stats Grid */}
       <motion.div
