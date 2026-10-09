@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { fmtFull } from "@/lib/currency";
+import { fmtFull, fmtUSD } from "@/lib/currency";
 import {
   ENROLMENT_LANGUAGES, PAYMENT_METHOD_LABELS,
   type EnrolmentLanguage, type EnrolmentPaymentMethod,
@@ -60,11 +60,15 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
   const editing = Boolean(existingStudent);
 
   /*
-   * The courses already named — on the enrolment when there is one, else on
-   * the lead, picked during the sale. Draw sells bundles, so it is a list.
+   * The course already named — on the enrolment when there is one, else on
+   * the lead, picked during the sale. A close is one course, as in the other
+   * sales CRMs (the user, 2026-10-09): a lead naming several is asked which
+   * one was sold. An enrolment from before, with several, keeps them.
    */
   const studentCourses = courseObjects(existingStudent?.courses);
-  const knownCourses = studentCourses.length ? studentCourses : courseObjects(lead.courses);
+  const leadCourses = courseObjects(lead.courses);
+  const knownCourses = studentCourses.length ? studentCourses : leadCourses.length === 1 ? leadCourses : [];
+  const severalOnLead = !studentCourses.length && leadCourses.length > 1;
 
   // Only needed when nothing is named, which is the only time the list shows.
   const { data: courses = [], isLoading: coursesLoading } = useAllCourses();
@@ -85,11 +89,11 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
   );
   const totalFee = Number(feeInput) || 0;
 
-  function toggleCourse(id: string) {
-    const next = courseIds.includes(id) ? courseIds.filter((x) => x !== id) : [...courseIds, id];
+  function pickCourse(id: string) {
+    const next = id ? [id] : [];
     setCourseIds(next);
     // The fee follows what was just chosen, rather than leaving the old
-    // number under a new set of courses.
+    // number under another course.
     const listed = sumOf(courses.filter((c) => next.includes(c._id)));
     if (listed > 0) setFeeInput(String(listed));
     // So does the bonus they come with, until the seller has answered it.
@@ -545,7 +549,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                             <Input
                               type="number" min="0" step="0.01" value={bonusInput}
                               onChange={(e) => { setBonusInput(e.target.value); setBonusTouched(true); }}
-                              placeholder="Bonus amount" className="h-8 text-xs"
+                              placeholder="Bonus amount (USD $)" className="h-8 text-xs"
                               aria-label="Bonus amount"
                             />
                           </motion.div>
@@ -565,7 +569,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                         {editing
                           ? "Saved here. Finance sees a change only if it sends this enrolment back for correction."
                           : bonusChoice === "yes"
-                            ? `${bonusAmount > 0 ? fmtFull(bonusAmount) : "The"} bonus goes to finance with the enrolment, and on to the LMS — outside the fee and balance.`
+                            ? `${bonusAmount > 0 ? fmtUSD(bonusAmount) : "The"} bonus goes to finance with the enrolment, and on to the LMS — outside the fee and balance.`
                             : "No bonus — recorded as such with the enrolment."}
                       </p>
                     )}
@@ -582,42 +586,33 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
 
                 {/* Only when nothing names a course. One that does shows it in
                     the details strip above; asking again there would be two
-                    answers to the same question. More than one can be picked:
-                    a bundle is several courses on one invoice. */}
+                    answers to the same question. One course a close, as in the
+                    other sales CRMs. */}
                 {!knownCourses.length && (
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <BookOpen className="h-3 w-3" /> Course *
                     </p>
-                    {coursesLoading ? (
-                      <p className="text-[11px] text-muted-foreground">Loading courses…</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {courses.map((c) => {
-                          const on = courseIds.includes(c._id);
-                          return (
-                            <motion.button
-                              key={c._id}
-                              type="button"
-                              whileTap={{ scale: 0.97 }}
-                              onClick={() => toggleCourse(c._id)}
-                              aria-pressed={on}
-                              className={cn(
-                                "rounded-md border px-2.5 py-1.5 text-left text-[11px] transition-colors",
-                                on
-                                  ? "border-primary bg-primary/10 text-primary"
-                                  : "border-border/60 text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                              )}
-                            >
-                              {c.name}{c.amount ? ` · ${fmtFull(c.amount)}` : ""}
-                            </motion.button>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {courseMissing && !coursesLoading && (
+                    <Select value={courseIds[0] ?? ""} onValueChange={pickCourse} disabled={coursesLoading}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder={coursesLoading ? "Loading courses…" : "Select a course"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(severalOnLead ? leadCourses : courses).map((c) => (
+                          <SelectItem key={c._id} value={c._id} className="text-xs">
+                            {c.name}{c.amount ? ` · ${fmtFull(c.amount)}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {severalOnLead && !courseIds.length && (
                       <p className="text-[10px] text-amber-400">
-                        This lead has no course. Pick one or more — the fee and the invoice come from them.
+                        This lead names {leadCourses.length} courses. A close is one — pick the one sold.
+                      </p>
+                    )}
+                    {courseMissing && !coursesLoading && !severalOnLead && (
+                      <p className="text-[10px] text-amber-400">
+                        This lead has no course. Pick one — the fee and the invoice come from it.
                       </p>
                     )}
                   </div>

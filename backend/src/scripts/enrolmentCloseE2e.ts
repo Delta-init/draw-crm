@@ -196,12 +196,12 @@ check("...in the bucket, signed, with its own bytes and type", stored.length ===
 const t0 = Date.now();
 r = await call("POST", "/students", closeBody(L1, {
   name: "Abdul Sathar", phone: "+971509000001", email: "Abdul76Sathar@Draw-e2e.test",
-  courses: [String(c1._id), String(c2._id)], totalFee: 7000, paidAmount: 2000, feeStatus: "partial",
+  courses: [String(c2._id)], totalFee: 7000, paidAmount: 2000, feeStatus: "partial",
   language: "Malayalam", paymentMethod: "tabby", hasBonus: true, bonusAmount: 250,
 }), counsellor);
 check("a complete close is saved", r.status === 201, show(r));
 const s1 = await Student.findOne({ leadId: L1 }).lean();
-check("...with both courses, the email lower-cased, language, method and receipt", (s1?.courses ?? []).length === 2
+check("...with its one course, the email lower-cased, language, method and receipt", (s1?.courses ?? []).length === 1
   && s1?.email === "abdul76sathar@draw-e2e.test" && s1?.language === "Malayalam" && s1?.paymentMethod === "tabby"
   && s1?.paymentReceipt?.key === key, JSON.stringify({ c: s1?.courses, e: s1?.email, l: s1?.language }));
 check("...and the bonus, beside a balance it is not part of", s1?.hasBonus === true && s1?.bonusAmount === 250 && s1?.pendingAmount === 5000,
@@ -220,11 +220,11 @@ check("tagged as sold through Draw, for finance, the LMS and Tetra Commission to
 check("from draw-crm, to the client by email and phone", p1.source === "draw-crm" && at(p1, "customer.email") === "abdul76sathar@draw-e2e.test"
   && at(p1, "customer.phone") === "+971509000001" && p1.externalId === String(s1?._id), JSON.stringify(p1.customer));
 const lines = (p1.courses ?? []) as { name: string; amountMinor: number }[];
-check("two lines: the agreed fee split by list price, adding up to it exactly", lines.length === 2
-  && lines[0]?.amountMinor === 203_226 && lines[1]?.amountMinor === 496_774, JSON.stringify(lines));
+check("one line: the course at the agreed fee", lines.length === 1 && lines[0]?.amountMinor === 700_000, JSON.stringify(lines));
 check("what was paid, and the balance — fee less paid, in fils", p1.declaredPaidMinor === 200_000 && p1.balanceMinor === 500_000,
   JSON.stringify({ paid: p1.declaredPaidMinor, balance: p1.balanceMinor }));
-check("the bonus, for information, in fils", at(p1, "bonus.given") === true && at(p1, "bonus.amountMinor") === 25_000, JSON.stringify(p1.bonus));
+check("the bonus, for information, in US cents — an MT5 bonus, USD whatever the fee's currency", at(p1, "bonus.given") === true
+  && at(p1, "bonus.amountMinor") === 25_000 && at(p1, "bonus.currency") === "USD", JSON.stringify(p1.bonus));
 check("the language, how it was paid, and the receipt by key", p1.language === "Malayalam" && p1.declaredPaymentMethod === "tabby"
   && at(p1, "receipt.key") === key && at(p1, "receipt.url") === receipt.url && at(p1, "receipt.mimeType") === "image/png", JSON.stringify(p1.receipt));
 const h1 = await FinanceHandover.findOne({ studentId: s1?._id }).lean();
@@ -288,6 +288,7 @@ check("one enrolment to finance per close and none twice — edits send nothing"
 step("Case 3 — errors: what finance needs, refused when missing and named");
 const refusals: [string, Json, RegExp][] = [
   ["no course", { courses: [] }, /a course/],
+  ["two courses — a close is one", { courses: [String(c1._id), String(c2._id)] }, /one course/],
   ["an unknown course", { courses: [String(new mongoose.Types.ObjectId())] }, /a course/],
   ["a course id that is not one", { courses: ["not-an-id"] }, /a course/],
   ["no email", { email: "" }, /email/],

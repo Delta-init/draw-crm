@@ -190,6 +190,10 @@ export class StudentService {
     // Yes or no, every time — and a yes is only an answer with its amount.
     if (typeof data.hasBonus !== "boolean") missing.push("whether a bonus was given");
     else if (data.hasBonus && !isBonusAmount(data.bonusAmount)) missing.push("the bonus amount");
+    // One course a close, as in the other sales CRMs (the user, 2026-10-09).
+    if (courseIds.length > 1) {
+      throw createError("A closing is one course — pick the one that was sold, then close again.", 422);
+    }
     if (missing.length) {
       throw createError(
         `A closing needs ${missing.join(", ")}. Pick the course, give the client's email, upload the receipt, choose the language and payment method, and say whether a bonus was given, then close again.`,
@@ -498,6 +502,9 @@ export class StudentService {
             bonus: {
               given: student.hasBonus,
               amountMinor: student.hasBonus ? Math.round((student.bonusAmount ?? 0) * 100) : 0,
+              // The course bonus is an MT5 bonus, in US dollars in every sales CRM (2026-10-09) —
+              // whatever the fee's currency. Cents.
+              currency: "USD",
             },
           }
         : {}),

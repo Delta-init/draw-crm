@@ -162,7 +162,7 @@ export function CourseDialog({ open, onOpenChange, course }: CourseDialogProps) 
 
           {/* Bonus */}
           <div className="space-y-1.5">
-            <Label htmlFor="course-bonus">Bonus ({getCurrencySymbol().trim()})</Label>
+            <Label htmlFor="course-bonus">Bonus (USD $)</Label>
             <Input
               id="course-bonus"
               type="number"
