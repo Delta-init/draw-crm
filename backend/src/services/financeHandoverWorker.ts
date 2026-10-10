@@ -1,8 +1,13 @@
 import { FinanceHandover } from "../models/FinanceHandover.js";
 import { Student } from "../models/Student.js";
-import { financeConfigured, sendEnrolment, fetchEnrolmentStatuses } from "./financeClient.js";
+import { financeConfigured, sendEnrolment, fetchEnrolmentStatusesFor } from "./financeClient.js";
 import { sweepCommission } from "./commissionService.js";
 import { env } from "../config/env.js";
+import { academyOf } from "../types/index.js";
+
+/** The academy a row was closed for — kept on it, else said in its payload; neither (rows from before) is Dubai. */
+const academyOfRow = (row: { get(path: string): unknown }) =>
+  academyOf(row.get("academy") ?? (row.get("payload") as { academy?: unknown } | null)?.academy);
 
 /**
  * Delivers queued enrolments to Delta Finance.
@@ -42,7 +47,8 @@ export async function drainFinanceHandovers(): Promise<void> {
 
   for (const row of due) {
     try {
-      const result = await sendEnrolment(row.payload);
+      // Into the finance organization of the academy it was closed for.
+      const result = await sendEnrolment(row.payload, academyOfRow(row));
       row.set({
         status: "sent",
         invoiceId: result.invoiceId,
@@ -119,7 +125,8 @@ export async function pollFinanceOutcomes(): Promise<void> {
     .limit(OUTCOME_BATCH);
   if (rows.length === 0) return;
 
-  const statuses = await fetchEnrolmentStatuses(rows.map((r) => String(r.studentId)));
+  // Each asked of the organization it was closed into, one call per organization.
+  const statuses = await fetchEnrolmentStatusesFor(rows.map((r) => ({ id: String(r.studentId), academy: academyOfRow(r) })));
   if (statuses.length === 0) return;               // finance unreachable; ask again next time
   const byId = new Map(statuses.map((st) => [st.externalId, st]));
 

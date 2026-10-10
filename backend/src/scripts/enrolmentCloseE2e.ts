@@ -31,6 +31,7 @@ const BARE_API = `http://127.0.0.1:${process.env.E2E_BARE_API_PORT}/api/v1`;
 const CLIENT_ID = process.env.E2E_FINANCE_CLIENT_ID ?? "";
 const SECRET = process.env.E2E_FINANCE_SECRET ?? "";
 const ORG_ID = process.env.E2E_FINANCE_ORG_ID ?? "";
+const ORG_BLR = process.env.E2E_FINANCE_ORG_ID_BANGALORE ?? "";
 const BUCKET = process.env.E2E_BUCKET ?? "";
 const PUBLIC_URL = process.env.E2E_PUBLIC_URL ?? "";
 
@@ -117,7 +118,7 @@ const finance = serve(Number(process.env.E2E_FAKE_FINANCE_PORT), (req, raw) => {
   const expected = crypto.createHmac("sha256", SECRET)
     .update([req.method ?? "", req.url ?? "", header("x-delta-timestamp"), header("x-delta-nonce"), crypto.createHash("sha256").update(raw).digest("hex")].join("\n"))
     .digest("hex");
-  if (header("x-delta-client") !== CLIENT_ID || header("x-delta-signature") !== expected || header("x-delta-org") !== ORG_ID) {
+  if (header("x-delta-client") !== CLIENT_ID || header("x-delta-signature") !== expected || ![ORG_ID, ORG_BLR].includes(header("x-delta-org"))) {
     badSignatures++;
     return { status: 401, body: { error: { code: "UNAUTHENTICATED", message: "Unauthorized" } } };
   }
@@ -323,6 +324,37 @@ check("a receipt over 10 MB is refused, saying the limit — not a 500", r.statu
 r = await upload(L3, { name: "receipt.png", type: "image/png", bytes: PNG }, counsellor, BARE_API);
 check("a server with no storage settings says so, rather than losing the file", r.status === 503 && /storage is not configured/i.test(r.body.message ?? ""), show(r));
 check("...and none of those reached the bucket", stored.length === storedBefore, `${storedBefore} → ${stored.length}`);
+
+// ── Case 5 (before Case 4 switches the counsellor off) ─────────────────────
+step("Case 5 — academy: a Bangalore close goes to the Bangalore organization, in INR");
+await Course.updateOne({ _id: c1._id }, { $set: { bangalore: { price: 45000, financeItemId: "64b0000000000000000000b1", lmsCourseSlugs: [] } } });
+const L5 = await lead("Bangalore Client", "+919800000005", "blr@draw-e2e.test");
+const L6 = await lead("Bangalore Unpriced", "+919800000006", "blr2@draw-e2e.test");
+const receivedBefore = received.length;
+r = await call("POST", "/students", closeBody(L5, {
+  name: "Bangalore Client", phone: "+919800000005", email: "blr@draw-e2e.test", academy: "bangalore",
+  totalFee: 45000, paidAmount: 45000, feeStatus: "paid", paymentMethod: "cash",
+  payments: [
+    { method: "cash", amount: 40500, receipt, paidAt: "2026-10-02T00:00:00.000Z" },
+    { method: "cash", amount: 4500, receipt, paidAt: "2026-10-02T00:00:00.000Z", currency: "AED", amountInCurrency: 200, exchangeRate: 22.5 },
+  ],
+}), counsellor);
+check("a Bangalore close is saved", r.status === 201 && at(r.body, "data.academy") === "bangalore", show(r));
+await waitFor(async () => received.length > receivedBefore, 8_000);
+const blr = received.at(-1);
+check("...and finance has it at once, from the Bangalore organization, signed", blr?.org === ORG_BLR && blr?.payload.academy === "bangalore" && badSignatures === 0, `${blr?.org} bad=${badSignatures}`);
+check("...in paise, at the course's Bangalore product, the AED cash as original",
+  JSON.stringify(blr?.payload.courses) === JSON.stringify([{ name: "COURSE 1 - MARKET BREAKOUT THEORY (WITH CREDIT)", amountMinor: 4_500_000, itemId: "64b0000000000000000000b1" }])
+    && (blr?.payload.payments as Json[] | undefined)?.[1]?.original !== undefined && blr?.payload.declaredPaidMinor === 4_500_000, JSON.stringify(blr?.payload.courses));
+check("...its outbox row Bangalore too", (await FinanceHandover.findOne({ studentId: at(r.body, "data._id") }).lean())?.academy === "bangalore");
+r = await call("POST", "/students", closeBody(L6, { academy: "bangalore", courses: [String(c2._id)], totalFee: 5500 }), counsellor);
+check("a Bangalore close of a course with no Bangalore price is refused, naming it", r.status === 422 && /COURSE 2 - MBT \+ DWT \(WITH CREDIT\) has no Bangalore price/.test(String(at(r.body, "message"))), show(r));
+r = await call("GET", "/courses/academies", undefined, counsellor);
+check("this server lists Dubai and Bangalore for the close dialog", r.status === 200 && JSON.stringify(at(r.body, "data.academies")) === JSON.stringify(["dubai", "bangalore"]), show(r));
+r = await call("GET", "/courses/academies", undefined, counsellor, BARE_API);
+check("...a server without the Bangalore organization lists only Dubai", r.status === 200 && JSON.stringify(at(r.body, "data.academies")) === JSON.stringify(["dubai"]), show(r));
+r = await call("POST", "/students", closeBody(L6, { academy: "bangalore", totalFee: 45000 }), counsellor, BARE_API);
+check("...and refuses a Bangalore close, even with finance switched off", r.status === 422 && /Bangalore finance organization isn't set/.test(String(at(r.body, "message"))), show(r));
 
 // ── Case 4 ──────────────────────────────────────────────────────────────────
 step("Case 4 — permission: no token, a role that cannot create students, a switched-off account");

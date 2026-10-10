@@ -12,10 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { fmtFull } from "@/lib/currency";
 import { useAllCourses } from "@/hooks/useCourses";
 import { useCorrectEnrolment, useEnrolmentCorrection } from "@/hooks/useEnrolments";
-import { PaymentRowsEditor, missingInRows, newPaymentRow, rowAmount, type PaymentRow } from "@/components/students/PaymentRowsEditor";
+import { PaymentRowsEditor, missingInRows, newPaymentRow, rowAedFields, rowAmount, type PaymentRow } from "@/components/students/PaymentRowsEditor";
+import { AcademyBadge } from "@/components/students/AcademyBadge";
+import { ACADEMY_LABELS, academyOf, bangalorePriceOf, fmtFee, priceFor, type Academy } from "@/lib/academy";
 import type { Course } from "@/types/course";
 import type { EnrolmentCorrectionStart, FeeStatus, Student } from "@/types/student";
 import { ENROLMENT_LANGUAGES } from "@/types/student";
@@ -36,7 +37,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const NONE = "__none__";
 
 const idOf = (v: unknown) => (v ? (typeof v === "object" ? String((v as { _id: string })._id) : String(v)) : "");
-const sumOf = (list: Course[]) => list.reduce((t, c) => t + (c.amount ?? 0), 0);
+/** The courses' list prices added up, as the enrolment's academy sells them. */
+const sumOf = (list: Course[], academy: Academy) => list.reduce((t, c) => t + priceFor(c, academy), 0);
 const nameOf = (v: unknown) => (v && typeof v === "object" ? (v as { name?: string }).name ?? "" : "");
 
 /**
@@ -45,17 +47,32 @@ const nameOf = (v: unknown) => (v && typeof v === "object" ? (v as { name?: stri
  * it — then each payment taken at the close. An enrolment from before
  * payments were listed starts from its one method, one receipt and the rest of
  * what was paid.
+ *
+ * A Bangalore enrolment's payments are INR; one taken in AED comes back as it
+ * was typed — the AED and its rate — and the lead's own money (AED) is always
+ * such a payment there, its rate as the close gave it.
  */
-function startingRows(s: Student, ownOnLead: number): PaymentRow[] {
+function startingRows(s: Student, ownOnLead: number, academy: Academy): PaymentRow[] {
   const listed = s.payments ?? [];
   const ownWas = listed.find((p) => p.collectedBefore);
   const rows: PaymentRow[] = [];
   if (ownOnLead > 0) {
-    rows.push(newPaymentRow({ collectedBefore: true, amountInput: String(ownOnLead), method: ownWas?.method ?? "", receipt: ownWas?.receipt ?? null }));
+    const rate = academy === "bangalore" && ownWas?.exchangeRate ? ownWas.exchangeRate : 0;
+    rows.push(newPaymentRow({
+      collectedBefore: true, amountInput: String(ownOnLead), method: ownWas?.method ?? "", receipt: ownWas?.receipt ?? null,
+      ...(academy === "bangalore"
+        ? { paidInAed: true, rateInput: rate ? String(rate) : "", convertedInput: rate ? String(Math.round(ownOnLead * rate * 100) / 100) : "" }
+        : {}),
+    }));
   }
   const taken = listed.filter((p) => !p.collectedBefore);
   if (taken.length) {
-    rows.push(...taken.map((p) => newPaymentRow({ method: p.method, amountInput: String(p.amount), receipt: p.receipt ?? null })));
+    rows.push(...taken.map((p) => newPaymentRow({
+      method: p.method, receipt: p.receipt ?? null,
+      ...(academy === "bangalore" && p.currency === "AED" && p.amountInCurrency && p.exchangeRate
+        ? { paidInAed: true, amountInput: String(p.amountInCurrency), rateInput: String(p.exchangeRate), convertedInput: String(p.amount) }
+        : { amountInput: String(p.amount) }),
+    })));
   } else if (!listed.length) {
     const rest = Math.round(((s.paidAmount ?? 0) - ownOnLead) * 100) / 100;
     if (rest > 0) rows.push(newPaymentRow({ method: s.paymentMethod ?? "", amountInput: String(rest), receipt: s.paymentReceipt ?? null }));
@@ -107,6 +124,10 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
   const s = start.student;
   const { data: courses = [], isLoading: coursesLoading } = useAllCourses();
   const correct = useCorrectEnrolment();
+  // Fixed at the close (the user, 2026-10-10): shown here, never changed. Its money is in its currency.
+  const academy = academyOf(start.academy ?? s.academy);
+  const bangalore = academy === "bangalore";
+  const fee = (n: number) => fmtFee(n, academy);
 
   // The client
   const [name, setName] = useState(s.name ?? "");
@@ -117,19 +138,24 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
   const studentCourses = (s.courses ?? []).filter((c): c is Course => typeof c === "object" && c !== null);
   const [courseIds, setCourseIds] = useState<string[]>(() => (s.courses ?? []).map(idOf).filter(Boolean));
   const courseOptions = [...studentCourses.filter((c) => !courses.some((x) => x._id === c._id)), ...courses];
+  /** A Bangalore enrolment takes only courses with a Bangalore price — the server refuses the rest. */
+  const sellable = (c: Course) => !bangalore || bangalorePriceOf(c) !== null;
   function toggleCourse(id: string) {
     const next = courseIds.includes(id) ? courseIds.filter((x) => x !== id) : [...courseIds, id];
     setCourseIds(next);
     // The fee follows what was just chosen, rather than leaving the old number under a new set of courses.
-    const listed = sumOf(courseOptions.filter((c) => next.includes(c._id)));
+    const listed = sumOf(courseOptions.filter((c) => next.includes(c._id)), academy);
     if (listed > 0) setFeeInput(String(listed));
   }
+  const unpriced = bangalore && !coursesLoading
+    ? courseOptions.filter((c) => courseIds.includes(c._id) && !sellable(c))
+    : [];
   const [feeInput, setFeeInput] = useState(String(s.totalFee ?? ""));
   const feeOk = feeInput.trim() !== "" && Number.isFinite(Number(feeInput)) && Number(feeInput) >= 0;
   const totalFee = feeOk ? Number(feeInput) : 0;
 
   // Each payment, with its receipt; the lead's own money first, its amount fixed.
-  const [paymentRows, setPaymentRows] = useState<PaymentRow[]>(() => startingRows(s, start.ownOnLead));
+  const [paymentRows, setPaymentRows] = useState<PaymentRow[]>(() => startingRows(s, start.ownOnLead, academy));
   const paidAmount = paymentRows.reduce((t, r) => t + rowAmount(r), 0);
   const pending = Math.max(0, totalFee - paidAmount);
   /** Collected more than the fee: taken (the owner, 2026-10-06) and said so in amber, not refused. */
@@ -167,6 +193,7 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
     !phone.trim() && "the client's phone",
     !EMAIL_RE.test(email.trim()) && "the client's email",
     !courseIds.length && "a course",
+    unpriced.length > 0 && `a Bangalore price for ${unpriced.map((c) => c.name).join(", ")}`,
     !feeOk && "the fee",
     !language && "language",
     ...missingInRows(paymentRows),
@@ -198,9 +225,12 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
             receipt: r.receipt,
             paidAt: on,
             ...(r.collectedBefore ? { collectedBefore: true } : {}),
+            ...(bangalore ? rowAedFields(r) : {}),
           })),
           hasBonus: bonusChoice === "yes",
           bonusAmount: bonusChoice === "yes" ? bonusAmount : 0,
+          // The one it was closed for — said so the server can check nothing moved it.
+          academy,
         },
       },
       { onSuccess: onClose },
@@ -221,8 +251,9 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
             <DialogHeader>
               <DialogTitle className="text-base font-bold">Correct enrolment</DialogTitle>
             </DialogHeader>
-            <p className="truncate text-xs text-muted-foreground">
-              {[s.name, s.enrollmentNumber, start.invoiceNumber].filter(Boolean).join(" · ")}
+            <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="truncate">{[s.name, s.enrollmentNumber, start.invoiceNumber].filter(Boolean).join(" · ")}</span>
+              <AcademyBadge academy={academy} className="shrink-0" />
             </p>
           </div>
         </div>
@@ -268,6 +299,10 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
         {/* The course and the money */}
         <section className="space-y-2">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Courses &amp; fee</p>
+          <p className="text-[11px] text-muted-foreground">
+            Academy: <span className="font-medium text-foreground">{ACADEMY_LABELS[academy]}</span>
+            {bangalore ? " — in rupees" : ""}. <span className="text-[10px]">Fixed at the close; a correction can&apos;t change it.</span>
+          </p>
           <div className="space-y-1.5">
             <p className={label}><BookOpen className="h-3 w-3" /> Course * <span className="text-[10px]">— one or more</span></p>
             {coursesLoading && !courseOptions.length ? (
@@ -276,6 +311,9 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
               <div className="flex flex-wrap gap-1.5">
                 {courseOptions.map((c) => {
                   const on = courseIds.includes(c._id);
+                  const listed = priceFor(c, academy);
+                  // One without a Bangalore price can be taken off a Bangalore enrolment, not put on.
+                  const blocked = !on && !sellable(c);
                   return (
                     <motion.button
                       key={c._id}
@@ -283,14 +321,15 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
                       whileTap={{ scale: 0.97 }}
                       onClick={() => toggleCourse(c._id)}
                       aria-pressed={on}
+                      disabled={blocked}
                       className={cn(
-                        "rounded-md border px-2.5 py-1.5 text-left text-[11px] transition-colors",
+                        "rounded-md border px-2.5 py-1.5 text-left text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                         on
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-border/60 text-muted-foreground hover:border-primary/40 hover:text-foreground",
                       )}
                     >
-                      {c.name}{c.amount ? ` · ${fmtFull(c.amount)}` : ""}
+                      {c.name}{listed ? ` · ${fee(listed)}` : bangalore ? " · no Bangalore price" : ""}
                     </motion.button>
                   );
                 })}
@@ -300,20 +339,20 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
           <div className="rounded-xl border border-border/50 bg-muted/20 p-3 space-y-2">
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-lg bg-card p-2 border border-border/30">
-                <p className="text-sm font-bold text-foreground">{fmtFull(totalFee)}</p>
+                <p className="text-sm font-bold text-foreground">{fee(totalFee)}</p>
                 <p className="text-[10px] text-muted-foreground">Total Fee</p>
               </div>
               <div className="rounded-lg bg-card p-2 border border-border/30">
-                <p className="text-sm font-bold text-green-400">{fmtFull(paidAmount)}</p>
+                <p className="text-sm font-bold text-green-400">{fee(paidAmount)}</p>
                 <p className="text-[10px] text-muted-foreground">Paid</p>
               </div>
               <div className="rounded-lg bg-card p-2 border border-border/30">
-                <p className={cn("text-sm font-bold", pending > 0 ? "text-amber-400" : "text-green-400")}>{fmtFull(pending)}</p>
+                <p className={cn("text-sm font-bold", pending > 0 ? "text-amber-400" : "text-green-400")}>{fee(pending)}</p>
                 <p className="text-[10px] text-muted-foreground">Balance</p>
               </div>
             </div>
             <div className="space-y-1">
-              <p className="text-[11px] text-muted-foreground">Total fee *</p>
+              <p className="text-[11px] text-muted-foreground">Total fee{bangalore ? " (₹)" : ""} *</p>
               <Input
                 type="number" min="0" step="0.01" value={feeInput}
                 onChange={(e) => setFeeInput(e.target.value)}
@@ -322,7 +361,7 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
             </div>
             {overFee && (
               <p className="text-[11px] font-medium text-amber-400">
-                Collected ({fmtFull(paidAmount)}) is {fmtFull(overBy)} more than the fee ({fmtFull(totalFee)}) — fine if it was taken: it goes to finance as collected.
+                Collected ({fee(paidAmount)}) is {fee(overBy)} more than the fee ({fee(totalFee)}) — fine if it was taken: it goes to finance as collected.
               </p>
             )}
           </div>
@@ -333,7 +372,7 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
           <p className="text-xs text-muted-foreground">
             Payments * <span className="text-[10px]">— one for each way the client paid, each with its receipt</span>
           </p>
-          <PaymentRowsEditor leadId={idOf(s.leadId)} rows={paymentRows} onChange={setPaymentRows} />
+          <PaymentRowsEditor leadId={idOf(s.leadId)} rows={paymentRows} onChange={setPaymentRows} academy={academy} />
           {paymentRows.some((r) => r.collectedBefore) && (
             <p className="text-[10px] text-muted-foreground">
               The amount already on the lead is what its own payments come to — change those on the lead, then open this again.
@@ -466,7 +505,7 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
           {missing.length
             ? `Still needed: ${missing.join(", ")}.`
             : overFee
-              ? `Collected is ${fmtFull(overBy)} more than the fee — it goes to finance as collected.`
+              ? `Collected is ${fee(overBy)} more than the fee — it goes to finance as collected.`
               : "Saved, and sent to finance again in the same step."}
         </span>
         <Button

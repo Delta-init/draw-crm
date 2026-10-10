@@ -44,6 +44,20 @@ const courseSchema = new Schema<ICourse>(
     lmsCourseSlugs: { type: [String], default: [] },
 
     /**
+     * The course as the Bangalore academy sells it (the user, 2026-10-10): its
+     * price in INR — a Bangalore close starts its fee from it, and is refused
+     * while the course has none — the item it bills as in the Bangalore finance
+     * organization, and the LMS courses it opens there; none of its own means
+     * the Dubai ones above, since the Forex courses are shared. Set on the
+     * Courses page ("Map").
+     */
+    bangalore: {
+      price: { type: Number, min: [0, "Price cannot be negative"], default: null },
+      financeItemId: { type: String, default: null },
+      lmsCourseSlugs: { type: [String], default: [] },
+    },
+
+    /**
      * What selling this course earns, in AED per approved sale: the closer
      * (Sales Staff), the leader of their team (TL) and the Sales Manager (SM).
      * `creditUsd` is the MT5 credit the course comes with, shown beside it.

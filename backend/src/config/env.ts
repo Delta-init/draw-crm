@@ -60,6 +60,14 @@ const envSchema = z.object({
   FINANCE_CLIENT_ID:          z.string().default(""),
   FINANCE_INTEGRATION_SECRET: z.string().default(""),
   FINANCE_ORG_ID:             z.string().default(""),
+  /*
+   * The finance organization a close for the Bangalore academy bills into
+   * (the user, 2026-10-10) — in INR, with the same client id and secret as
+   * above. Every later call for such a close (resend, correction, status) goes
+   * to this organization too. Empty: Bangalore closes are refused while the
+   * handover is on, and the Map screen lists no Bangalore products.
+   */
+  FINANCE_ORG_ID_BANGALORE:   z.string().default(""),
 
   /**
    * Object storage for payment receipts.

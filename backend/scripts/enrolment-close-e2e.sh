@@ -78,6 +78,8 @@ export E2E_FAKE_FINANCE_PORT="$FINANCE_PORT" E2E_FAKE_S3_PORT="$S3_PORT"
 export E2E_FINANCE_CLIENT_ID="draw-crm-e2e"
 export E2E_FINANCE_SECRET="draw-enrolment-close-e2e-inbound-secret-0123"
 export E2E_FINANCE_ORG_ID="64b0000000000000000000d8"
+# The Bangalore academy's finance organization (the user, 2026-10-10).
+export E2E_FINANCE_ORG_ID_BANGALORE="64b0000000000000000000e8"
 export E2E_BUCKET="draw-e2e-receipts"
 export E2E_PUBLIC_URL="http://127.0.0.1:$S3_PORT/public"
 
@@ -87,6 +89,7 @@ echo "Starting the Draw CRM backend on :$API_PORT — finance and storage connec
 PORT="$API_PORT" \
   FINANCE_API_URL="http://127.0.0.1:$FINANCE_PORT" FINANCE_CLIENT_ID="$E2E_FINANCE_CLIENT_ID" \
   FINANCE_INTEGRATION_SECRET="$E2E_FINANCE_SECRET" FINANCE_ORG_ID="$E2E_FINANCE_ORG_ID" \
+  FINANCE_ORG_ID_BANGALORE="$E2E_FINANCE_ORG_ID_BANGALORE" \
   R2_ACCOUNT_ID="e2e-account" R2_ACCESS_KEY_ID="e2e-key" R2_SECRET_ACCESS_KEY="e2e-secret" \
   R2_BUCKET_NAME="$E2E_BUCKET" R2_PUBLIC_URL="$E2E_PUBLIC_URL" R2_ENDPOINT="http://127.0.0.1:$S3_PORT" \
   bun --no-env-file src/index.ts > "$WORK/api.log" 2>&1 &
@@ -95,7 +98,7 @@ PORT="$API_PORT" \
 # been given storage settings answers when somebody attaches a receipt.
 echo "Starting a second copy on :$BARE_API_PORT — no storage, no finance"
 PORT="$BARE_API_PORT" \
-  FINANCE_API_URL="" FINANCE_CLIENT_ID="" FINANCE_INTEGRATION_SECRET="" FINANCE_ORG_ID="" \
+  FINANCE_API_URL="" FINANCE_CLIENT_ID="" FINANCE_INTEGRATION_SECRET="" FINANCE_ORG_ID="" FINANCE_ORG_ID_BANGALORE="" \
   R2_ACCOUNT_ID="" R2_ACCESS_KEY_ID="" R2_SECRET_ACCESS_KEY="" R2_BUCKET_NAME="" R2_PUBLIC_URL="" R2_ENDPOINT="" \
   bun --no-env-file src/index.ts > "$WORK/bare-api.log" 2>&1 &
 

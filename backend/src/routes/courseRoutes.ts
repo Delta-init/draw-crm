@@ -10,6 +10,7 @@ import {
   deleteCourse,
   getFinanceItems,
   getLmsCourses,
+  getAcademies,
 } from "../controllers/courseController.js";
 
 const router = Router();
@@ -21,6 +22,11 @@ router.get("/all", getAllCourses);
 
 // Paginated list
 router.get("/", getCourses);
+
+// Which academies a close may be for here (Bangalore once its finance
+// organization is set) — read by the close dialog, so open to anyone signed
+// in. Before "/:id", which would otherwise take it for a course id.
+router.get("/academies", getAcademies);
 
 // What a course can be mapped to — finance's products, the LMS's courses — for
 // the Map screen. Behind the permission that edits courses, and registered

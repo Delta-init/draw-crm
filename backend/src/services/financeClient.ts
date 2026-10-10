@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { env } from "../config/env.js";
 import { signRequest } from "../utils/signing.js";
+import { academyOf, type Academy } from "../types/index.js";
 
 /**
  * Calling Delta Finance.
@@ -20,6 +21,32 @@ export function financeConfigured(): boolean {
       env.FINANCE_INTEGRATION_SECRET &&
       env.FINANCE_ORG_ID,
   );
+}
+
+/**
+ * The finance organization an academy's closes bill into: Dubai's is
+ * FINANCE_ORG_ID, as every close's was before; Bangalore's is
+ * FINANCE_ORG_ID_BANGALORE. "" when that one is not set.
+ */
+export function financeOrgOf(academy: Academy): string {
+  return academy === "bangalore" ? env.FINANCE_ORG_ID_BANGALORE : env.FINANCE_ORG_ID;
+}
+
+/** Whether closes for this academy can be handed over: the integration on, and the academy's organization set. */
+export function academyConfigured(academy: Academy): boolean {
+  return financeConfigured() && Boolean(financeOrgOf(academy));
+}
+
+/**
+ * The academies this server takes a close for: Bangalore only once its finance
+ * organization is set (FINANCE_ORG_ID_BANGALORE), whether or not the handover
+ * is on — the same rule the close itself is refused by. Advertised to the close
+ * dialog, which offers the choice only when Bangalore is listed: the web goes
+ * live on push and this server by hand, and a new screen on a server from
+ * before must never offer a Bangalore close it cannot take.
+ */
+export function academiesOffered(): Academy[] {
+  return env.FINANCE_ORG_ID_BANGALORE ? ["dubai", "bangalore"] : ["dubai"];
 }
 
 /** Trailing slashes and a trailing /api/v1 both stripped: the path carries it. */
@@ -50,10 +77,14 @@ export interface EnrolmentResult {
  * retry. A 4xx will fail the same way every time — a malformed payload does not
  * become valid by being sent again — so the worker stops retrying those.
  */
-export async function sendEnrolment(payload: unknown): Promise<EnrolmentResult> {
+export async function sendEnrolment(payload: unknown, academy: Academy = "dubai"): Promise<EnrolmentResult> {
   if (!financeConfigured()) {
     throw Object.assign(new Error("Finance integration is not configured"), { permanent: true });
   }
+  // Into the organization it was closed for. One without its organization set
+  // waits — retried, not abandoned — until somebody sets it.
+  const org = financeOrgOf(academy);
+  if (!org) throw new Error("The Bangalore finance organization is not set (FINANCE_ORG_ID_BANGALORE)");
 
   const path = "/api/v1/integrations/enrolments";
   const raw = JSON.stringify(payload);
@@ -79,7 +110,7 @@ export async function sendEnrolment(payload: unknown): Promise<EnrolmentResult> 
         "x-delta-timestamp": timestamp,
         "x-delta-nonce": nonce,
         "x-delta-signature": signature,
-        "x-delta-org": env.FINANCE_ORG_ID,
+        "x-delta-org": org,
       },
       body: raw,
       signal: controller.signal,
@@ -127,8 +158,8 @@ export async function sendEnrolment(payload: unknown): Promise<EnrolmentResult> 
  * rather than mirrored — a copy of somebody else's catalogue is a copy that
  * goes stale, which is the problem this integration exists to remove.
  */
-export async function listFinanceItems(): Promise<FinanceItem[]> {
-  if (!financeConfigured()) return [];
+export async function listFinanceItems(academy: Academy = "dubai"): Promise<FinanceItem[]> {
+  if (!academyConfigured(academy)) return [];
 
   const path = "/api/v1/integrations/items";
   const timestamp = String(Date.now());
@@ -144,7 +175,7 @@ export async function listFinanceItems(): Promise<FinanceItem[]> {
         "x-delta-timestamp": timestamp,
         "x-delta-nonce": nonce,
         "x-delta-signature": signature,
-        "x-delta-org": env.FINANCE_ORG_ID,
+        "x-delta-org": financeOrgOf(academy),
       },
       signal: controller.signal,
     });
@@ -200,8 +231,8 @@ export interface EnrolmentStatus {
  * restarting — the rows simply cannot say what happened to them yet, which is
  * the truth at that moment.
  */
-export async function fetchEnrolmentStatuses(studentIds: string[]): Promise<EnrolmentStatus[]> {
-  if (!financeConfigured() || studentIds.length === 0) return [];
+export async function fetchEnrolmentStatuses(studentIds: string[], academy: Academy = "dubai"): Promise<EnrolmentStatus[]> {
+  if (!academyConfigured(academy) || studentIds.length === 0) return [];
 
   const path = "/api/v1/integrations/enrolments/status";
   const raw = JSON.stringify({ source: "draw-crm", externalIds: studentIds.slice(0, 200) });
@@ -227,7 +258,7 @@ export async function fetchEnrolmentStatuses(studentIds: string[]): Promise<Enro
         "x-delta-timestamp": timestamp,
         "x-delta-nonce": nonce,
         "x-delta-signature": signature,
-        "x-delta-org": env.FINANCE_ORG_ID,
+        "x-delta-org": financeOrgOf(academy),
       },
       body: raw,
       signal: controller.signal,
@@ -240,4 +271,25 @@ export async function fetchEnrolmentStatuses(studentIds: string[]): Promise<Enro
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * The same answer for enrolments closed into more than one academy: each is
+ * asked of the finance organization it was closed into — one call per
+ * organization, never one per enrolment — and the answers put together. An
+ * organization that can't be reached leaves its own enrolments out, and only
+ * those. Never throws.
+ */
+export async function fetchEnrolmentStatusesFor(
+  items: { id: string; academy?: unknown }[],
+): Promise<EnrolmentStatus[]> {
+  const byAcademy = new Map<Academy, string[]>();
+  for (const item of items) {
+    const academy = academyOf(item.academy);
+    byAcademy.set(academy, [...(byAcademy.get(academy) ?? []), item.id]);
+  }
+  const answers = await Promise.all(
+    [...byAcademy].map(([academy, ids]) => fetchEnrolmentStatuses(ids, academy)),
+  );
+  return answers.flat();
 }

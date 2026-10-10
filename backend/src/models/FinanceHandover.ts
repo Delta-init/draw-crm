@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { ACADEMIES } from "../types/index.js";
 
 /**
  * An enrolment waiting to reach Delta Finance.
@@ -26,6 +27,13 @@ const financeHandoverSchema = new Schema(
 
     /** The payload as it was when the sale happened, not as the data looks now. */
     payload: { type: Schema.Types.Mixed, required: true },
+
+    /**
+     * The academy it was closed for, and so the finance organization every
+     * call about it goes to — delivery, resend, the decision poll. Unset on
+     * rows from before, which are Dubai.
+     */
+    academy: { type: String, enum: ACADEMIES },
 
     attempts: { type: Number, default: 0 },
     /** Not before this time. Backed off after each failure. */

@@ -11,6 +11,9 @@
  *                        finance or the LMS down
  *   Case 4  permission   no token, a role that cannot edit courses, a
  *                        switched-off account
+ *   Case 5  academy      the Bangalore side of a course: its INR price, its
+ *                        product in the Bangalore organization (listed from
+ *                        that organization), its LMS courses or the Dubai ones
  *
  * Run through scripts/course-mapping-e2e.sh. Refuses anything but a scratch
  * database on 127.0.0.1.
@@ -28,6 +31,7 @@ const API = `http://127.0.0.1:${process.env.E2E_API_PORT}/api/v1`;
 const INBOUND_SECRET = process.env.FINANCE_INTEGRATION_SECRET ?? "";
 const CLIENT_ID = process.env.FINANCE_CLIENT_ID ?? "";
 const ORG_ID = process.env.FINANCE_ORG_ID ?? "";
+const ORG_BLR = process.env.FINANCE_ORG_ID_BANGALORE ?? "";
 
 let failures = 0, checks = 0;
 function check(label: string, ok: boolean, detail = "") {
@@ -37,7 +41,10 @@ function check(label: string, ok: boolean, detail = "") {
 }
 const step = (s: string) => console.log(`\n\x1b[1m${s}\x1b[0m`);
 /** What this API answers with, as far as the checks read it. */
-interface CourseOut { _id: string; amount: number; financeItemId: string | null; lmsCourseSlug: string; lmsCourseSlugs: string[] }
+interface CourseOut {
+  _id: string; amount: number; financeItemId: string | null; lmsCourseSlug: string; lmsCourseSlugs: string[];
+  bangalore?: { price: number | null; financeItemId: string | null; lmsCourseSlugs: string[] };
+}
 interface Listed { id?: string; sku?: string; slug?: string }
 interface Envelope { success?: boolean; message?: string; data?: CourseOut & Listed[] & { accessToken?: string } }
 interface Res { status: number; body: Envelope }
@@ -74,18 +81,23 @@ let financeMode: "up" | "down" = "up";
 let badSignatures = 0;
 const ITEM_C1 = { id: "64b0000000000000000000a1", name: "COURSE 1 - MARKET BREAKOUT THEORY (WITH CREDIT)", sku: "DRAW-C1-WC", unitPriceMinor: 225_000, type: "service" };
 const ITEM_C2 = { id: "64b0000000000000000000a2", name: "MBT + DWT (with credit)", sku: "DRAW-C2-WC", unitPriceMinor: 550_000, type: "service" };
+// The Bangalore organization's catalogue — INR.
+const ITEM_B1 = { id: "64b0000000000000000000b1", name: "MBT (Bangalore)", sku: "BLR-MBT", unitPriceMinor: 4_500_000, type: "service" };
+const orgsAsked: string[] = [];
 const finance = serve(Number(process.env.E2E_FAKE_FINANCE_PORT), (url, req) => {
   if (req.method !== "GET" || url.pathname !== "/api/v1/integrations/items") return { status: 404, body: { error: { message: "Not found" } } };
   const header = (name: string) => String(req.headers[name] ?? "");
   const expected = crypto.createHmac("sha256", INBOUND_SECRET)
     .update(["GET", url.pathname + url.search, header("x-delta-timestamp"), header("x-delta-nonce"), crypto.createHash("sha256").update("").digest("hex")].join("\n"))
     .digest("hex");
-  if (header("x-delta-client") !== CLIENT_ID || header("x-delta-signature") !== expected || header("x-delta-org") !== ORG_ID) {
+  if (header("x-delta-client") !== CLIENT_ID || header("x-delta-signature") !== expected || ![ORG_ID, ORG_BLR].includes(header("x-delta-org"))) {
     badSignatures++;
     return { status: 401, body: { error: { code: "UNAUTHENTICATED", message: "Unauthorized" } } };
   }
+  orgsAsked.push(header("x-delta-org"));
   if (financeMode === "down") return { status: 503, body: { error: { message: "down" } } };
-  return { status: 200, body: { data: [ITEM_C1, ITEM_C2] } };
+  // Each organization its own catalogue.
+  return { status: 200, body: { data: header("x-delta-org") === ORG_BLR ? [ITEM_B1] : [ITEM_C1, ITEM_C2] } };
 });
 
 /* ── A stand-in LMS: its public course list. ── */
@@ -223,6 +235,52 @@ check("...and the viewer's attempt changed nothing", ((await Course.findById(c1.
 await User.updateOne({ email: "viewer@draw-e2e.test" }, { $set: { status: "inactive" } });
 const off = await call("POST", "/auth/login", { email: "viewer@draw-e2e.test", password: PASSWORD });
 check("a switched-off account cannot sign in to try", off.status >= 400 && !off.body?.data?.accessToken, show(off));
+
+// ── Case 5 ──────────────────────────────────────────────────────────────────
+step("Case 5 — academy: the Bangalore side of a course");
+orgsAsked.length = 0;
+r = await call("GET", "/courses/finance-items?academy=bangalore", undefined, admin);
+check("?academy=bangalore lists the Bangalore organization's products, asked of that organization", r.status === 200 && r.body?.data?.length === 1
+  && r.body.data[0]?.id === ITEM_B1.id && orgsAsked.join() === ORG_BLR, `${show(r)} asked ${orgsAsked.join()}`);
+orgsAsked.length = 0;
+r = await call("GET", "/courses/finance-items", undefined, admin);
+check("...and without it, Dubai's, as before", r.body?.data?.length === 2 && orgsAsked.join() === ORG_ID, `${show(r)} asked ${orgsAsked.join()}`);
+r = await call("PUT", `/courses/${c1._id}`, { financeItemId: ITEM_C1.id, lmsCourseSlugs: [MBT], bangalore: { price: 45000, financeItemId: ITEM_B1.id, lmsCourseSlugs: [] } }, admin);
+check("a course mapped for Bangalore: its INR price, its Bangalore product, no LMS courses of its own", r.status === 200
+  && r.body?.data?.bangalore?.price === 45000 && r.body.data.bangalore.financeItemId === ITEM_B1.id && r.body.data.bangalore.lmsCourseSlugs?.length === 0
+  && r.body.data.financeItemId === ITEM_C1.id, show(r));
+r = await call("PUT", `/courses/${c1._id}`, { bangalore: { lmsCourseSlugs: [AI, AI] } }, admin);
+check("...saying only its Bangalore LMS courses leaves its price and product, once each", r.body?.data?.bangalore?.price === 45000
+  && r.body.data.bangalore.financeItemId === ITEM_B1.id && JSON.stringify(r.body.data.bangalore.lmsCourseSlugs) === JSON.stringify([AI]), show(r));
+const blrPayload = async (courseIds: unknown[], totalFee: number) => {
+  const student = await new Student({
+    enrollmentNumber: `E2E-${crypto.randomUUID().slice(0, 8)}`, name: "Priya Bangalore", email: "priya.blr@draw-e2e.test",
+    phone: "+919800000001", leadId: new mongoose.Types.ObjectId(), courses: courseIds, totalFee, paidAmount: 1000, language: "English", academy: "bangalore",
+  }).save();
+  return (await new StudentService().buildHandoverPayload(String(student._id))) as ({ academy?: string; courses?: PayloadCourse[] }) | null;
+};
+payload = await blrPayload([c1._id], 45000);
+check("a Bangalore enrolment of it carries the Bangalore product, its Bangalore LMS course, the fee in paise", (payload as { academy?: string })?.academy === "bangalore"
+  && payload?.courses?.[0]?.itemId === ITEM_B1.id && JSON.stringify(payload?.courses?.[0]?.lmsCourseSlugs) === JSON.stringify([AI]) && payload?.courses?.[0]?.amountMinor === 4_500_000, JSON.stringify(payload));
+r = await call("PUT", `/courses/${c1._id}`, { bangalore: { lmsCourseSlugs: [] } }, admin);
+payload = await blrPayload([c1._id], 45000);
+check("...and with none of its own, the Dubai ones", JSON.stringify(payload?.courses?.[0]?.lmsCourseSlugs) === JSON.stringify([MBT]), JSON.stringify(payload?.courses));
+payload = await payloadFor([c1._id], 2250);
+check("...while a Dubai enrolment of it is billed as before", payload?.courses?.[0]?.itemId === ITEM_C1.id && (payload as { academy?: string })?.academy === "dubai", JSON.stringify(payload));
+r = await call("PUT", `/courses/${c1._id}`, { bangalore: { price: null, financeItemId: "" } }, admin);
+check("clearing the Bangalore price and product", r.status === 200 && r.body?.data?.bangalore?.price === null && r.body.data.bangalore.financeItemId === null, show(r));
+r = await call("PUT", `/courses/${c1._id}`, { bangalore: { price: 0 } }, admin);
+check("...a price of 0 is no price", r.status === 200 && r.body?.data?.bangalore?.price === null, show(r));
+r = await call("PUT", `/courses/${c1._id}`, { bangalore: { price: -5 } }, admin);
+check("a negative Bangalore price is refused", r.status === 400, show(r));
+r = await call("PUT", `/courses/${c1._id}`, { bangalore: { financeItemId: "not-an-id" } }, admin);
+check("...as is a Bangalore product id that is not one", r.status === 400, show(r));
+r = await call("PUT", `/courses/${c1._id}`, { bangalore: { currency: "INR" } }, admin);
+check("...and anything else on the Bangalore side", r.status === 400, show(r));
+r = await call("POST", "/courses", { name: "BANGALORE ONLY", amount: 1000, status: "active", bangalore: { price: 30000, lmsCourseSlugs: [DWT] } }, admin);
+check("a course created with its Bangalore side", r.status === 201 && r.body?.data?.bangalore?.price === 30000 && JSON.stringify(r.body.data.bangalore.lmsCourseSlugs) === JSON.stringify([DWT]), show(r));
+const denied = await call("PUT", `/courses/${c1._id}`, { bangalore: { price: 99 } }, viewer);
+check("a viewer cannot set a Bangalore price", denied.status === 401 || denied.status === 403, show(denied));
 
 finance.close();
 lms.close();

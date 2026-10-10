@@ -14,7 +14,10 @@
  *     holds the sale until fixed; shared logins earn nothing;
  *   - a voided invoice reverses the sale; the month is the sale's, in UAE time;
  *   - who sees what, the preview the closing dialog shows, and the API's
- *     refusals.
+ *     refusals;
+ *   - the academy (2026-10-10): a Bangalore sale's status is asked of the
+ *     Bangalore finance organization — following it and taking it back when
+ *     voided — and it earns by the same plan.
  *
  * Run by commission-check.sh. Scratch database only.
  */
@@ -38,6 +41,10 @@ const section = (s: string) => console.log(`\n${s}`);
 type Answer = { approval: string; status: string; invoiceNumber: string; lms?: unknown; commission?: unknown };
 const finance = new Map<string, Answer>();
 let financeDown = false;
+// Which organization knows each enrolment (Dubai's unless said), and every question with the organization asked.
+const DUBAI_ORG = "000000000000000000000001", BANGALORE_ORG = "000000000000000000000002";
+const orgOf = new Map<string, string>();
+const asks: { org: string; ids: string[] }[] = [];
 const fake = Bun.serve({
   port: 0,
   async fetch(req) {
@@ -45,7 +52,9 @@ const fake = Bun.serve({
     if (req.method === "POST" && url.pathname === "/api/v1/integrations/enrolments/status") {
       const body = (await req.json()) as { externalIds: string[] };
       if (financeDown) return new Response("down", { status: 503 });
-      const data = body.externalIds.filter((id) => finance.has(id)).map((id) => {
+      const org = req.headers.get("x-delta-org") ?? "";
+      asks.push({ org, ids: body.externalIds });
+      const data = body.externalIds.filter((id) => finance.has(id) && (orgOf.get(id) ?? DUBAI_ORG) === org).map((id) => {
         const a = finance.get(id)!;
         return {
           externalId: id, invoiceId: `inv-${id}`, invoiceNumber: a.invoiceNumber, status: a.status,
@@ -73,6 +82,7 @@ Object.assign(process.env, {
   FINANCE_CLIENT_ID: "commission-check",
   FINANCE_INTEGRATION_SECRET: "commission-check-secret",
   FINANCE_ORG_ID: "000000000000000000000001",
+  FINANCE_ORG_ID_BANGALORE: "000000000000000000000002",
 });
 
 const mongoose = (await import("mongoose")).default;
@@ -465,6 +475,36 @@ r = await call("GET", `/students/enrolments/${journey}`);
 check("…no token: 401", r.status === 401);
 r = await call("GET", "/commission/plan", "Gone");
 check("an inactive user is refused: 403", r.status === 403, `${r.status}`);
+
+section("The academy: a Bangalore sale is followed in the Bangalore organization");
+{
+  const _id = new Types.ObjectId();
+  await db.collection("students").insertOne({
+    _id, name: "Bangalore Student", enrollmentNumber: "EN-BLR", leadId: new Types.ObjectId(), courses: [c1._id],
+    team: teams["TEAM TITAN"], assignedTo: people.Theertha, enrollmentDate: new Date("2026-10-10T08:00:00Z"), createdAt: new Date(),
+    status: "active", academy: "bangalore", totalFee: 45000,
+  });
+  await db.collection("financehandovers").insertOne({
+    studentId: _id, status: "sent", payload: {}, approvalState: "pending", academy: "bangalore",
+    invoiceNumber: "INV-BLR", attempts: 0, nextAttemptAt: new Date(), flags: [],
+  });
+  const blr = String(_id);
+  orgOf.set(blr, BANGALORE_ORG);
+  complete(blr);
+  asks.length = 0;
+  await sweep();
+  const blrAsks = asks.filter((a) => a.ids.includes(blr));
+  check("its status is asked of the Bangalore organization only", blrAsks.length > 0 && blrAsks.every((a) => a.org === BANGALORE_ORG), JSON.stringify(asks));
+  check("…and the Dubai sales of the Dubai organization only", asks.filter((a) => a.org === DUBAI_ORG).every((a) => !a.ids.includes(blr)), JSON.stringify(asks));
+  s = await saleOf(blr);
+  check("…so it is counted, by the same plan: Sales Staff 230, SM 85", s?.state === "counted" && who(s, "sales") === "Theertha:230" && who(s, "sm") === "Abrar:85", JSON.stringify(s?.lines));
+  at(blr, { status: "void" });
+  asks.length = 0;
+  await reverseVoidedSales();
+  s = await saleOf(blr);
+  check("voided in the Bangalore organization: taken back, asked of that organization", s?.state === "reversed" && asks.some((a) => a.org === BANGALORE_ORG && a.ids.includes(blr))
+    && asks.every((a) => a.org === BANGALORE_ORG || !a.ids.includes(blr)), `${s?.state} ${JSON.stringify(asks)}`);
+}
 
 server.close();
 fake.stop(true);

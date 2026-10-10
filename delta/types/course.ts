@@ -14,6 +14,12 @@ export interface Course {
   lmsCourseSlug?: string;
   /** Every LMS course it opens, in order — two for a bundle. */
   lmsCourseSlugs?: string[];
+  /**
+   * The course as the Bangalore academy sells it: its INR price (none — it
+   * can't be closed for Bangalore), its item in the Bangalore finance
+   * organization, and its LMS courses (none — the Dubai ones above).
+   */
+  bangalore?: { price?: number | null; financeItemId?: string | null; lmsCourseSlugs?: string[] } | null;
   /** What selling it earns (AED per approved sale) — set on the Commission plan. */
   commission?: CoursePlan;
   createdAt: string;

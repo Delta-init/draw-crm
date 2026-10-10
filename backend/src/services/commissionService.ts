@@ -6,7 +6,7 @@ import { Student } from "../models/Student.js";
 import { Course } from "../models/Course.js";
 import { Team } from "../models/Team.js";
 import { User } from "../models/User.js";
-import { fetchEnrolmentStatuses } from "./financeClient.js";
+import { fetchEnrolmentStatusesFor } from "./financeClient.js";
 import { stepsOf, allDone, waitingOn } from "./enrolmentSteps.js";
 import { slabsFor } from "./salarySlabs.js";
 import { env } from "../config/env.js";
@@ -270,6 +270,8 @@ type StudentLite = {
   createdAt?: Date;
   financeInvoiceNumber?: string | null;
   totalFee?: number;
+  /** The academy it was closed for — whose finance organization knows its invoice. */
+  academy?: string;
 };
 
 /**
@@ -286,7 +288,7 @@ export async function trackSales(config: CommissionConfig, names: Names): Promis
   if (!handed.length) return 0;
   const handoverOf = new Map(handed.map((h) => [String(h.studentId), h]));
   const students = (await Student.find({ _id: { $in: handed.map((h) => h.studentId) }, enrollmentDate: { $gte: COUNT_FROM } })
-    .select("name enrollmentNumber courses team assignedTo enrollmentDate createdAt financeInvoiceNumber totalFee")
+    .select("name enrollmentNumber courses team assignedTo enrollmentDate createdAt financeInvoiceNumber totalFee academy")
     .lean()) as StudentLite[];
   const sales = await CommissionSale.find({ student: { $in: students.map((s) => s._id) } }).lean();
   const saleOf = new Map(sales.map((x) => [String(x.student), x]));
@@ -296,7 +298,8 @@ export async function trackSales(config: CommissionConfig, names: Names): Promis
   }).slice(0, 200);
   if (!open.length) return 0;
 
-  const statuses = await fetchEnrolmentStatuses(open.map((s) => String(s._id)));
+  // Each asked of the finance organization its academy closed it into.
+  const statuses = await fetchEnrolmentStatusesFor(open.map((s) => ({ id: String(s._id), academy: s.academy })));
   if (!statuses.length) return 0;                       // finance unreachable: ask again next time
   const statusOf = new Map(statuses.map((st) => [st.externalId, st]));
   let changed = 0;
@@ -454,7 +457,10 @@ export async function reverseVoidedSales(): Promise<number> {
 
   for (let i = 0; i < live.length; i += 200) {
     const ids = live.slice(i, i + 200).map((s) => String(s.student));
-    const statuses = await fetchEnrolmentStatuses(ids);
+    // Asked of the organization each was closed into: Dubai's and Bangalore's apart.
+    const academies = await Student.find({ _id: { $in: ids } }).select("academy").lean();
+    const academyOfId = new Map(academies.map((a) => [String(a._id), a.academy]));
+    const statuses = await fetchEnrolmentStatusesFor(ids.map((id) => ({ id, academy: academyOfId.get(id) })));
     for (const st of statuses) {
       if (!Types.ObjectId.isValid(st.externalId)) continue;
       if (st.status !== "void") {

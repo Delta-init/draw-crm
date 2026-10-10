@@ -1,5 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import type { IStudent } from "../types/index.js";
+import { ACADEMIES, PAYMENT_ORIGINAL_CURRENCIES } from "../types/index.js";
 
 const studentSchema = new Schema<IStudent>(
   {
@@ -100,6 +101,11 @@ const studentSchema = new Schema<IStudent>(
             },
             paidAt: { type: Date, required: true },
             collectedBefore: { type: Boolean },
+            // A Bangalore close's payment taken in AED: how much of it, and
+            // 1 AED = exchangeRate INR. `amount` is the INR figure.
+            currency: { type: String, enum: PAYMENT_ORIGINAL_CURRENCIES },
+            amountInCurrency: { type: Number, min: 0.01 },
+            exchangeRate: { type: Number, min: 0 },
           },
           { _id: false },
         ),
@@ -107,6 +113,14 @@ const studentSchema = new Schema<IStudent>(
       default: undefined,
     },
     notes: { type: String, trim: true, maxlength: 2000 },
+    /**
+     * Which academy it was closed for (the user, 2026-10-10): Dubai, in AED,
+     * or Bangalore, in INR — the fee, what was paid and the balance are in that
+     * academy's currency. Picked at the close and never changed after: every
+     * call to finance about it goes to the organization it was closed into.
+     * Unset on closes from before, which are Dubai.
+     */
+    academy: { type: String, enum: ACADEMIES },
     /**
      * Whether the client was given a bonus with this enrolment, and how much.
      *

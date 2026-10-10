@@ -13,11 +13,27 @@ const courseService = new CourseService();
  * unmap), and every LMS course it opens, in order ([] to unmap) — two for a
  * bundle. Slugs as the LMS writes them: lowercase letters, digits, hyphens.
  */
+const financeItemIdSchema = z.string().regex(/^[a-f\d]{24}$/i, "Not a finance item id").or(z.literal("")).nullable().optional();
+const lmsCourseSlugsSchema = z
+  .array(z.string().trim().regex(/^[a-z0-9][a-z0-9-]{0,199}$/, "Not an LMS course slug"))
+  .max(10, "At most 10 LMS courses")
+  .optional();
 const mappingSchema = {
-  financeItemId: z.string().regex(/^[a-f\d]{24}$/i, "Not a finance item id").or(z.literal("")).nullable().optional(),
-  lmsCourseSlugs: z
-    .array(z.string().trim().regex(/^[a-z0-9][a-z0-9-]{0,199}$/, "Not an LMS course slug"))
-    .max(10, "At most 10 LMS courses")
+  financeItemId: financeItemIdSchema,
+  lmsCourseSlugs: lmsCourseSlugsSchema,
+  /**
+   * The course as the Bangalore academy sells it (the user, 2026-10-10): its
+   * INR price (null or 0: none — it can't be closed for Bangalore), its item in
+   * the Bangalore finance organization, and its LMS courses ([]: the Dubai
+   * ones). Only what is sent changes.
+   */
+  bangalore: z
+    .object({
+      price: z.number().min(0, "Price cannot be negative").nullable().optional(),
+      financeItemId: financeItemIdSchema,
+      lmsCourseSlugs: lmsCourseSlugsSchema,
+    })
+    .strict()
     .optional(),
 };
 
@@ -139,17 +155,42 @@ export const deleteCourse = async (
  * an error, when this server is not connected to finance.
  */
 export const getFinanceItems = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { listFinanceItems, financeConfigured, academyConfigured } = await import("../services/financeClient.js");
+    if (!financeConfigured()) {
+      sendSuccess(res, "Finance integration is not configured", []);
+      return;
+    }
+    // ?academy=bangalore: the Bangalore finance organization's catalogue, for the Map screen's Bangalore part.
+    const academy = req.query.academy === "bangalore" ? "bangalore" : "dubai";
+    if (!academyConfigured(academy)) {
+      sendSuccess(res, "The Bangalore finance organization is not configured", []);
+      return;
+    }
+    sendSuccess(res, "Finance catalogue retrieved", await listFinanceItems(academy));
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * The academies a close may be for here — ["dubai"], or ["dubai", "bangalore"]
+ * once the Bangalore finance organization is set. The close dialog and the Map
+ * screen offer Bangalore only when it is listed; a server from before answers
+ * this with an error, which they read as Dubai only.
+ */
+export const getAcademies = async (
   _req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const { listFinanceItems, financeConfigured } = await import("../services/financeClient.js");
-    if (!financeConfigured()) {
-      sendSuccess(res, "Finance integration is not configured", []);
-      return;
-    }
-    sendSuccess(res, "Finance catalogue retrieved", await listFinanceItems());
+    const { academiesOffered } = await import("../services/financeClient.js");
+    sendSuccess(res, "Academies retrieved", { academies: academiesOffered() });
   } catch (err) {
     next(err);
   }

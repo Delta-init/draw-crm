@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { fmtFull } from "@/lib/currency";
+import { fmtFee, academyOf } from "@/lib/academy";
 import { useStudents, useDeleteStudent } from "@/hooks/useStudents";
 import { useAllCourses } from "@/hooks/useCourses";
 import { useTeams } from "@/hooks/useTeams";
@@ -329,17 +329,17 @@ function StudentsPageContent() {
       );
       case "totalFee": return (
         <td key="totalFee" className="px-4 py-3.5 hidden xl:table-cell text-right">
-          <span className="text-sm tabular-nums text-muted-foreground">{fmtFull(s.totalFee)}</span>
+          <span className="text-sm tabular-nums text-muted-foreground">{fmtFee(s.totalFee, academyOf(s.academy))}</span>
         </td>
       );
       case "paidAmount": return (
         <td key="paidAmount" className="px-4 py-3.5 hidden lg:table-cell text-right">
-          <span className="text-sm tabular-nums text-green-400 font-medium">{fmtFull(s.paidAmount)}</span>
+          <span className="text-sm tabular-nums text-green-400 font-medium">{fmtFee(s.paidAmount, academyOf(s.academy))}</span>
         </td>
       );
       case "pendingAmount": return (
         <td key="pendingAmount" className="px-4 py-3.5 hidden lg:table-cell text-right">
-          <span className={cn("text-sm tabular-nums font-medium", s.pendingAmount > 0 ? "text-amber-400" : "text-muted-foreground")}>{fmtFull(s.pendingAmount)}</span>
+          <span className={cn("text-sm tabular-nums font-medium", s.pendingAmount > 0 ? "text-amber-400" : "text-muted-foreground")}>{fmtFee(s.pendingAmount, academyOf(s.academy))}</span>
         </td>
       );
       case "initialResponse": return (

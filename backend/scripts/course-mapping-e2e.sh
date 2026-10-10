@@ -67,6 +67,8 @@ export FINANCE_API_URL="http://127.0.0.1:$FINANCE_PORT"
 export FINANCE_CLIENT_ID="draw-crm-e2e"
 export FINANCE_INTEGRATION_SECRET="draw-course-mapping-e2e-inbound-secret-0123"
 export FINANCE_ORG_ID="64b0000000000000000000d7"
+# The Bangalore academy's finance organization: its own catalogue (the user, 2026-10-10).
+export FINANCE_ORG_ID_BANGALORE="64b0000000000000000000e7"
 export LMS_API_URL="http://127.0.0.1:$LMS_PORT"
 export LMS_SERVICE_SECRET="" LMS_REMOTE_ORG_ID="" ROOT_ERP_SECRET=""
 export TELEGRAM_BOT_TOKEN="" TELEGRAM_CHAT_ID="" GEMINI_API_KEY=""

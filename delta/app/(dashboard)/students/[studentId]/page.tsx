@@ -16,7 +16,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { fmtFull, fmtUSD } from "@/lib/currency";
+import { fmtUSD } from "@/lib/currency";
+import { fmtFee, academyOf } from "@/lib/academy";
+import { AcademyBadge } from "@/components/students/AcademyBadge";
 import { useStudent, useUpdateStudent } from "@/hooks/useStudents";
 import { useEnrolmentCorrection, uaeTime } from "@/hooks/useEnrolments";
 import { useAuthStore } from "@/lib/store/authStore";
@@ -136,6 +138,8 @@ export default function StudentDetailPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${sCfg.color}`}>{sCfg.label}</span>
                     <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${fCfg.color}`}>{fCfg.label}</span>
+                    {/* Which academy it was closed for — its money is in that academy's currency. */}
+                    <AcademyBadge academy={student.academy} className="px-3 py-1 text-xs" />
                     {leadObj && (
                       <Link href={`/leads/${leadObj._id}`} className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-border transition-colors">
                         <ExternalLink className="h-3 w-3" /> View Lead
@@ -199,9 +203,9 @@ export default function StudentDetailPage() {
               <CardContent className="space-y-3">
                 <div className="grid grid-cols-3 gap-2 text-center">
                   {[
-                    { label: "Total",   value: fmtFull(student.totalFee),    cls: "text-foreground" },
-                    { label: "Paid",    value: fmtFull(student.paidAmount),   cls: "text-green-400" },
-                    { label: "Balance", value: fmtFull(student.pendingAmount),cls: student.pendingAmount > 0 ? "text-amber-400" : "text-muted-foreground" },
+                    { label: "Total",   value: fmtFee(student.totalFee, academyOf(student.academy)),    cls: "text-foreground" },
+                    { label: "Paid",    value: fmtFee(student.paidAmount, academyOf(student.academy)),   cls: "text-green-400" },
+                    { label: "Balance", value: fmtFee(student.pendingAmount, academyOf(student.academy)),cls: student.pendingAmount > 0 ? "text-amber-400" : "text-muted-foreground" },
                   ].map(({ label, value, cls }) => (
                     <div key={label} className="rounded-lg bg-muted/30 p-2 border border-border/30">
                       <p className={cn("text-sm font-bold tabular-nums", cls)}>{value}</p>

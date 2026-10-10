@@ -8,7 +8,11 @@ export interface CourseMapping {
   financeItemId?: string | null;
   /** Every LMS course it opens, in order; [] unmaps it. */
   lmsCourseSlugs?: string[];
+  /** As the Bangalore academy sells it: INR price (null/0: none), finance item there, LMS courses ([]: the Dubai ones). */
+  bangalore?: { price?: number | null; financeItemId?: string | null; lmsCourseSlugs?: string[] };
 }
+
+const uniqueSlugs = (list: string[]) => [...new Set(list.map((s) => s.trim()).filter(Boolean))];
 
 /**
  * The fields to store for a mapping, from what the caller sent: nothing about
@@ -19,10 +23,15 @@ function mappingFields(mapping: CourseMapping): Record<string, unknown> {
   const fields: Record<string, unknown> = {};
   if (mapping.financeItemId !== undefined) fields.financeItemId = mapping.financeItemId || null;
   if (mapping.lmsCourseSlugs !== undefined) {
-    const slugs = [...new Set(mapping.lmsCourseSlugs.map((s) => s.trim()).filter(Boolean))];
+    const slugs = uniqueSlugs(mapping.lmsCourseSlugs);
     fields.lmsCourseSlugs = slugs;
     fields.lmsCourseSlug = slugs[0] ?? "";
   }
+  // The Bangalore side, field by field — dotted, so what it does not mention stays.
+  const b = mapping.bangalore;
+  if (b?.price !== undefined) fields["bangalore.price"] = b.price && b.price > 0 ? b.price : null;
+  if (b?.financeItemId !== undefined) fields["bangalore.financeItemId"] = b.financeItemId || null;
+  if (b?.lmsCourseSlugs !== undefined) fields["bangalore.lmsCourseSlugs"] = uniqueSlugs(b.lmsCourseSlugs);
   return fields;
 }
 
@@ -36,8 +45,10 @@ export interface CourseFilters {
 export class CourseService {
   // ── Create ──────────────────────────────────────────────────────────────────
   async createCourse(data: { name: string; description?: string; amount: number; bonusAmount?: number; status?: string } & CourseMapping) {
-    const { financeItemId, lmsCourseSlugs, ...rest } = data;
-    const course = await Course.create({ ...rest, ...mappingFields({ financeItemId, lmsCourseSlugs }) });
+    const { financeItemId, lmsCourseSlugs, bangalore, ...rest } = data;
+    const course = new Course(rest);
+    course.set(mappingFields({ financeItemId, lmsCourseSlugs, bangalore }));
+    await course.save();
     return course;
   }
 
@@ -87,8 +98,9 @@ export class CourseService {
     if (!course)
       throw Object.assign(new Error("Course not found"), { statusCode: 404 });
 
-    const { financeItemId, lmsCourseSlugs, ...rest } = data;
-    Object.assign(course, rest, mappingFields({ financeItemId, lmsCourseSlugs }));
+    const { financeItemId, lmsCourseSlugs, bangalore, ...rest } = data;
+    Object.assign(course, rest);
+    course.set(mappingFields({ financeItemId, lmsCourseSlugs, bangalore }));
     await course.save();
     return course;
   }

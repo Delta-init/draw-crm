@@ -15,7 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCourses } from "@/hooks/useCourses";
+import { useBangaloreOffered, useCourses } from "@/hooks/useCourses";
 import { CourseDialog } from "@/components/courses/CourseDialog";
 import { DeleteCourseDialog } from "@/components/courses/DeleteCourseDialog";
 import { MapCourseDialog } from "@/components/courses/MapCourseDialog";
@@ -25,6 +25,7 @@ import { useCurrencyStore } from "@/lib/store/currencyStore";
 import Link from "next/link";
 import { TL_PAID, usd } from "@/lib/commission";
 import { fmtCurrency, fmtUSD } from "@/lib/currency";
+import { bangalorePriceOf, fmtINR } from "@/lib/academy";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,8 @@ interface CourseCardProps {
 
 function CourseCard({ course, onEdit, onDelete, onMap, index }: CourseCardProps) {
   const lms = lmsCoursesOf(course);
+  // The Bangalore price shows only where the server takes Bangalore closes.
+  const { data: bangaloreOffered = false } = useBangaloreOffered();
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -124,6 +127,10 @@ function CourseCard({ course, onEdit, onDelete, onMap, index }: CourseCardProps)
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${lms.length ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
               {lms.length ? `LMS: ${lms.length} course${lms.length === 1 ? "" : "s"}` : "LMS not mapped"}
             </span>
+            {/* Sold for the Bangalore academy: its INR price — without one it can't be closed there. */}
+            {bangaloreOffered && <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${bangalorePriceOf(course) !== null ? "bg-orange-500/10 text-orange-600 dark:text-orange-400" : "bg-muted text-muted-foreground"}`}>
+              {bangalorePriceOf(course) !== null ? `Bangalore ${fmtINR(bangalorePriceOf(course)!)}` : "No Bangalore price"}
+            </span>}
           </button>
 
           {/* What selling it pays, from the Commission plan — where it is

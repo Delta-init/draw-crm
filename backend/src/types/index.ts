@@ -187,10 +187,25 @@ export interface ICourse extends Document {
   lmsCourseSlug?: string;
   /** Every LMS course it opens, in order (a bundle opens more than one). */
   lmsCourseSlugs?: string[];
+  /** Selling it for the Bangalore academy: its INR price, finance item there, and LMS courses (none = the Dubai ones). */
+  bangalore?: ICourseBangalore;
   /** What selling it earns (AED per approved sale) — set on the Commission plan. */
   commission?: ICourseCommission;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/**
+ * A course as the Bangalore academy sells it. No price means it can't be
+ * closed for Bangalore. No LMS courses of its own means the Dubai ones — the
+ * Forex courses are shared between the academies.
+ */
+export interface ICourseBangalore {
+  /** In INR; null (or 0) when it has none. */
+  price?: number | null;
+  /** The item in the Bangalore finance organization's catalogue. */
+  financeItemId?: string | null;
+  lmsCourseSlugs?: string[];
 }
 
 // ─── Commission ───────────────────────────────────────────────────────────────
@@ -336,6 +351,27 @@ export const PAYMENT_METHOD_LABELS: Record<EnrolmentPaymentMethod, string> = {
   tamara: "Tamara",
   billexpro: "BillExPro",
 };
+
+/**
+ * Which academy a close is for (the user, 2026-10-10): Dubai — billed in AED
+ * into the finance organization FINANCE_ORG_ID names, as every close was before
+ * — or Bangalore, billed in INR into FINANCE_ORG_ID_BANGALORE's. Picked at the
+ * close and fixed from then on: every later call to finance for that close —
+ * resend, correction, status — goes to the organization it was closed into.
+ */
+export const ACADEMIES = ["dubai", "bangalore"] as const;
+export type Academy = (typeof ACADEMIES)[number];
+export const ACADEMY_LABELS: Record<Academy, string> = { dubai: "Dubai", bangalore: "Bangalore" };
+/** What a stored value means: Bangalore only when it says so — absent (every close from before) is Dubai. */
+export const academyOf = (v: unknown): Academy => (v === "bangalore" ? "bangalore" : "dubai");
+
+/**
+ * A Bangalore close's money is INR, and cash is sometimes taken in AED: such a
+ * payment carries what was handed over, in AED, and the rate — 1 AED = so many
+ * INR. Its `amount` is the INR figure, the one that counts.
+ */
+export const PAYMENT_ORIGINAL_CURRENCIES = ["AED"] as const;
+export type PaymentOriginalCurrency = (typeof PAYMENT_ORIGINAL_CURRENCIES)[number];
 
 /** A file kept in object storage, as the enrolment records it. */
 export interface StoredFile {
@@ -487,6 +523,10 @@ export interface IStudentPayment {
   paidAt: Date;
   /** The money already on the lead before the close, as one payment. */
   collectedBefore?: boolean;
+  /** A Bangalore close's payment taken in AED: "AED", how much of it, and 1 AED = `exchangeRate` INR. Absent otherwise. */
+  currency?: PaymentOriginalCurrency;
+  amountInCurrency?: number;
+  exchangeRate?: number;
 }
 
 export interface IStudent extends Document {
@@ -526,6 +566,8 @@ export interface IStudent extends Document {
    */
   payments?: IStudentPayment[];
   notes?: string;
+  /** Which academy it was closed for — fixed at the close; unset on closes from before, which are Dubai. */
+  academy?: Academy;
   /** Whether a bonus was given at the close — unset on enrolments from before it was asked. */
   hasBonus?: boolean | null;
   /** The bonus, in the same currency as the fee; 0 when none. Never part of the balance. */

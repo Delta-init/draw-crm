@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   GraduationCap, X, User2, Phone, Mail, BookOpen,
-  Calendar, DollarSign, StickyNote, CheckCircle2, Gift,
+  Calendar, DollarSign, StickyNote, CheckCircle2, Gift, MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,16 +12,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { fmtFull, fmtUSD } from "@/lib/currency";
+import { fmtUSD } from "@/lib/currency";
 import {
   ENROLMENT_LANGUAGES, PAYMENT_METHOD_LABELS,
   type EnrolmentLanguage, type EnrolmentPaymentMethod,
 } from "@/types/student";
 import { useCreateStudent, useUpdateStudent } from "@/hooks/useStudents";
-import { useAllCourses } from "@/hooks/useCourses";
+import { useAllCourses, useBangaloreOffered } from "@/hooks/useCourses";
 import { useAddPayment } from "@/hooks/usePayments";
 import { CommissionPreview } from "@/components/commission/CommissionPreview";
-import { PaymentRowsEditor, missingInRows, newPaymentRow, rowAmount, type PaymentRow } from "@/components/students/PaymentRowsEditor";
+import { PaymentRowsEditor, missingInRows, newPaymentRow, rowAedFields, rowAmount, rowsForAcademy, type PaymentRow } from "@/components/students/PaymentRowsEditor";
+import { AcademyBadge } from "@/components/students/AcademyBadge";
+import { ACADEMIES, ACADEMY_LABELS, academyOf, bangalorePriceOf, fmtFee, priceFor, type Academy } from "@/lib/academy";
 import type { Lead } from "@/types/lead";
 import type { Course } from "@/types/course";
 import type { FeeStatus, Student, StoredReceipt } from "@/types/student";
@@ -52,7 +54,8 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/;
 const courseObjects = (list?: (Course | string)[] | null): Course[] =>
   (list ?? []).filter((c): c is Course => typeof c === "object" && c !== null);
 
-const sumOf = (list: Course[]) => list.reduce((s, c) => s + (c.amount ?? 0), 0);
+/** The courses' list prices added up, as the academy sells them. */
+const sumOf = (list: Course[], academy: Academy = "dubai") => list.reduce((s, c) => s + priceFor(c, academy), 0);
 /** The bonus the courses come with, added up — what a new close starts from. */
 const bonusOf = (list: Course[]) => list.reduce((s, c) => s + (c.bonusAmount ?? 0), 0);
 
@@ -73,7 +76,21 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
   // Only needed when nothing is named, which is the only time the list shows.
   const { data: courses = [], isLoading: coursesLoading } = useAllCourses();
   const [courseIds, setCourseIds] = useState<string[]>([]);
-  const pickedCourses = knownCourses.length ? knownCourses : courses.filter((c) => courseIds.includes(c._id));
+  // The course as the list has it when it can — with its Bangalore price — else as the lead named it.
+  const pickedCourses = (knownCourses.length ? knownCourses : courses.filter((c) => courseIds.includes(c._id)))
+    .map((c) => courses.find((x) => x._id === c._id) ?? c);
+
+  /*
+   * Which academy (the user, 2026-10-10): Dubai, in AED as before, or
+   * Bangalore, in INR — the fee starts from the course's Bangalore price, the
+   * payments are in rupees (cash taken in AED at a rate), and it goes to the
+   * Bangalore finance organization. Chosen at the close, fixed after it.
+   */
+  const [academy, setAcademy] = useState<Academy>(editing ? academyOf(existingStudent?.academy) : "dubai");
+  const bangalore = academy === "bangalore";
+  // Offered only when the server says it takes Bangalore closes; otherwise no choice — Dubai, as before.
+  const { data: bangaloreOffered = false } = useBangaloreOffered(!editing);
+  const fee = (n: number) => fmtFee(n, academy);
 
   /*
    * The fee, and it can be argued with.
@@ -89,12 +106,25 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
   );
   const totalFee = Number(feeInput) || 0;
 
+  /*
+   * Switching academy switches the money: the fee to the course's price in
+   * that academy (Bangalore's in INR — the price agreed on the lead is AED),
+   * and the payments to that currency.
+   */
+  function pickAcademy(next: Academy) {
+    if (next === academy) return;
+    setAcademy(next);
+    const listed = sumOf(pickedCourses, next);
+    setFeeInput(next === "bangalore" ? (listed > 0 ? String(listed) : "") : String(lead.sellingAmount || listed || ""));
+    setPaymentRows((rows) => rowsForAcademy(rows, next));
+  }
+
   function pickCourse(id: string) {
     const next = id ? [id] : [];
     setCourseIds(next);
     // The fee follows what was just chosen, rather than leaving the old
     // number under another course.
-    const listed = sumOf(courses.filter((c) => next.includes(c._id)));
+    const listed = sumOf(courses.filter((c) => next.includes(c._id)), academy);
     if (listed > 0) setFeeInput(String(listed));
     // So does the bonus they come with, until the seller has answered it.
     if (!editing && !bonusTouched) {
@@ -104,7 +134,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
     }
   }
 
-  /** What was collected before today, from the payments already on the lead. */
+  /** What was collected before today, from the payments already on the lead (AED: the lead's own list is). */
   const alreadyPaid = (lead.payments ?? []).reduce((s, p) => s + p.amount, 0);
   /*
    * A new close takes each payment as a row — method, amount and receipt, a
@@ -120,7 +150,13 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
   const paidNow = editing
     ? Math.max(0, Number(paidNowInput) || 0)
     : paymentRows.filter((r) => !r.collectedBefore).reduce((s, r) => s + rowAmount(r), 0);
-  const paidAmount = editing ? alreadyPaid + paidNow : paymentRows.reduce((s, r) => s + rowAmount(r), 0);
+  /*
+   * A Bangalore enrolment's money is INR and never on the lead's (AED) list,
+   * so editing one adds to what it already says was paid, and records nothing
+   * on the lead.
+   */
+  const paidBefore = editing && bangalore ? existingStudent?.paidAmount ?? 0 : alreadyPaid;
+  const paidAmount = editing ? paidBefore + paidNow : paymentRows.reduce((s, r) => s + rowAmount(r), 0);
   const pending = Math.max(0, totalFee - paidAmount);
   /** Collected more than the fee: taken (the owner, 2026-10-06) and said so in amber, not refused. */
   const overFee = Math.round(paidAmount * 100) > Math.round(totalFee * 100);
@@ -149,6 +185,8 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
   // An enrolment with no course bills nothing — it was saved and then never
   // reached finance at all. Where the lead never named one it is chosen here.
   const courseMissing = pickedCourses.length === 0;
+  // A Bangalore close needs the course's Bangalore price: the server refuses one without.
+  const unpriced = bangalore && !coursesLoading ? pickedCourses.filter((c) => bangalorePriceOf(c) === null) : [];
 
   /*
    * The client's email, asked for only when the lead has none that works.
@@ -209,6 +247,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
     ? [courseMissing && "a course", bonusAmountMissing && "the bonus amount"].filter(Boolean) as string[]
     : [
         courseMissing && "a course",
+        unpriced.length > 0 && `a Bangalore price for ${unpriced.map((c) => c.name).join(", ")}`,
         emailMissing && "the client's email",
         !language && "language",
         ...missingInRows(paymentRows),
@@ -238,7 +277,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
      * failed can be finished by hand.
      */
     const soldAs = pickedCourses.length ? ` — ${pickedCourses.map((c) => c.name).join(", ")}` : "";
-    if (editing && paidNow > 0) {
+    if (editing && paidNow > 0 && !bangalore) {
       await addPayment.mutateAsync({
         amount: paidNow,
         note: `Collected at enrolment${soldAs}`,
@@ -248,8 +287,9 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
       setPaidNowInput("");
     }
     // Each payment taken now, one by one, saying how it was paid. One that an
-    // attempt already recorded before failing is not recorded again.
-    if (!editing) {
+    // attempt already recorded before failing is not recorded again. Not for a
+    // Bangalore close: its payments are INR, the lead's list is AED.
+    if (!editing && !bangalore) {
       for (const row of paymentRows) {
         if (row.collectedBefore || row.addedToLead) continue;
         await addPayment.mutateAsync({
@@ -292,7 +332,9 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
         receipt: r.receipt as StoredReceipt,
         paidAt: new Date(enrollmentDate).toISOString(),
         ...(r.collectedBefore ? { collectedBefore: true } : {}),
+        ...(bangalore ? rowAedFields(r) : {}),
       })),
+      academy,
       leadId: lead._id,
       name:   lead.name,
       phone:  lead.phone ?? undefined,
@@ -328,7 +370,10 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
     : null;
 
   const courseLine = knownCourses.length
-    ? knownCourses.map((c) => `${c.name}${c.amount ? ` · ${fmtFull(c.amount)}` : ""}`).join(", ")
+    ? pickedCourses.map((c) => {
+        const listed = priceFor(c, academy);
+        return `${c.name}${listed ? ` · ${fee(listed)}` : bangalore ? " · no Bangalore price" : ""}`;
+      }).join(", ")
     : null;
 
   // Whose sale it is, for the commission it earns: the enrolment's own team
@@ -357,9 +402,13 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                   <DialogHeader>
                     <DialogTitle className="text-base font-bold">{editing ? "Enrolment" : "Create Student Profile"}</DialogTitle>
                   </DialogHeader>
-                  <p className="text-xs text-muted-foreground">
-                    {lead.name} · {editing ? `Enrolled ${existingStudent?.enrollmentNumber ?? ""}`.trim() : "Closing the lead"}
-                    {progress ? ` · ${progress}` : ""}
+                  <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                    <span>
+                      {lead.name} · {editing ? `Enrolled ${existingStudent?.enrollmentNumber ?? ""}`.trim() : "Closing the lead"}
+                      {progress ? ` · ${progress}` : ""}
+                    </span>
+                    {/* Fixed at the close: shown, not chosen again. */}
+                    {editing && <AcademyBadge academy={academy} />}
                   </p>
                 </div>
               </div>
@@ -449,21 +498,60 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                 </motion.div>
               )}
 
+              {/* Which academy — chosen here, at the close, and fixed after it. Only
+                  where the server takes Bangalore closes; elsewhere every close is Dubai. */}
+              {!editing && (bangaloreOffered || bangalore) && (
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.11 }} className="space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                    <MapPin className="h-3 w-3" /> Academy *
+                  </p>
+                  <div className="flex items-center gap-2" role="radiogroup" aria-label="Academy">
+                    {ACADEMIES.map((a) => (
+                      <button
+                        key={a}
+                        type="button"
+                        role="radio"
+                        aria-checked={academy === a}
+                        onClick={() => pickAcademy(a)}
+                        className={cn(
+                          "h-8 rounded-md border px-3 text-xs font-medium transition-colors",
+                          academy === a
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border/60 text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                        )}
+                      >
+                        {ACADEMY_LABELS[a]}{a === "bangalore" ? " · ₹" : ""}
+                      </button>
+                    ))}
+                  </div>
+                  {bangalore && (
+                    <p className="text-[10px] text-muted-foreground">
+                      In rupees: the fee is the course&apos;s Bangalore price, payments in ₹ (cash taken in AED at its rate), billed by the Bangalore finance team.
+                    </p>
+                  )}
+                  {unpriced.length > 0 && (
+                    <p className="text-[10px] text-amber-400">
+                      {unpriced.map((c) => c.name).join(", ")} {unpriced.length > 1 ? "have" : "has"} no Bangalore price yet — set it under Courses → Map, or close it as Dubai.
+                    </p>
+                  )}
+                </motion.div>
+              )}
+
               {/* Fee section */}
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Fee Summary</p>
                 <div className="rounded-xl border border-border/50 bg-muted/20 p-3 space-y-2">
                   <div className="grid grid-cols-3 gap-2 text-center">
                     <div className="rounded-lg bg-card p-2 border border-border/30">
-                      <p className="text-sm font-bold text-foreground">{fmtFull(totalFee)}</p>
+                      <p className="text-sm font-bold text-foreground">{fee(totalFee)}</p>
                       <p className="text-[10px] text-muted-foreground">Total Fee</p>
                     </div>
                     <div className="rounded-lg bg-card p-2 border border-border/30">
-                      <p className="text-sm font-bold text-green-400">{fmtFull(paidAmount)}</p>
+                      <p className="text-sm font-bold text-green-400">{fee(paidAmount)}</p>
                       <p className="text-[10px] text-muted-foreground">Paid</p>
                     </div>
                     <div className="rounded-lg bg-card p-2 border border-border/30">
-                      <p className={cn("text-sm font-bold", pending > 0 ? "text-amber-400" : "text-green-400")}>{fmtFull(pending)}</p>
+                      <p className={cn("text-sm font-bold", pending > 0 ? "text-amber-400" : "text-green-400")}>{fee(pending)}</p>
                       <p className="text-[10px] text-muted-foreground">Balance</p>
                     </div>
                   </div>
@@ -472,7 +560,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                   </p>
                   <div className={cn("grid gap-2", editing ? "grid-cols-2" : "grid-cols-1")}>
                     <div className="space-y-1">
-                      <p className="text-[11px] text-muted-foreground">Total fee</p>
+                      <p className="text-[11px] text-muted-foreground">Total fee{bangalore ? " (₹)" : ""}</p>
                       <Input
                         type="number" min="0" step="0.01" value={feeInput}
                         onChange={(e) => setFeeInput(e.target.value)}
@@ -483,7 +571,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                     {editing && (
                       <div className="space-y-1">
                         <p className="text-[11px] text-muted-foreground">
-                          Collected now{alreadyPaid > 0 ? ` · ${fmtFull(alreadyPaid)} already` : ""}
+                          Collected now{paidBefore > 0 ? ` · ${fee(paidBefore)} already` : ""}
                         </p>
                         <Input
                           type="number" min="0" step="0.01" value={paidNowInput}
@@ -498,12 +586,14 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                       can disagree. */}
                   {paidNow > 0 && (
                     <p className="text-[10px] text-muted-foreground">
-                      {fmtFull(paidNow)} will be added to this lead&apos;s payments.
+                      {bangalore
+                        ? `${fee(paidNow)} stays on the enrolment — in rupees, so not added to the lead's payments (they're in AED).`
+                        : `${fee(paidNow)} will be added to this lead's payments.`}
                     </p>
                   )}
                   {overFee && (
                     <p className="text-[11px] font-medium text-amber-400">
-                      Collected ({fmtFull(paidAmount)}) is {fmtFull(overBy)} more than the fee ({fmtFull(totalFee)}) — fine if it was taken: it goes to finance as collected.
+                      Collected ({fee(paidAmount)}) is {fee(overBy)} more than the fee ({fee(totalFee)}) — fine if it was taken: it goes to finance as collected.
                     </p>
                   )}
                   {totalFee > 0 && (
@@ -600,7 +690,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                       <SelectContent>
                         {(severalOnLead ? leadCourses : courses).map((c) => (
                           <SelectItem key={c._id} value={c._id} className="text-xs">
-                            {c.name}{c.amount ? ` · ${fmtFull(c.amount)}` : ""}
+                            {c.name}{priceFor(c, academy) ? ` · ${fee(priceFor(c, academy))}` : bangalore ? " · no Bangalore price" : ""}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -641,7 +731,12 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                     <p className="text-xs text-muted-foreground">
                       Payments * <span className="text-[10px]">— one for each way the client paid, each with its receipt</span>
                     </p>
-                    <PaymentRowsEditor leadId={lead._id} rows={paymentRows} onChange={setPaymentRows} />
+                    <PaymentRowsEditor leadId={lead._id} rows={paymentRows} onChange={setPaymentRows} academy={academy} />
+                    {bangalore && (
+                      <p className="text-[10px] text-muted-foreground">
+                        In ₹. These stay on the enrolment and go to finance — they aren&apos;t added to the lead&apos;s payments, which are in AED.
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -710,7 +805,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                 {missing.length
                   ? `Still needed: ${missing.join(", ")}.`
                   : overFee
-                    ? `Collected is ${fmtFull(overBy)} more than the fee — it goes to finance as collected.`
+                    ? `Collected is ${fee(overBy)} more than the fee — it goes to finance as collected.`
                     : editing
                       ? "Changes apply to this enrolment."
                       : "Saving closes the lead and sends it to finance for approval."}

@@ -3,8 +3,8 @@ import { z } from "zod";
 import { Student } from "../models/Student.js";
 import { Lead } from "../models/Lead.js";
 import { Course } from "../models/Course.js";
-import type { IRole, IStudent, IStudentPayment, EnrolmentLanguage, EnrolmentPaymentMethod } from "../types/index.js";
-import { ENROLMENT_LANGUAGES, ENROLMENT_PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from "../types/index.js";
+import type { Academy, IRole, IStudent, IStudentPayment, EnrolmentLanguage, EnrolmentPaymentMethod } from "../types/index.js";
+import { ACADEMIES, ACADEMY_LABELS, ENROLMENT_LANGUAGES, ENROLMENT_PAYMENT_METHODS, PAYMENT_METHOD_LABELS, academyOf } from "../types/index.js";
 
 function createError(msg: string, status: number) {
   return Object.assign(new Error(msg), { statusCode: status });
@@ -15,7 +15,60 @@ const minor = (n: number) => Math.round(n * 100);
 const money = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 type ReceiptInput = { name?: string; url?: string; key?: string; size?: number; mimeType?: string } | null | undefined;
-type PaymentInput = { method?: string; amount?: number | string; receipt?: ReceiptInput; paidAt?: string; collectedBefore?: boolean } | null;
+type PaymentInput = {
+  method?: string;
+  amount?: number | string;
+  receipt?: ReceiptInput;
+  paidAt?: string;
+  collectedBefore?: boolean;
+  /** A Bangalore close's payment taken in AED: "AED", the amount in AED, and 1 AED = exchangeRate INR. */
+  currency?: string;
+  amountInCurrency?: number | string;
+  exchangeRate?: number | string;
+} | null;
+
+/** The currency a close's money is in: INR for Bangalore, AED for Dubai. */
+const currencyOf = (academy: Academy) => (academy === "bangalore" ? "INR" : "AED");
+
+/**
+ * A Bangalore close's payment taken in AED (the user, 2026-10-10: cash is
+ * sometimes taken in AED): the amount in AED and the rate — 1 AED = so many
+ * INR — checked against the INR amount the close converted it to, within half
+ * a percent for rounding. A figure typed in the wrong currency is refused
+ * rather than billed. Nothing for a payment in the close's own currency.
+ *
+ * A Dubai close is in AED throughout, so it takes nothing else; a Bangalore
+ * close takes INR, or AED with its rate.
+ */
+function foreignPart(raw: PaymentInput, amount: number, n: string, academy: Academy): Pick<IStudentPayment, "currency" | "amountInCurrency" | "exchangeRate"> {
+  const currency = typeof raw?.currency === "string" ? raw.currency.trim().toUpperCase() : "";
+  const own = currencyOf(academy);
+  if (!currency || currency === own) return {};
+  if (academy !== "bangalore" || currency !== "AED") {
+    throw createError(
+      academy === "bangalore"
+        ? `${n} is in ${currency} — a Bangalore close takes INR, or AED with its rate.`
+        : `${n} is in ${currency} — a Dubai close is in AED.`,
+      422,
+    );
+  }
+  const inAed = Number(raw?.amountInCurrency);
+  if (!Number.isFinite(inAed) || inAed <= 0) throw createError(`${n} needs the amount paid in AED.`, 422);
+  const rate = Number(raw?.exchangeRate);
+  if (!Number.isFinite(rate) || rate <= 0) throw createError(`${n} needs its rate: 1 AED = how many INR.`, 422);
+  const expected = Math.round(inAed * rate * 100);
+  if (Math.abs(minor(amount) - expected) > Math.max(1, Math.round(expected * 0.005))) {
+    throw createError(
+      `${n}: ${money(inAed)} AED at 1 AED = ${rate} INR comes to ${money(expected / 100)} INR, not ${money(amount)}.`,
+      422,
+    );
+  }
+  return { currency: "AED", amountInCurrency: minor(inAed) / 100, exchangeRate: rate };
+}
+
+/** What the lead's own money is counted as on a payment: the AED handed over when it says so, else its amount. */
+const ownFigure = (p: Pick<IStudentPayment, "amount" | "currency" | "amountInCurrency">) =>
+  p.currency === "AED" && p.amountInCurrency ? p.amountInCurrency : p.amount;
 
 /**
  * The payments a close sends, checked (the user, 2026-10-05: a client may pay
@@ -24,7 +77,7 @@ type PaymentInput = { method?: string; amount?: number | string; receipt?: Recei
  * exactly what was paid. Null when the close sent none — an older screen, with
  * one method, one receipt and the total.
  */
-function checkedPayments(list: unknown, paidAmount: number, enrolledOn: Date): IStudentPayment[] | null {
+function checkedPayments(list: unknown, paidAmount: number, enrolledOn: Date, academy: Academy = "dubai"): IStudentPayment[] | null {
   if (list === undefined || list === null) return null;
   if (!Array.isArray(list) || list.length === 0 || list.length > 10) throw createError("A closing takes between one and ten payments.", 422);
   const payments = (list as PaymentInput[]).map((raw, i) => {
@@ -47,6 +100,7 @@ function checkedPayments(list: unknown, paidAmount: number, enrolledOn: Date): I
       },
       paidAt: Number.isNaN(paidAt.getTime()) ? enrolledOn : paidAt,
       ...(raw.collectedBefore ? { collectedBefore: true } : {}),
+      ...foreignPart(raw, amount, n, academy),
     };
   });
   const sum = payments.reduce((s, p) => s + minor(p.amount), 0);
@@ -99,6 +153,46 @@ export interface EnrolmentCorrection {
   payments?: unknown;
   hasBonus?: boolean;
   bonusAmount?: number | string;
+  /** Never changes in a correction: sent only to be checked against the one it was closed for. */
+  academy?: string;
+}
+
+/**
+ * The academy a close asks for: Dubai or Bangalore, Dubai when it says nothing
+ * (a screen from before the choice). Anything else is refused.
+ */
+function askedAcademy(v: unknown): Academy {
+  if (v === undefined || v === null || v === "") return "dubai";
+  if (!ACADEMIES.includes(v as Academy)) throw createError("The academy is Dubai or Bangalore.", 422);
+  return v as Academy;
+}
+
+/** A course's Bangalore INR price, when it has one above zero. */
+const bangalorePrice = (c: { bangalore?: { price?: number | null } | null } | null | undefined): number | null => {
+  const p = Number(c?.bangalore?.price);
+  return Number.isFinite(p) && p > 0 ? p : null;
+};
+
+/**
+ * A Bangalore close's courses must each have a Bangalore price (the user,
+ * 2026-10-10) — the fee starts from it and finance bills it in INR — and the
+ * Bangalore finance organization must be set, whether or not the handover is
+ * on: a server without it doesn't take Bangalore closes at all (and doesn't
+ * offer them — academiesOffered), rather than keep one it can never bill.
+ */
+async function assertBangaloreReady(courseIds: string[]): Promise<void> {
+  const { academiesOffered } = await import("./financeClient.js");
+  if (!academiesOffered().includes("bangalore")) {
+    throw createError("Bangalore closes aren't switched on yet — the Bangalore finance organization isn't set. Close it as Dubai, or ask an admin.", 422);
+  }
+  const found = await Course.find({ _id: { $in: courseIds } }).select("name bangalore").lean();
+  const unpriced = found.filter((c) => bangalorePrice(c) === null).map((c) => c.name);
+  if (unpriced.length) {
+    throw createError(
+      `${unpriced.join(", ")} ${unpriced.length > 1 ? "have" : "has"} no Bangalore price yet — set it under Courses → Map, then close again.`,
+      422,
+    );
+  }
 }
 
 // Auto-generate enrollment number: STU-0001, STU-0002, ...
@@ -141,15 +235,18 @@ export class StudentService {
     payments?: unknown;
     hasBonus?: boolean;
     bonusAmount?: number;
+    /** Dubai or Bangalore (the user, 2026-10-10); Dubai when not said. Fixed from the close on. */
+    academy?: string;
   }, performedBy?: string) {
     const existing = await Student.findOne({ leadId: data.leadId });
     if (existing) throw createError("A student already exists for this lead", 409);
 
+    const academy    = askedAcademy(data.academy);
     const totalFee   = data.totalFee   ?? 0;
     const paidAmount = data.paidAmount ?? 0;
     const enrolledOn = data.enrollmentDate ? new Date(data.enrollmentDate) : new Date();
     // One payment or several; the first is also the one method and receipt.
-    const payments = checkedPayments(data.payments, paidAmount, enrolledOn);
+    const payments = checkedPayments(data.payments, paidAmount, enrolledOn, academy);
     const paymentMethod = payments?.[0]?.method ?? data.paymentMethod;
     const paymentReceipt = payments?.[0]?.receipt ?? data.paymentReceipt;
 
@@ -200,6 +297,7 @@ export class StudentService {
         422,
       );
     }
+    if (academy === "bangalore") await assertBangaloreReady(courseIds);
 
     const enrollmentNumber = await nextEnrollmentNumber();
 
@@ -233,6 +331,7 @@ export class StudentService {
       ...(payments ? { payments } : {}),
       hasBonus: data.hasBonus,
       bonusAmount: data.hasBonus ? Number(data.bonusAmount) : 0,
+      academy,
       status: "active",
     });
 
@@ -361,7 +460,7 @@ export class StudentService {
 
   async getStudentByLeadId(leadId: string) {
     return Student.findOne({ leadId })
-      .populate("courses",    "name amount")
+      .populate("courses",    "name amount bangalore")
       .populate("team",       "name")
       .populate("assignedTo", "name email designation")
       .lean();
@@ -432,14 +531,34 @@ export class StudentService {
    */
   async buildHandoverPayload(studentId: string): Promise<Record<string, unknown> | null> {
     const student = await Student.findById(studentId)
-      .populate("courses", "name amount financeItemId lmsCourseSlug lmsCourseSlugs")
+      .populate("courses", "name amount financeItemId lmsCourseSlug lmsCourseSlugs bangalore")
       .populate("assignedTo", "name email")
       .lean();
     if (!student) return null;
 
+    /*
+     * The academy it was closed for (the user, 2026-10-10). A Bangalore close
+     * is billed in INR, into the Bangalore finance organization: each course
+     * as the Bangalore academy sells it — its INR price weighs the split below,
+     * its Bangalore finance item, and its Bangalore LMS courses, or the Dubai
+     * ones when it has none of its own (the Forex courses are shared). The
+     * amounts are paise, as the Dubai ones are fils: the fee as it was agreed.
+     */
+    const academy = academyOf(student.academy);
+    const bangalore = academy === "bangalore";
     const courseDocs = ((student.courses ?? []) as unknown as {
       name?: string; amount?: number; financeItemId?: string | null; lmsCourseSlug?: string; lmsCourseSlugs?: string[];
-    }[]).filter(Boolean);
+      bangalore?: { price?: number | null; financeItemId?: string | null; lmsCourseSlugs?: string[] } | null;
+    }[]).filter(Boolean).map((c) => (bangalore
+      ? {
+          name: c.name,
+          amount: bangalorePrice(c) ?? 0,
+          financeItemId: c.bangalore?.financeItemId ?? null,
+          ...((c.bangalore?.lmsCourseSlugs ?? []).some((x) => x.trim())
+            ? { lmsCourseSlug: undefined, lmsCourseSlugs: c.bangalore!.lmsCourseSlugs }
+            : { lmsCourseSlug: c.lmsCourseSlug, lmsCourseSlugs: c.lmsCourseSlugs }),
+        }
+      : c));
     if (courseDocs.length === 0) return null;
 
     const rep = student.assignedTo as unknown as { name?: string; email?: string } | undefined;
@@ -481,6 +600,9 @@ export class StudentService {
       // Which sales CRM sold it, shown as a tag in finance, the LMS and
       // Tetra Commission — the same field Delta's and the Remote CRM send.
       crm: "draw",
+      // Which academy, always said: finance keeps it on the invoice and passes
+      // it to the LMS (the student's academy there) and Tetra Commission.
+      academy,
       customer: {
         name: student.name,
         email: student.email ?? "",
@@ -531,6 +653,11 @@ export class StudentService {
               method: p.method,
               amountMinor: Math.round(p.amount * 100),
               paidOn: new Date(p.paidAt).toISOString().slice(0, 10),
+              // Cash a Bangalore close took in AED: what was handed over, and
+              // how many INR one AED bought — finance's own field for it.
+              ...(bangalore && p.currency === "AED" && p.amountInCurrency && p.exchangeRate
+                ? { original: { currency: "AED", amountMinor: Math.round(p.amountInCurrency * 100), rate: p.exchangeRate } }
+                : {}),
               ...(p.receipt?.key && p.receipt.url
                 ? {
                     receipt: {
@@ -583,6 +710,8 @@ export class StudentService {
             studentId,
             leadId,
             payload,
+            // The organization every call about it goes to, from now on.
+            academy: academyOf(payload.academy),
             status: "pending",
             nextAttemptAt: new Date(),
           },
@@ -620,7 +749,7 @@ export class StudentService {
     limit?: string;
   }) {
     const { FinanceHandover } = await import("../models/FinanceHandover.js");
-    const { fetchEnrolmentStatuses } = await import("./financeClient.js");
+    const { fetchEnrolmentStatusesFor } = await import("./financeClient.js");
 
     const page  = Math.max(1, parseInt(filters.page ?? "1", 10));
     const limit = Math.min(100, parseInt(filters.limit ?? "20", 10));
@@ -657,7 +786,8 @@ export class StudentService {
     const byStudent = new Map(handovers.map((h) => [String(h.studentId), h]));
 
     const { stepsOf } = await import("./enrolmentSteps.js");
-    const statuses = await fetchEnrolmentStatuses(ids);
+    // Each asked of the organization it was closed into: Dubai's and Bangalore's apart.
+    const statuses = await fetchEnrolmentStatusesFor(students.map((s) => ({ id: String(s._id), academy: s.academy })));
     const byExternal = new Map(statuses.map((s) => [s.externalId, s]));
 
     const rows = students.map((s) => {
@@ -736,7 +866,7 @@ export class StudentService {
     const h = await FinanceHandover.findOne({ studentId: student._id })
       .select("status attempts lastError invoiceId invoiceNumber flags sentAt approvalState returnedReason returnedAt approvedAt resentAt resends")
       .lean();
-    const [st] = await fetchEnrolmentStatuses([id]);
+    const [st] = await fetchEnrolmentStatuses([id], academyOf(student.academy));
     const sale = await CommissionSale.findOne({ student: student._id }).lean();
     const config = sale ? await loadConfig() : null;
     const everything = isSuperAdmin(viewer.role as never) || (config?.salesManager ? String(config.salesManager) === viewer.userId : false);
@@ -799,7 +929,7 @@ export class StudentService {
     const existing = await FinanceHandover.findOne({ studentId }).lean();
 
     if (existing?.status === "sent") {
-      if (!(await this.sendBackOf(studentId, existing)).sentBack) {
+      if (!(await this.sendBackOf(studentId, existing, academyOf(student.academy))).sentBack) {
         return { queued: false, message: `Already invoiced as ${existing.invoiceNumber ?? "an invoice"}` };
       }
       if (!(await this.resendCorrected(studentId))) return { queued: false, message: "Enrolment not found" };
@@ -827,13 +957,15 @@ export class StudentService {
   private async sendBackOf(
     studentId: string,
     h: { status?: string; approvalState?: string; returnedReason?: string } | null,
+    academy: Academy,
   ): Promise<{ sentBack: boolean; reason: string }> {
     if (h?.status !== "sent") return { sentBack: false, reason: "" };
     if (h.approvalState === "returned") return { sentBack: true, reason: h.returnedReason ?? "" };
     // Decided already: an approved enrolment is not sent back, so finance isn't asked.
     if (h.approvalState === "approved" || h.approvalState === "not_required") return { sentBack: false, reason: "" };
     const { fetchEnrolmentStatuses } = await import("./financeClient.js");
-    const [st] = await fetchEnrolmentStatuses([studentId]);
+    // Of the organization it was closed into.
+    const [st] = await fetchEnrolmentStatuses([studentId], academy);
     return st?.approval === "returned" ? { sentBack: true, reason: st.returnedReason ?? "" } : { sentBack: false, reason: "" };
   }
 
@@ -854,6 +986,8 @@ export class StudentService {
       {
         $set: {
           payload,
+          // Unchanged — the academy is the close's — but said on rows from before it was kept.
+          academy: academyOf(payload.academy),
           status: "pending",
           nextAttemptAt: new Date(),
           attempts: 0,
@@ -907,7 +1041,8 @@ export class StudentService {
     const { FinanceHandover } = await import("../models/FinanceHandover.js");
     const { student, mayMove } = await this.correctable(id, viewer);
     const h = await FinanceHandover.findOne({ studentId: student._id }).lean();
-    const { sentBack, reason } = await this.sendBackOf(id, h);
+    const academy = academyOf(student.academy);
+    const { sentBack, reason } = await this.sendBackOf(id, h, academy);
     let options = {};
     if (mayMove) {
       const { Team } = await import("../models/Team.js");
@@ -927,6 +1062,8 @@ export class StudentService {
       resentAt: h?.resentAt ?? null,
       resends: h?.resends ?? 0,
       mayMove,
+      // Fixed at the close: the form shows it, and can't change it.
+      academy,
       ownOnLead: (await this.ownOnLead(student.leadId)) / 100,
       ...options,
       student: await this.populateStudent(id),
@@ -954,9 +1091,10 @@ export class StudentService {
     const { User } = await import("../models/User.js");
 
     const { student, mayMove } = await this.correctable(id, viewer);
+    const academy = academyOf(student.academy);
 
     const h = await FinanceHandover.findOne({ studentId: student._id }).lean();
-    if (!(await this.sendBackOf(id, h)).sentBack) {
+    if (!(await this.sendBackOf(id, h, academy)).sentBack) {
       throw createError(
         "Finance hasn't sent this enrolment back, so there is nothing to correct. A change once it is approved goes through finance.",
         409,
@@ -983,9 +1121,17 @@ export class StudentService {
     if (typeof data.hasBonus !== "boolean") missing.push("whether a bonus was given");
     else if (data.hasBonus && !isBonusAmount(data.bonusAmount)) missing.push("the bonus amount");
     if (missing.length) throw createError(`A correction needs ${missing.join(", ")}.`, 422);
+    // The academy is the close's, for good (the user, 2026-10-10): a correction shows it and never moves it.
+    if (data.academy !== undefined && data.academy !== null && data.academy !== "" && data.academy !== academy) {
+      throw createError(
+        `This enrolment was closed for ${ACADEMY_LABELS[academy]} — a correction can't move it to another academy.`,
+        422,
+      );
+    }
 
     const courses = await Course.find({ _id: { $in: courseIds } }).select("name").lean();
     if (courses.length !== courseIds.length) throw createError("A course on it no longer exists — choose again.", 422);
+    if (academy === "bangalore") await assertBangaloreReady(courseIds);
     // In the order they were chosen, for the lead's payment notes.
     const soldAs = courseIds.map((c) => courses.find((x) => String(x._id) === c)?.name ?? "").filter(Boolean).join(", ");
 
@@ -1004,7 +1150,7 @@ export class StudentService {
       }
     }
 
-    const payments = checkedPayments(data.payments, paidAmount, enrolledOn!);
+    const payments = checkedPayments(data.payments, paidAmount, enrolledOn!, academy);
     if (!payments) throw createError("A correction needs its payments, each with its method, amount and receipt.", 422);
 
     /*
@@ -1023,9 +1169,11 @@ export class StudentService {
         422,
       );
     }
-    if (ownRows.length && minor(ownRows[0]!.amount) !== own) {
+    // The lead's own money is what it was recorded as — in a Bangalore close,
+    // the AED handed over when the payment says so, its INR worked out at a rate.
+    if (ownRows.length && minor(ownFigure(ownRows[0]!)) !== own) {
       throw createError(
-        `The lead's own payments come to ${money(own / 100)} now, not ${money(ownRows[0]!.amount)} — they changed while this was open. Close the correction and open it again.`,
+        `The lead's own payments come to ${money(own / 100)} now, not ${money(ownFigure(ownRows[0]!))} — they changed while this was open. Close the correction and open it again.`,
         409,
       );
     }
@@ -1061,23 +1209,30 @@ export class StudentService {
      * replaced by the payments as corrected, so the lead and the enrolment
      * keep counting the same money — the lead's own payments are left as they
      * are. Not worth failing the correction over; it says so instead.
+     *
+     * Not for a Bangalore close: its payments are INR, and the lead's payment
+     * list — what the dashboards and reports add up — is AED, so a Bangalore
+     * close records none there (the close dialog adds none) and its correction
+     * leaves the list as it is.
      */
     let leadNote = "";
-    try {
-      const lead = await Lead.findById(student.leadId).select("payments").lean();
-      if (lead) {
-        const kept = (lead.payments ?? []).filter((p) => !fromTheClose(p.note));
-        const taken = payments.filter((p) => !p.collectedBefore).map((p) => ({
-          amount: p.amount,
-          note: `Collected at enrolment${soldAs ? ` — ${soldAs}` : ""} · ${PAYMENT_METHOD_LABELS[p.method] ?? p.method}`,
-          paidAt: p.paidAt,
-          addedBy: new Types.ObjectId(viewer.userId),
-        }));
-        await Lead.updateOne({ _id: lead._id }, { $set: { payments: [...kept, ...taken] } });
+    if (academy !== "bangalore") {
+      try {
+        const lead = await Lead.findById(student.leadId).select("payments").lean();
+        if (lead) {
+          const kept = (lead.payments ?? []).filter((p) => !fromTheClose(p.note));
+          const taken = payments.filter((p) => !p.collectedBefore).map((p) => ({
+            amount: p.amount,
+            note: `Collected at enrolment${soldAs ? ` — ${soldAs}` : ""} · ${PAYMENT_METHOD_LABELS[p.method] ?? p.method}`,
+            paidAt: p.paidAt,
+            addedBy: new Types.ObjectId(viewer.userId),
+          }));
+          await Lead.updateOne({ _id: lead._id }, { $set: { payments: [...kept, ...taken] } });
+        }
+      } catch (err) {
+        console.error(`[enrolments] could not bring the lead's payments in line with corrected enrolment ${id}`, err);
+        leadNote = " The lead's own payment list could not be updated — check it on the lead.";
       }
-    } catch (err) {
-      console.error(`[enrolments] could not bring the lead's payments in line with corrected enrolment ${id}`, err);
-      leadNote = " The lead's own payment list could not be updated — check it on the lead.";
     }
 
     if (!(await this.resendCorrected(id))) {
@@ -1105,7 +1260,8 @@ export class StudentService {
 
   private populateStudent(id: string) {
     return Student.findById(id)
-      .populate("courses",    "name amount")
+      // With the Bangalore price, for a Bangalore enrolment's fee to follow its course.
+      .populate("courses",    "name amount bangalore")
       .populate("team",       "name")
       .populate("assignedTo", "name email designation")
       .populate("leadId",     "name phone status")

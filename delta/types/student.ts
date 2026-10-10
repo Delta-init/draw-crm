@@ -56,6 +56,8 @@ export interface Student {
   hasBonus?: boolean | null;
   /** The bonus, in the fee's currency; 0 when none. Never part of the balance. */
   bonusAmount?: number;
+  /** Which academy it was closed for — its money is in that academy's currency. Absent on closes from before: Dubai. */
+  academy?: "dubai" | "bangalore";
   createdAt: string;
   updatedAt: string;
 }
@@ -175,6 +177,8 @@ export interface EnrolmentCorrectionStart {
   resentAt?: string | null;
   resends?: number;
   mayMove: boolean;
+  /** The academy it was closed for — shown, never changed, by a correction. Absent from a server from before: Dubai. */
+  academy?: "dubai" | "bangalore";
   ownOnLead: number;
   counsellors?: { _id: string; name: string }[];
   teams?: { _id: string; name: string }[];
@@ -195,9 +199,11 @@ export interface EnrolmentCorrectionInput {
   paidAmount: number;
   notes: string;
   language: string;
-  payments: { method: string; amount: number; receipt: StoredReceipt | null; paidAt: string; collectedBefore?: boolean }[];
+  payments: ({ method: string; amount: number; receipt: StoredReceipt | null; paidAt: string; collectedBefore?: boolean } & PaymentInAed)[];
   hasBonus: boolean;
   bonusAmount: number;
+  /** Only ever the one it was closed for: the server refuses a correction that moves it. */
+  academy?: "dubai" | "bangalore";
 }
 
 export interface EnrolmentCounts {
@@ -257,17 +263,29 @@ export interface CreateStudentInput {
   payments?: StudentPayment[];
   hasBonus?: boolean;
   bonusAmount?: number;
+  /** Dubai or Bangalore; the server takes Dubai when it is not said. */
+  academy?: "dubai" | "bangalore";
 }
 
 /**
  * One payment taken at the close — a client may pay part in cash and part by
  * card, each with its own receipt. They add up to the enrolment's paidAmount.
  */
-export interface StudentPayment {
+export interface StudentPayment extends PaymentInAed {
   method: string;
   amount: number;
   receipt: StoredReceipt;
   paidAt: string;
   /** The money already on the lead before the close, as one payment. */
   collectedBefore?: boolean;
+}
+
+/**
+ * A Bangalore close's payment taken in AED: "AED", how much of it, and
+ * 1 AED = `exchangeRate` INR. The payment's own amount is the INR figure.
+ */
+export interface PaymentInAed {
+  currency?: "AED";
+  amountInCurrency?: number;
+  exchangeRate?: number;
 }

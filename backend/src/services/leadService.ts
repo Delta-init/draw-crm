@@ -30,7 +30,7 @@ function buildPopulatedQuery(id: string) {
       ],
     })
     // bonusAmount: the close starts from it (CreateStudentModal).
-    .populate("courses", "name amount bonusAmount status")
+    .populate("courses", "name amount bonusAmount status bangalore")
     .populate("notes.author", "name email")
     .populate("activityLogs.performedBy", "name email");
 }
@@ -402,7 +402,7 @@ export class LeadService {
         .populate("reporter", "name email")
         .populate("assignedTo", "name email")
         .populate("team", "name status")
-        .populate("courses", "name amount bonusAmount status")
+        .populate("courses", "name amount bonusAmount status bangalore")
         .sort({ [sortField]: sortOrder })
         .skip(skip)
         .limit(limit)
