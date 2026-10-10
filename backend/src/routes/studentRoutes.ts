@@ -6,7 +6,7 @@ import {
   createStudent, getStudents, getStudentById,
   getStudentByLeadId, updateStudent, deleteStudent,
   getMyEnrolments,
-  getEnrolment, requestInvoice, getCorrection, correctEnrolment, uploadPaymentReceipt,
+  getEnrolment, requestInvoice, getCorrection, correctEnrolment, uploadPaymentReceipt, checkEmail,
 } from "../controllers/studentController.js";
 
 const router = Router();
@@ -41,6 +41,11 @@ const takeReceipt: RequestHandler = (req, res, next) => {
 
 // Static before parameterized
 router.get("/by-lead/:leadId", authenticate, checkPermission("students", "view"), getStudentByLeadId);
+
+// Whether an email is another client's (one email, one client — 2026-10-10): asked
+// by the close dialog and the correction dialog, so for whoever may do either.
+// Before "/:id", or Express reads "email-check" as a student id.
+router.get("/email-check", authenticate, checkAnyPermission(["students", "create"], ["students", "edit"]), checkEmail);
 
 // The receipt for a close, taken before the enrolment exists — and for the
 // correction of one finance sent back. Before "/:id", or Express reads

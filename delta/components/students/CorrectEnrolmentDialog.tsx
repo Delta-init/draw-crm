@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils";
 import { useAllCourses } from "@/hooks/useCourses";
 import { useCorrectEnrolment, useEnrolmentCorrection } from "@/hooks/useEnrolments";
+import { useEmailCheck } from "@/hooks/useStudents";
 import { PaymentRowsEditor, missingInRows, newPaymentRow, rowAedFields, rowAmount, type PaymentRow } from "@/components/students/PaymentRowsEditor";
 import { AcademyBadge } from "@/components/students/AcademyBadge";
 import { ACADEMY_LABELS, academyOf, bangalorePriceOf, fmtFee, priceFor, type Academy } from "@/lib/academy";
@@ -133,6 +134,22 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
   const [name, setName] = useState(s.name ?? "");
   const [phone, setPhone] = useState(s.phone ?? "");
   const [email, setEmail] = useState(s.email ?? "");
+  /*
+   * One email, one client (2026-10-10): an email another client here already
+   * holds is refused — finance would file this enrolment under them. Asked for
+   * the client as the form has them: the name and phone go too once changed.
+   */
+  const differs = (now: string, was?: string | null) => now.trim() !== (was ?? "").trim();
+  const emailCheck = useEmailCheck(
+    email,
+    {
+      studentId,
+      ...(differs(name, s.name) && name.trim() ? { name: name.trim() } : {}),
+      ...(differs(phone, s.phone) && phone.trim() ? { phone: phone.trim() } : {}),
+    },
+    EMAIL_RE.test(email.trim()),
+  );
+  const emailTaken = emailCheck.taken;
 
   // The courses, and the fee that follows them — and can be argued with.
   const studentCourses = (s.courses ?? []).filter((c): c is Course => typeof c === "object" && c !== null);
@@ -192,6 +209,7 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
     !name.trim() && "the client's name",
     !phone.trim() && "the client's phone",
     !EMAIL_RE.test(email.trim()) && "the client's email",
+    emailTaken && "the client's own email",
     !courseIds.length && "a course",
     unpriced.length > 0 && `a Bangalore price for ${unpriced.map((c) => c.name).join(", ")}`,
     !feeOk && "the fee",
@@ -294,6 +312,7 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
           {email.trim() !== "" && !EMAIL_RE.test(email.trim()) && (
             <p className="text-[10px] text-amber-400">Finance needs a working email to invoice the client.</p>
           )}
+          {emailTaken && <p className="text-[10px] text-amber-400">{emailTaken.message}</p>}
         </section>
 
         {/* The course and the money */}
@@ -504,15 +523,17 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
         <span className={cn("text-[11px]", !missing.length && overFee ? "text-amber-400" : "text-muted-foreground")}>
           {missing.length
             ? `Still needed: ${missing.join(", ")}.`
-            : overFee
-              ? `Collected is ${fee(overBy)} more than the fee — it goes to finance as collected.`
-              : "Saved, and sent to finance again in the same step."}
+            : emailCheck.checking
+              ? "Checking the client's email…"
+              : overFee
+                ? `Collected is ${fee(overBy)} more than the fee — it goes to finance as collected.`
+                : "Saved, and sent to finance again in the same step."}
         </span>
         <Button
           size="sm"
           className="gap-2 shrink-0"
           onClick={save}
-          disabled={correct.isPending || missing.length > 0 || uploading}
+          disabled={correct.isPending || missing.length > 0 || uploading || emailCheck.checking}
         >
           {correct.isPending
             ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending…</>

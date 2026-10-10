@@ -13,6 +13,10 @@
  *                        named together, bad receipts, a server with no storage
  *   Case 4  permission   no token, a role that cannot create students, a
  *                        switched-off account
+ *   Case 6  one email    another client's email refused at the close (409,
+ *                        naming them) and never sent; the dialog's check
+ *
+ * (Case 5, the academy, runs before Case 4, as does Case 6.)
  *
  * Run through scripts/enrolment-close-e2e.sh. Refuses anything but a scratch
  * database on 127.0.0.1.
@@ -355,6 +359,29 @@ r = await call("GET", "/courses/academies", undefined, counsellor, BARE_API);
 check("...a server without the Bangalore organization lists only Dubai", r.status === 200 && JSON.stringify(at(r.body, "data.academies")) === JSON.stringify(["dubai"]), show(r));
 r = await call("POST", "/students", closeBody(L6, { academy: "bangalore", totalFee: 45000 }), counsellor, BARE_API);
 check("...and refuses a Bangalore close, even with finance switched off", r.status === 422 && /Bangalore finance organization isn't set/.test(String(at(r.body, "message"))), show(r));
+
+// ── Case 6 (before Case 4 switches the counsellor off) ─────────────────────
+step("Case 6 — one email, one client: another client's email refused, and never sent to finance");
+const priya = await Student.findOne({ leadId: L2 }).lean(); // closed in Case 2 with priya@draw-e2e.test
+const L7 = await lead("Halif", "+971509000007");
+const sentBefore = received.length;
+r = await call("POST", "/students", closeBody(L7, { name: "Halif", phone: "+971509000007", email: "Priya@draw-e2e.test" }), counsellor);
+check("a close with the email another client's enrolment holds is refused (409), naming her and her enrolment",
+  r.status === 409 && r.body.message === `This email is already used by Priya Nair (${priya?.enrollmentNumber}), a different client — enter Halif's own email.`, show(r));
+check("...nothing saved, the lead's email left empty", (await Student.countDocuments({ leadId: L7 })) === 0 && !(await Lead.findById(L7).lean())?.email);
+r = await call("GET", `/students/email-check?email=${encodeURIComponent("priya@draw-e2e.test")}&leadId=${L7}`, undefined, counsellor);
+check("the dialog's check says the same before anything is saved", r.status === 200 && at(r.body, "data.ok") === false
+  && at(r.body, "data.takenBy.code") === priya?.enrollmentNumber && at(r.body, "data.takenBy.kind") === "student"
+  && at(r.body, "data.message") === `This email is already used by Priya Nair (${priya?.enrollmentNumber}), a different client — enter Halif's own email.`, show(r));
+r = await call("GET", `/students/email-check?email=${encodeURIComponent("priya@draw-e2e.test")}&leadId=${L2}`, undefined, counsellor);
+check("...and nothing of the kind for her own lead, closed with it", r.status === 200 && at(r.body, "data.ok") === true, show(r));
+check("...nor did anything reach finance", received.length === sentBefore, `${sentBefore} → ${received.length}`);
+r = await call("POST", "/students", closeBody(L7, { name: "Halif", phone: "+971509000007", email: "halif@draw-e2e.test" }), counsellor);
+const halifId = String(at(r.body, "data._id") ?? "");
+const halifSent = r.status === 201 && await waitFor(async () => received.some((x) => x.payload.externalId === halifId), 8_000);
+check("Halif's own email: closed (201), and it goes to finance", halifSent
+  && at(received.find((x) => x.payload.externalId === halifId)?.payload, "customer.email") === "halif@draw-e2e.test", show(r));
+check("...and the only enrolment finance has with Priya's email is hers", received.every((x) => at(x.payload, "customer.email") !== "priya@draw-e2e.test" || x.payload.externalId === String(priya?._id)));
 
 // ── Case 4 ──────────────────────────────────────────────────────────────────
 step("Case 4 — permission: no token, a role that cannot create students, a switched-off account");

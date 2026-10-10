@@ -20,6 +20,11 @@
  *     the Bangalore finance organization, and so does every later call for it
  *     (status, send-back check, correction, resend); statuses are asked per
  *     organization; a correction shows the academy and can't change it.
+ *   - Case 9: one email, one client (the user, 2026-10-10) — a correction to an
+ *     email another student or lead holds, another person (another number; no
+ *     phone → another name), refused 409 naming them, nothing changed or sent;
+ *     the same person, and its own lead, taken; the check the dialog asks;
+ *     "Send again" of a sent-back one with another client's email refused.
  *
  * Draw's enrolments hold courses as a list (bundles), and the close keeps the
  * client's email on the lead when it had none.
@@ -510,6 +515,85 @@ await sendBack(sale.id);
 const overRes = await call("PUT", `/students/${sale.id}/correction`, "Maya", correction({ totalFee: 700 }));
 const overSaved = await Student.findById(sale.id).lean();
 check("collected more than the fee: taken (200), balance 0", overRes.status === 200 && overSaved?.totalFee === 700 && overSaved?.pendingAmount === 0, `${overRes.status} ${overRes.body.message}`);
+
+section("Case 9 — one email, one client (2026-10-10): a correction can't take an email another client here holds");
+{
+  const other = await closedSale();
+  await sendBack(other.id);
+  const hakeem = await Student.findById(sale.id).lean(); // Abdul Hakeem, +971501112233, hakeem@example.com
+  const lead = async (name: string, phone: string | null, email: string) => {
+    const _id = new Types.ObjectId();
+    await db.collection("leads").insertOne({ _id, name, ...(phone ? { phone } : {}), email, status: "followup", assignedTo: people.Theertha!.id, payments: [] });
+    return String(_id);
+  };
+  await lead("mohammed lebbie", "+971524445566", "lebbie@test.local");
+  await lead("Sara  Khan", null, "sara@test.local");
+  const halif = { name: "Halif", phone: "+971559998877" };
+  /** A correction of `other` that must be refused, changing nothing and sending nothing. */
+  const refusedOther = async (label: string, body: Record<string, unknown>, message: string) => {
+    const before = await snapshot(other.id);
+    const sends = sendsFor(other.id).length;
+    const x = await call("PUT", `/students/${other.id}/correction`, "Maya", body);
+    await sleep(100);
+    const same = (await snapshot(other.id)) === before && sendsFor(other.id).length === sends;
+    check(label, x.status === 409 && x.body.message === message && same, `${x.status} ${x.body.message}${same ? "" : " — something changed"}`);
+  };
+  /** A correction of `other` that must go through — and be sent back again for the next. */
+  const takenOther = async (label: string, body: Record<string, unknown>) => {
+    const sends = sendsFor(other.id).length;
+    const x = await call("PUT", `/students/${other.id}/correction`, "Maya", body);
+    const out = await waitFor(() => sendsFor(other.id).length === sends + 1);
+    check(label, x.status === 200 && out && (await Student.findById(other.id).lean())?.email === String(body.email).toLowerCase(), `${x.status} ${x.body.message}`);
+    await waitFor(async () => (await FinanceHandover.findOne({ studentId: other.id }).lean())?.status === "sent");
+    await sendBack(other.id);
+  };
+
+  await refusedOther("another student's email, another number: 409, naming them and their enrolment, nothing changed or sent",
+    correction({ ...halif, email: "Hakeem@Example.com" }),
+    `This email is already used by Abdul Hakeem (${hakeem?.enrollmentNumber}), a different client — enter Halif's own email.`);
+  await refusedOther("another lead's email, another number: 409, naming the lead",
+    correction({ ...halif, email: "lebbie@test.local" }),
+    "This email is already used by mohammed lebbie (a lead), a different client — enter Halif's own email.");
+  await refusedOther("held by a lead with no phone, another name: 409",
+    correction({ ...halif, email: "sara@test.local" }),
+    "This email is already used by Sara  Khan (a lead), a different client — enter Halif's own email.");
+  await takenOther("…the same name, case and spaces aside: the same person — corrected (200) and sent",
+    correction({ name: "SARA khan", phone: "+971559998877", email: "sara@test.local" }));
+  await takenOther("the same number as the student holding it (written another way): the same person — 200",
+    correction({ name: "Abdul Hakeem", phone: "00971 50 111 2233", email: "hakeem@example.com" }));
+  const ownLead = await Lead.findById(other.leadId).lean();
+  await takenOther("its own lead's email, whatever the lead's phone says: its own — 200",
+    correction({ ...halif, email: String(ownLead?.email) }));
+
+  // What the correction dialog asks before it saves: for the enrolment, as the form has the client now.
+  const ask = (q: Record<string, string>, who = "Maya") => call("GET", `/students/email-check?${new URLSearchParams({ studentId: other.id, ...q }).toString()}`, who);
+  let c = await ask({ email: "lebbie@test.local" });
+  check("the check, for an enrolment: another lead's email — not ok, the lead named, the client by the enrolment's name",
+    c.status === 200 && c.body.data?.ok === false && JSON.stringify(c.body.data?.takenBy) === JSON.stringify({ kind: "lead", name: "mohammed lebbie" })
+      && c.body.data?.message === "This email is already used by mohammed lebbie (a lead), a different client — enter Halif's own email.", `${c.status} ${JSON.stringify(c.body.data)}`);
+  c = await ask({ email: "lebbie@test.local", name: "M. Lebbie", phone: "+971 52 444 5566" });
+  check("…with the name and phone the form now has — the holder's number: ok", c.body.data?.ok === true, JSON.stringify(c.body.data));
+  c = await ask({ email: "hakeem@example.com" });
+  check("…another student's email: not ok, with their enrolment number", c.body.data?.ok === false && (c.body.data?.takenBy as { code?: string })?.code === hakeem?.enrollmentNumber, JSON.stringify(c.body.data));
+  c = await ask({ email: String(ownLead?.email) });
+  check("…its own lead's email: ok", c.body.data?.ok === true, JSON.stringify(c.body.data));
+  c = await ask({ email: "lebbie@test.local" }, "Theertha");
+  check("…asked by a role that closes but can't correct: answered (the close dialog asks too)", c.status === 200, `${c.status}`);
+  c = await ask({ email: "lebbie@test.local" }, "Vera");
+  check("…by a role that does neither: 403", c.status === 403, `${c.status}`);
+
+  // "Send again" of a sent-back enrolment is a correction too: as it stands, with another client's email (a close from before the rule), refused.
+  await db.collection("students").updateOne({ _id: new Types.ObjectId(other.id) }, { $set: { email: "lebbie@test.local" } });
+  const sendsNow = sendsFor(other.id).length;
+  let again = await call("POST", `/students/${other.id}/invoice`, "Maya");
+  await sleep(100);
+  check("\"Send again\" with another client's email: 409, naming them, nothing sent",
+    again.status === 409 && again.body.message === "This email is already used by mohammed lebbie (a lead), a different client — enter Halif's own email."
+      && sendsFor(other.id).length === sendsNow, `${again.status} ${again.body.message}`);
+  await db.collection("students").updateOne({ _id: new Types.ObjectId(other.id) }, { $set: { email: String(ownLead?.email) } });
+  again = await call("POST", `/students/${other.id}/invoice`, "Maya");
+  check("…with the client's own: sent again (200)", again.status === 200 && (await waitFor(() => sendsFor(other.id).length === sendsNow + 1)), `${again.status} ${again.body.message}`);
+}
 
 server.close();
 finance.close();

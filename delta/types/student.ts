@@ -206,6 +206,18 @@ export interface EnrolmentCorrectionInput {
   academy?: "dubai" | "bangalore";
 }
 
+/**
+ * Whether an email can be this client's (one email, one client — 2026-10-10):
+ * finance files an enrolment under whoever has its email, so one another
+ * client here already holds is refused, naming them — never their phone.
+ */
+export interface EmailCheck {
+  ok: boolean;
+  takenBy?: { kind: "student" | "lead"; name: string; code?: string };
+  /** "This email is already used by mohammed lebbie (STU-0021), a different client — enter Halif's own email." */
+  message?: string;
+}
+
 export interface EnrolmentCounts {
   total: number;
   onThisPage: number;

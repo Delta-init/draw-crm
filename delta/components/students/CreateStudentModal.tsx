@@ -17,7 +17,7 @@ import {
   ENROLMENT_LANGUAGES, PAYMENT_METHOD_LABELS,
   type EnrolmentLanguage, type EnrolmentPaymentMethod,
 } from "@/types/student";
-import { useCreateStudent, useUpdateStudent } from "@/hooks/useStudents";
+import { useCreateStudent, useEmailCheck, useUpdateStudent } from "@/hooks/useStudents";
 import { useAllCourses, useBangaloreOffered } from "@/hooks/useCourses";
 import { useAddPayment } from "@/hooks/usePayments";
 import { CommissionPreview } from "@/components/commission/CommissionPreview";
@@ -26,7 +26,7 @@ import { AcademyBadge } from "@/components/students/AcademyBadge";
 import { ACADEMIES, ACADEMY_LABELS, academyOf, bangalorePriceOf, fmtFee, priceFor, type Academy } from "@/lib/academy";
 import type { Lead } from "@/types/lead";
 import type { Course } from "@/types/course";
-import type { FeeStatus, Student, StoredReceipt } from "@/types/student";
+import type { EmailCheck, FeeStatus, Student, StoredReceipt } from "@/types/student";
 
 interface Props {
   open: boolean;
@@ -192,13 +192,29 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
    * The client's email, asked for only when the lead has none that works.
    * Finance refuses an enrolment without one, so a close without it failed
    * there, out of sight. Kept on the lead too once saved.
+   *
+   * One that another client here already holds doesn't work either (one email,
+   * one client — 2026-10-10): finance knows a client by the email alone and
+   * would file this sale under them. The lead's own is then treated as missing
+   * — asked for, saying whose it is — and so is one typed in that is someone
+   * else's. The lead keeps its own email; the one given goes with the enrolment.
    */
   const leadEmail = (lead.email ?? "").trim();
-  const leadEmailOk = EMAIL_RE.test(leadEmail);
+  const leadEmailValid = EMAIL_RE.test(leadEmail);
+  /** An email the server refused at the save as someone else's — when its check couldn't say so first. */
+  const [refusedEmail, setRefusedEmail] = useState<{ email: string; message: string } | null>(null);
+  const refusal = (e: string): EmailCheck | null =>
+    refusedEmail && refusedEmail.email === e.trim().toLowerCase() ? { ok: false, message: refusedEmail.message } : null;
+  const leadEmailCheck = useEmailCheck(leadEmail, { leadId: lead._id }, !editing && leadEmailValid);
+  const leadEmailTaken = leadEmailCheck.taken ?? (editing ? null : refusal(leadEmail));
+  const leadEmailOk = leadEmailValid && !leadEmailTaken;
   const askEmail = !editing && !leadEmailOk;
-  const [emailInput, setEmailInput] = useState(leadEmailOk ? "" : leadEmail);
+  const [emailInput, setEmailInput] = useState(leadEmailValid ? "" : leadEmail);
   const email = leadEmailOk ? leadEmail : emailInput.trim();
   const emailMissing = askEmail && !EMAIL_RE.test(email);
+  const typedEmailCheck = useEmailCheck(emailInput, { leadId: lead._id }, askEmail && !emailMissing);
+  const emailTaken = askEmail ? typedEmailCheck.taken ?? refusal(emailInput) : null;
+  const emailChecking = !editing && (leadEmailCheck.checking || (askEmail && !emailMissing && typedEmailCheck.checking));
 
   /*
    * What a close cannot be made without, because finance needs it: what the
@@ -249,6 +265,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
         courseMissing && "a course",
         unpriced.length > 0 && `a Bangalore price for ${unpriced.map((c) => c.name).join(", ")}`,
         emailMissing && "the client's email",
+        emailTaken && "the client's own email",
         !language && "language",
         ...missingInRows(paymentRows),
         !bonusChoice && "whether a bonus was given",
@@ -359,6 +376,14 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
       paidAmount,
       notes: notes || undefined,
       ...bonusFields,
+    }).catch((err: unknown) => {
+      // Someone else's email after all: the dialog asks for another, saying whose.
+      const res = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
+      const message = res?.data?.message ?? "";
+      if (res?.status === 409 && message.startsWith("This email is already used by")) {
+        setRefusedEmail({ email: email.toLowerCase(), message });
+      }
+      throw err;
     });
     onCreated();
   }
@@ -454,10 +479,19 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                           placeholder="client@example.com" className="h-8 text-xs"
                           aria-label="Client email"
                         />
-                        <p className={cn("text-[10px]", emailMissing && emailInput ? "text-amber-400" : "text-muted-foreground")}>
+                        <p className={cn(
+                          "text-[10px]",
+                          (emailMissing && emailInput) || emailTaken || (leadEmailTaken && !emailInput.trim()) ? "text-amber-400" : "text-muted-foreground",
+                        )}>
                           {emailMissing && emailInput
                             ? "That is not an email address finance will take."
-                            : "This lead has no email. Finance needs one for the invoice; it is saved on the lead too."}
+                            : emailTaken
+                              ? emailTaken.message
+                              : leadEmailTaken
+                                ? emailInput.trim()
+                                  ? "Finance gets this one with the enrolment; the lead keeps its own."
+                                  : `${leadEmail} — ${leadEmailTaken.message}`
+                                : "This lead has no email. Finance needs one for the invoice; it is saved on the lead too."}
                         </p>
                       </div>
                     </div>
@@ -804,11 +838,13 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
               <span className={cn("text-[11px]", !missing.length && overFee ? "text-amber-400" : "text-muted-foreground")}>
                 {missing.length
                   ? `Still needed: ${missing.join(", ")}.`
-                  : overFee
-                    ? `Collected is ${fee(overBy)} more than the fee — it goes to finance as collected.`
-                    : editing
-                      ? "Changes apply to this enrolment."
-                      : "Saving closes the lead and sends it to finance for approval."}
+                  : emailChecking
+                    ? "Checking the client's email…"
+                    : overFee
+                      ? `Collected is ${fee(overBy)} more than the fee — it goes to finance as collected.`
+                      : editing
+                        ? "Changes apply to this enrolment."
+                        : "Saving closes the lead and sends it to finance for approval."}
               </span>
               <motion.div whileTap={{ scale: 0.97 }} className="shrink-0">
                 <Button
@@ -816,7 +852,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                   className="gap-2"
                   // A failed save has already said why, in its own toast.
                   onClick={() => void handleCreate().catch(() => undefined)}
-                  disabled={saving || missing.length > 0 || uploading}
+                  disabled={saving || missing.length > 0 || uploading || emailChecking}
                 >
                   {saving ? (
                     <span className="flex items-center gap-1.5"><span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> {editing ? "Saving…" : "Creating…"}</span>
