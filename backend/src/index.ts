@@ -13,6 +13,7 @@ import { startReminderScheduler } from "./services/reminderScheduler.js";
 import { startSplitScheduler } from "./services/splitScheduler.js";
 import { startBackupScheduler } from "./services/backupService.js";
 import { startFinanceHandoverWorker } from "./services/financeHandoverWorker.js";
+import { startCallSyncWorker } from "./services/callSyncService.js";
 
 const app = express();
 
@@ -54,6 +55,8 @@ const start = async () => {
     startSplitScheduler();
     startBackupScheduler();
     startFinanceHandoverWorker();
+    // 3CX calls with leads, every minute (off without THREECX_* or with RUN_SCHEDULERS=false).
+    startCallSyncWorker();
   });
 };
 

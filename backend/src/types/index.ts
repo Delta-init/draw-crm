@@ -36,6 +36,12 @@ export const CRM_MODULES = [
   "leaderboard",
   // My Pay: the salary slabs (salaryService) — open to everyone, as in the Sales CRM.
   "pay",
+  /*
+   * Calls: the 3CX calls with leads (lead_calls) — view the Calls page, export
+   * its CSV. Open to everyone by default; each sees only their own calls, their
+   * team's or everyone's (leadCallService).
+   */
+  "calls",
 ] as const;
 
 export type CrmModule = (typeof CRM_MODULES)[number];
@@ -53,6 +59,8 @@ export const OPEN_BY_DEFAULT: Partial<Record<CrmModule, Partial<ModulePermission
   pay: { view: true },
   // My Tracker was open to everyone here; its row was never on the Roles screen.
   tracker: { view: true, edit: true },
+  // The Calls page was open to everyone with Leads (2026-10-12: 3CX calls, scoped per person).
+  calls: { view: true, export: true },
 };
 
 export type PermissionsMap = {
@@ -79,6 +87,8 @@ export interface IUser extends Document {
   role: Types.ObjectId | IRole;
   designation?: string;
   extension?: string;        // 3CX phone extension number e.g. "101"
+  /** Where the extension came from: typed on the Users screen ("manual", never overwritten) or 3CX's users by email. */
+  extensionSource?: "manual" | "3cx" | null;
   status: "active" | "inactive";
   createdAt: Date;
   updatedAt: Date;

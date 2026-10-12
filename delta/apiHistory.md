@@ -1415,3 +1415,17 @@ admin's tokens aside, signs in with the pass, reloads to /dashboard); errors toa
 
 `useCreateStudent` sends `payments: [{ method, amount, receipt, paidAt, collectedBefore? }]` (types/student.ts `StudentPayment`)
 beside `paymentMethod` / `paymentReceipt` (the first payment's). Each new payment is added to the lead with `useAddPayment`, once.
+
+## 3CX calls (added 2026-10-12)
+
+**File:** `hooks/useCalls.ts` (the older `useRecentCalls` / `useQcQueue` / `useLeadCalls` stay for the QC screens).
+
+| Hook | Query key | Endpoint | Notes |
+|---|---|---|---|
+| `useCallLog(filters)` | `["calls", "log", filters]` | `GET /calls/log` | Page of calls + stats + people + period + threecx; every minute |
+| `fetchCallLogForExport(filters)` | — | `GET /calls/log?export=1&limit=5000` | The CSV |
+| `useLeadCallLog(leadId)` | `["calls", "log", "lead", id]` | `GET /calls/log/lead/:leadId` | A lead's calls + stats |
+| `getRecordingLink(callId, i)` | — | `GET /calls/log/:id/recording-link` | 10-minute `/api/v1/calls/log/recording?…` |
+| `useSyncCallsNow()` | — | `POST /calls/log/sync` | Super Admin |
+
+**Types:** `ThreecxCall`, `CallStats`, `CallPersonRow`, `ThreecxStatus`, `CallLogFilters`, `CallLogResponse`.

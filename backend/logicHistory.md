@@ -716,3 +716,34 @@ A course says what bonus comes with it (`Course.bonusAmount`, the course's curre
 4. **Compatibility**: the first payment is also `paymentMethod` / `paymentReceipt`, and finance still gets `declaredPaidMinor`,
    `declaredPaymentMethod` and `receipt` beside `payments[]`.
 5. **Finance** records each payment against the invoice with its receipt when accounts approve (finance-delta).
+
+## 3CX calls on the Calls page (2026-10-12)
+
+As in Tetra Commission (`students/calls.ts` there), for leads. **Files**: `lib/threecx.ts`, `models/LeadCall.ts`,
+`services/callSyncService.ts`, `services/leadCallService.ts`, `controllers/leadCallController.ts`, `routes/callRoutes.ts`.
+
+1. **The sync**: every minute (`startCallSyncWorker`, off with a log line when `RUN_SCHEDULERS=false` or any of
+   `THREECX_URL` / `THREECX_CLIENT_ID` / `THREECX_API_KEY` is missing — read with no defaults) the 3CX call log
+   (`/xapi/v1/ReportCallLogData/Pbx.GetCallLogData`, 500-row pages) is read from where the last run got to less 3 hours
+   (calls are logged when they end), a day at a time; the first run reaches 90 days back. Progress (`syncedTo`) is kept
+   as it goes, so a failed run resumes. State and a 15-minute lock live in `app_settings` `_id: "threecx_calls"`: only
+   one process syncs at once (a second is skipped).
+2. **Rows → calls** (PARSER 2): the rows sharing a `MainCallHistoryId` are one call; its main row is the lowest Indent.
+   `key` = `call:<history id>` (a row without one: a hash of its contents), unique — a call read again is updated, never
+   stored twice. Direction = in when the lead's number is the source. Status: answered (connected — a row talked) /
+   missed (in, nobody answered) / no_answer (out). Talk = the longest row's, ring = the main row's, recordings = every
+   `SrcRecId` / `DstRecId`. Who took it = an extension (2–6 digits) on a row that talked, a row under the queue first.
+3. **Lead match**: last 9 digits (`phoneKey`, as the contact lookup), every number in the lead's phone field (split on
+   `/ , ; |` and " - "). A number on several leads: the one assigned to whoever took the call, else the newest. Calls with
+   numbers no lead has, and internal calls, are not kept. Old `call_logs` rows are left as they are and not shown.
+4. **Who took it** = the user whose `extension` is that extension; nobody yet → linked once someone gets it. A call read
+   again keeps the person it has when its extension is nobody's now. **Extensions** are filled from `/xapi/v1/Users` by
+   email every 6 hours (`extensionSource: "3cx"`); one typed on the Users screen (`"manual"`) or one there before this
+   sync (no source) is never overwritten. Changing it on the Users screen marks it manual; clearing it lets 3CX fill it.
+5. **Who sees what** (as the lead list): Super Admin, the Reporter role and the Sales Manager (Commission settings) every
+   call; a team leader calls taken by their teams' people and every call on their teams' leads; anyone else calls they
+   took and every call on leads assigned to them. A lead's section: all its calls when the lead list shows them the lead,
+   otherwise only calls they took. Module `calls` (view, export), open by default.
+6. **Recordings** are never copied: a 10-minute HMAC-signed link (`JWT_SECRET`, bound to call, part, expiry, user) plays
+   through `GET /calls/log/recording`, which streams `/xapi/v1/Recordings/Pbx.DownloadRecording(recId=…)` with ranges
+   passed through and `Cross-Origin-Resource-Policy: cross-origin`. The 3CX key never reaches a browser.

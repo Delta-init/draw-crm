@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.js";
+import { checkPermission, requireSuperAdmin } from "../middleware/permissions.js";
 import {
   getLeadCalls,
   getRecentCalls,
@@ -14,6 +15,13 @@ import {
   webhookJournal,
   get3cxTemplate,
 } from "../controllers/callController.js";
+import {
+  getCallLog,
+  getLeadCallLog,
+  getRecordingLink,
+  streamRecording,
+  syncCallsNow,
+} from "../controllers/leadCallController.js";
 
 const router = Router();
 
@@ -25,6 +33,14 @@ router.post("/journal",        journalCall);
 router.get("/webhook",         webhookJournal);
 router.post("/webhook",        webhookJournal);
 router.get("/3cx-template",    get3cxTemplate);
+
+// ── 3CX calls with leads (lead_calls, synced from 3CX's call log) — the Calls page ──
+// The recording itself: no sign-in header (an <audio> element sends none); its signed 10-minute link is the permission.
+router.get("/log/recording",               streamRecording);
+router.get("/log",                         authenticate, checkPermission("calls", "view"), getCallLog);
+router.post("/log/sync",                   authenticate, requireSuperAdmin, syncCallsNow);
+router.get("/log/lead/:leadId",            authenticate, checkPermission("leads", "view"), getLeadCallLog);
+router.get("/log/:id/recording-link",      authenticate, getRecordingLink);
 
 // ── Authenticated routes — static BEFORE parameterised /:callId ──────────────
 router.post("/click",           authenticate, logClickToCall);

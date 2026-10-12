@@ -677,3 +677,25 @@ payments[], hasBonus, bonusAmount }`). `POST /students/receipts/:leadId` also ta
 **Models Used**: `FinanceHandover.resentAt` / `resends` (new), `Student`, `Lead.payments` / `email`, `Course`, `Team`, `User`.
 
 **Tests**: `scripts/enrolment-correction-check.sh` — 62 checks against a stand-in finance.
+
+## Calls from 3CX (2026-10-12)
+
+**What it does**: The Calls page lists only calls with leads through 3CX, read from 3CX's call log every minute (90 days
+back the first time): when, in or out, connected / missed / not answered, who took it, talk and ring time, and the
+recordings (played from 3CX through the server). Totals (all, outgoing, incoming, connected, missed, not answered, talk
+time, average connected call), a per-person table, filters (Dubai days: today / 7 days / 30 days / this month / custom;
+direction; result; salesperson; lead name or number), sorting by date / talk / ring, paging and a CSV. A lead's page shows
+its calls the same way. Extensions are filled from 3CX by email; a typed one wins. The old click-to-call / journal logs
+stay in the database and on the QC screen, not on the Calls page.
+
+**Routes** (`/api/v1/calls`): `GET /log` (`calls:view`; `export=1` needs `calls:export`, up to 5,000 rows),
+`GET /log/lead/:leadId` (`leads:view`), `GET /log/:id/recording-link?index=` (signed in; the call must be theirs to see),
+`GET /log/recording?c&i&e&u&s` (the signed link is the permission), `POST /log/sync` (Super Admin). Query for `/log`:
+`preset` today|7d|30d|month or `from`/`to` (YYYY-MM-DD), `direction` in|out, `result` connected|missed|not_answered,
+`person` u:<userId>|x:<ext>|-, `search`, `sort` date|talk|ring, `order` asc|desc, `page`, `limit` (≤ 200).
+
+**Env**: `THREECX_URL`, `THREECX_CLIENT_ID`, `THREECX_API_KEY` (all three, or no sync); `RUN_SCHEDULERS`.
+
+**Models Used**: `LeadCall` (`lead_calls`, new), `User.extensionSource` (new), `Lead`, `Team`, `CommissionSettings`, `app_settings`.
+
+**Tests**: `scripts/calls-check.sh` — 103 checks against a stand-in 3CX.

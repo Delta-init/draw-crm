@@ -51,7 +51,7 @@ export const navItems: { href: string; label: string; icon: React.ElementType; p
   { href: "/dashboard", label: "Dashboard",          icon: LayoutDashboard, permModule: "dashboard" },
   { href: "/my-tracker",label: "My Tracker",         icon: ClipboardCheck,  permModule: "tracker" },
   { href: "/leads",     label: "Leads",              icon: FileText,        permModule: "leads"     },
-  { href: "/calls",     label: "Calls",              icon: PhoneCall,       permModule: "leads"     },
+  { href: "/calls",     label: "Calls",              icon: PhoneCall,       permModule: "calls"     },
   { href: "/mentors",   label: "Mentors",            icon: CalendarDays,    permModule: "mentors" },
   { href: "/reminders", label: "Reminders",          icon: Bell,            permModule: "reminders" },
   { href: "/teams",     label: "Teams",              icon: UsersRound,      permModule: "teams"     },

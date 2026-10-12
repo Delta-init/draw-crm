@@ -147,3 +147,126 @@ export function fmtCallTime(iso: string): string {
     hour: "2-digit", minute: "2-digit", hour12: true,
   });
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   3CX calls with leads (2026-10-12) — synced from 3CX's call log every minute
+   (backend services/callSyncService.ts). The Calls page and a lead's Calls
+   section read only these; the call_logs above stay for QC and old pages.
+──────────────────────────────────────────────────────────────────────────── */
+
+export type CallResultStatus = "answered" | "missed" | "no_answer";
+
+export interface ThreecxCall {
+  id:          string;
+  startedAt:   string;
+  direction:   "in" | "out";
+  status:      CallResultStatus;
+  talkSeconds: number;
+  ringSeconds: number;
+  number:      string;
+  extension:   string;
+  agentName:   string;
+  userId:      string;
+  userName:    string;
+  /** u:<userId>, x:<extension>, or "-" (nobody took it) — the person filter's value. */
+  person:      string;
+  leadId:      string;
+  leadName:    string;
+  leadPhone:   string;
+  recordings:  number;
+  reason:      string;
+}
+
+export interface CallStats {
+  total: number; incoming: number; outgoing: number; connected: number; missed: number; notAnswered: number;
+  talkSeconds: number; averageTalkSeconds: number; recorded: number;
+}
+
+export interface CallPersonRow extends CallStats {
+  key: string; userId: string; extension: string; name: string;
+}
+
+export interface ThreecxStatus {
+  connected: boolean;
+  updatedAt: string | null;
+  firstImportDone: boolean;
+  running: boolean;
+  backfillDays: number;
+  error: { at: string; message: string } | null;
+}
+
+export interface CallLogFilters {
+  preset?:    "today" | "7d" | "30d" | "month" | "custom";
+  from?:      string;
+  to?:        string;
+  direction?: "in" | "out" | "";
+  result?:    "connected" | "missed" | "not_answered" | "";
+  person?:    string;
+  search?:    string;
+  sort?:      "date" | "talk" | "ring";
+  order?:     "asc" | "desc";
+  page?:      number;
+  limit?:     number;
+}
+
+export interface CallLogResponse {
+  calls:      ThreecxCall[];
+  pagination: { total: number; page: number; limit: number; totalPages: number; hasNextPage: boolean; hasPrevPage: boolean };
+  stats:      CallStats;
+  people:     CallPersonRow[];
+  period:     { from: string; to: string };
+  threecx:    ThreecxStatus;
+  canSync:    boolean;
+}
+
+function callLogParams(f: CallLogFilters): Record<string, string> {
+  const p: Record<string, string> = {};
+  for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== "" && v !== null) p[k] = String(v);
+  if (f.preset && f.preset !== "custom") { delete p.from; delete p.to; }
+  return p;
+}
+
+export const useCallLog = (filters: CallLogFilters) =>
+  useQuery({
+    queryKey: ["calls", "log", filters],
+    queryFn: async () => {
+      const res = await api.get<ApiResponse<CallLogResponse>>("/calls/log", { params: callLogParams(filters) });
+      return res.data.data!;
+    },
+    placeholderData: (prev) => prev,
+    refetchInterval: 60_000,
+  });
+
+/** Every matching call (up to 5,000) for the CSV. */
+export async function fetchCallLogForExport(filters: CallLogFilters): Promise<ThreecxCall[]> {
+  const res = await api.get<ApiResponse<CallLogResponse>>("/calls/log", {
+    params: { ...callLogParams(filters), page: "1", limit: "5000", export: "1" },
+  });
+  return res.data.data?.calls ?? [];
+}
+
+export const useLeadCallLog = (leadId: string) =>
+  useQuery({
+    queryKey: ["calls", "log", "lead", leadId],
+    queryFn: async () => {
+      const res = await api.get<ApiResponse<{ calls: ThreecxCall[]; stats: CallStats; threecx: ThreecxStatus }>>(`/calls/log/lead/${leadId}`);
+      return res.data.data!;
+    },
+    enabled: !!leadId,
+    refetchInterval: 60_000,
+  });
+
+/** A 10-minute link to play recording `index` of a call (played through the backend, never from 3CX directly). */
+export async function getRecordingLink(callId: string, index: number): Promise<string> {
+  const res = await api.get<ApiResponse<{ url: string; expiresIn: number }>>(`/calls/log/${callId}/recording-link`, { params: { index } });
+  return res.data.data!.url;
+}
+
+/** Super Admin: fetch new calls from 3CX now. */
+export const useSyncCallsNow = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post<ApiResponse<{ inserted?: number; started?: boolean }>>("/calls/log/sync")).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["calls", "log"] }),
+  });
+};

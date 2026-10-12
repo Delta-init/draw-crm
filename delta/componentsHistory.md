@@ -1071,3 +1071,12 @@ A new close starts "Bonus given?" at yes with the chosen courses' bonuses added 
   already on the lead), its own receipt upload; add / remove rows. Exports `newPaymentRow`, `rowAmount`, `missingInRows`.
 - `CreateStudentModal` — a new close uses the rows instead of one method and one receipt; red "more than the fee" and a blocked
   save when collected is above the fee (edit mode too).
+
+### Change log — 2026-10-12 (3CX calls)
+- `components/calls/callUi.tsx` (new) — `CallResult`, `CallPerson`, `RecordingPlayer` (asks for a 10-minute link, plays in an
+  `<audio>`, a button per part), `SyncNote` ("Last synced" / "3CX not connected" / first import / last error for the Super
+  Admin), `fmtClockDuration`, `fmtTalkTotal`, `fmtWhen` (Dubai), `RESULTS`.
+- `app/(dashboard)/calls/page.tsx` — rewritten: 3CX calls only; clickable stat cards, per-person table, period presets
+  (Dubai days), filters, sorting, paging, CSV (Export on Calls), Sync now (Super Admin). The Call button stays on each row.
+- `components/leads/CallsPanel.tsx` — the lead's 3CX calls with recordings; the Call button stays.
+- Sidebar Calls → module `calls` (was `leads`); `types/index.ts` adds `calls` (open by default: view, export).

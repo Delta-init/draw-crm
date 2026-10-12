@@ -727,3 +727,14 @@ Once sent again — corrected, or with "Send again" — the card says so: "Sendi
 "Sent again" with the time (and how many times), "waiting for approval"; the steps line and the enrolment's page too.
 
 **API**: `GET /students/:id/correction`, `PUT /students/:id/correction`; `handover.resentAt` / `resends` on the lists.
+
+## Calls from 3CX (2026-10-12)
+
+**What it does**: The Calls page shows only calls with leads through 3CX (synced every minute): stat cards for all,
+outgoing, incoming, connected, missed and not answered (click one to filter), talk time and the average connected call;
+a table per person; period (Today, 7 days, 30 days, This month, Custom — Dubai days), direction, result, salesperson and
+lead name / number filters; sort by date, talk or ring; pages of 50; a CSV; and each call's recording to play. A lead's
+page lists its calls the same way. A note says when it last synced, or that 3CX is not connected. Each person sees their
+own calls (and their leads'), a team leader their team's, the Super Admin / Reporter / Sales Manager everyone's.
+
+**API**: `GET /calls/log`, `GET /calls/log/lead/:leadId`, `GET /calls/log/:id/recording-link`, `POST /calls/log/sync`.

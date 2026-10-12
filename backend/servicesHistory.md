@@ -712,3 +712,15 @@ This file documents every service in `backend/src/services/`. Read this before w
   store, or null when none were sent.
 - `assertNotOverFee(totalFee, paidAmount)` — 422 when what was collected is more than the fee.
 - `buildHandoverPayload` — adds `payments: [{ method, amountMinor, paidOn, receipt }]` when the enrolment has them.
+
+## callSyncService / leadCallService — 3CX calls (added 2026-10-12)
+
+- `syncCalls(by)` — the sync (logicHistory "3CX calls on the Calls page"); `{ ok, skipped?, error?, windows, rows, calls, inserted, updated }`.
+- `startCallSyncWorker()` — every minute after a 2-minute wait; respects `RUN_SCHEDULERS` and the THREECX_* settings.
+- `syncExtensions()` — 3CX users → `User.extension` by email, never over a typed one.
+- `groupRows`, `parseCall`, `phoneKey`, `phoneKeysOf`, `pickLead`, `durationSeconds`, `callLogPath` — reading 3CX's rows.
+- `takeLock` / `releaseLock`, `getCallSettings` — `app_settings` `threecx_calls`.
+- `recordingPath(callId, index, userId)`, `checkRecordingLink(params)`, `recordingSource(call, i)`, `recordingCount(call)`.
+- `leadCallService.list(viewer, filters)` — a page of calls + totals + per-person rows + period + 3CX status.
+- `leadCallService.forLead(viewer, leadId)` — a lead's calls (≤ 500) + totals. `canSeeCall(viewer, call)`, `scopeOf(viewer)`.
+- `lib/threecx.ts` — `threecxConfigured`, `threecxFetch`, `threecxJson` (OAuth client credentials, token cached an hour).
