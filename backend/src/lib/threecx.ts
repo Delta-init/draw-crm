@@ -3,7 +3,9 @@
    (backend/src/lib/threecx.ts there), adapted.
 
    Sign in with the API client (client credentials, token valid an hour), then
-   plain GETs. Read-only: nothing here changes anything on the phone system.
+   plain GETs — and, since 2026-10-12, the Call button's Call Control requests
+   (threecxPost: makecall on the caller's own extension, and dropping their own
+   leg of a call). Nothing else changes anything on the phone system.
 
    Connected only when THREECX_URL, THREECX_CLIENT_ID and THREECX_API_KEY are
    all set — read from the environment each time, with no defaults, so a copy
@@ -60,10 +62,11 @@ async function getToken(fresh = false): Promise<string> {
   return token.value;
 }
 
-/** A GET on the 3CX API (`path` starts with /xapi/…). Signs in again once if the token was refused. */
+/** A request on the 3CX API (`path` starts with /xapi/… or /callcontrol/…; GET unless told). Signs in again once if
+ *  the token was refused. */
 export async function threecxFetch(
   path: string,
-  opts: { timeoutMs?: number; headers?: Record<string, string> } = {},
+  opts: { timeoutMs?: number; headers?: Record<string, string>; method?: string; body?: string } = {},
 ): Promise<Response> {
   if (!threecxConfigured()) throw new ThreecxError("3CX is not connected (THREECX_URL / THREECX_CLIENT_ID / THREECX_API_KEY)");
   const { url } = threecxSettings();
@@ -71,6 +74,8 @@ export async function threecxFetch(
     let res: Response;
     try {
       res = await fetch(`${url}${path}`, {
+        method: opts.method ?? "GET",
+        body: opts.body,
         headers: { Authorization: `Bearer ${await getToken(attempt > 0)}`, ...opts.headers },
         signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000),
       });
@@ -97,4 +102,9 @@ export async function threecxJson<T = unknown>(path: string, timeoutMs = 120_000
     );
   }
   return (await res.json()) as T;
+}
+
+/** A JSON POST (Call Control: makecall, drop). */
+export async function threecxPost(path: string, payload: unknown, timeoutMs = 30_000): Promise<Response> {
+  return threecxFetch(path, { method: "POST", body: JSON.stringify(payload), headers: { "Content-Type": "application/json" }, timeoutMs });
 }

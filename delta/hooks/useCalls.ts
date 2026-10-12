@@ -280,3 +280,48 @@ export async function testThreecx(): Promise<ThreecxTestResult> {
   const res = await api.post<ApiResponse<ThreecxTestResult>>("/calls/log/test");
   return res.data.data ?? { ok: false, steps: [{ name: "Test", ok: false, detail: res.data.message || "No answer from the server" }] };
 }
+
+/* ── The Call button through 3CX (2026-10-12) ─────────────────────────────── */
+
+/** Whether this person's Call buttons can place a 3CX call (3CX connected and their extension known). */
+export interface ClickToCallInfo {
+  enabled:      boolean;
+  connected:    boolean;
+  extension:    string;
+  webClientUrl: string;
+}
+
+export const useClickToCall = (enabled = true) =>
+  useQuery({
+    queryKey: ["calls", "click-to-call"],
+    queryFn: async () => {
+      const res = await api.get<ApiResponse<ClickToCallInfo>>("/calls/click-to-call");
+      return res.data.data ?? { enabled: false, connected: false, extension: "", webClientUrl: "" };
+    },
+    enabled,
+    staleTime: 5 * 60_000,
+  });
+
+/** A 3CX call just placed: what the call window follows. */
+export interface PlacedCall {
+  extension:     string;
+  dial:          string;
+  device:        string;
+  leadId:        string;
+  leadName:      string;
+  callId:        number | null;
+  participantId: number | null;
+}
+
+/** The caller's own call on their extension, as 3CX has it now (null = not there: not started, or ended). */
+export interface MyCallState {
+  extension: string;
+  devices:   string[];
+  participant: {
+    id:     number | null;
+    status: string;
+    stage:  "ringing" | "calling" | "connected" | "other";
+    callId: number | null;
+    party:  string;
+  } | null;
+}

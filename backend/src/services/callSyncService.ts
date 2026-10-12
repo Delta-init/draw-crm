@@ -23,6 +23,12 @@ import { threecxConfigured, threecxJson, threecxSettings } from "../lib/threecx.
    Who took a call = the CRM user whose `extension` is that 3CX extension.
    Extensions are filled in from 3CX's users by email every few hours; one
    typed on the Users screen (extensionSource "manual") is never overwritten.
+
+   A lead's call counts (2026-10-12) come from here too, replacing the old
+   hand-kept counters: callCount (every call), callConnected (answered) and
+   callNotConnected (missed + not answered), counted again from lead_calls for
+   every lead a run touched — and once over every lead with calls, the first
+   run after this shipped (COUNTS_VERSION).
 ──────────────────────────────────────────────────────────────────────────── */
 
 const SETTINGS_ID = "threecx_calls";
@@ -36,6 +42,9 @@ const TICK_MS = 60_000; // every minute, so a call shows on the Calls page soon 
 const PARSER = 2;
 export const LOCK_MS = 15 * 60_000;
 const EXTENSIONS_EVERY_MS = 6 * 3_600_000;
+/** When it changes, the next run counts every lead's calls again (1 — 2026-10-12, the counts from 3CX; 2 — the same
+ *  day: hand-typed counts on leads with no 3CX calls go back to 0 too). */
+const COUNTS_VERSION = 2;
 export const LINK_TTL_S = 10 * 60;
 
 /* ── settings + a lock, so two servers never sync at once ────────────────── */
@@ -53,6 +62,8 @@ export interface CallSyncSettings {
   extensionsSyncedAt?: Date | null;
   extensions?: { threecxUsers: number; matched: number; updated: number } | null;
   extensionsError?: { at: Date; message: string } | null;
+  countsVersion?: number;
+  countsAt?: Date | null;
 }
 
 export async function getCallSettings(): Promise<CallSyncSettings> {
@@ -324,17 +335,21 @@ export interface SyncSummary {
   calls: number;
   inserted: number;
   updated: number;
+  /** Leads whose call counts changed. */
+  leadsRecounted?: number;
 }
 
 async function syncWindow(from: number, to: number, leads: Map<string, LeadMatch[]>, users: Map<string, UserByExt>, now: Date) {
   const rows = await fetchWindow(from, to);
   const ops: Parameters<typeof LeadCall.bulkWrite>[0] = [];
+  const parsed: { key: string; lead: string }[] = [];
   for (const group of groupRows(rows)) {
     const c = parseCall(group, (k) => leads.has(k));
     if (!c) continue; // not a call with a lead
     const u = c.extension ? users.get(c.extension) : undefined;
     const lead = pickLead(leads.get(c.numberKey), u ? String(u._id) : "");
     if (!lead) continue;
+    parsed.push({ key: c.key, lead: String(lead._id) });
     ops.push({
       updateOne: {
         filter: { key: c.key },
@@ -355,12 +370,72 @@ async function syncWindow(from: number, to: number, leads: Map<string, LeadMatch
   }
   let inserted = 0;
   let updated = 0;
+  const touched = new Set<string>();
   if (ops.length) {
+    // The leads these calls are on now, and the ones they were on before (a call read again can move to another
+    // lead with that number): both are counted again.
+    const keys = parsed.map((p) => p.key);
+    const before = await LeadCall.find({ key: { $in: keys } }).select("lead").lean<{ lead: Types.ObjectId }[]>();
+    for (const b of before) touched.add(String(b.lead));
+    for (const p of parsed) touched.add(p.lead);
     const r = await LeadCall.bulkWrite(ops, { ordered: false });
     inserted = r.upsertedCount;
     updated = r.modifiedCount;
   }
-  return { rows: rows.length, calls: ops.length, inserted, updated };
+  return { rows: rows.length, calls: ops.length, inserted, updated, touched };
+}
+
+/* ── a lead's call counts, from its 3CX calls ────────────────────────────── */
+
+/**
+ * Counts each lead's calls again from lead_calls: callCount, callConnected (answered), callNotConnected (missed +
+ * not answered). `leadIds` — those leads (one left with no calls goes back to 0); none — every lead: those with calls
+ * counted, and any other still carrying a hand-typed count reset to 0 (the counts are 3CX's only).
+ * Written straight to the collection, and only where a number changed: no hooks, and the lead's updatedAt stays.
+ * Returns how many leads changed.
+ */
+export async function recountLeadCalls(leadIds?: Iterable<string | Types.ObjectId>): Promise<number> {
+  const ids = leadIds
+    ? [...new Set([...leadIds].map(String))].filter((v) => Types.ObjectId.isValid(v)).map((v) => new Types.ObjectId(v))
+    : null;
+  if (ids && !ids.length) return 0;
+  const counted = await LeadCall.aggregate<{ _id: Types.ObjectId; total: number; connected: number; notConnected: number }>([
+    ...(ids ? [{ $match: { lead: { $in: ids } } }] : []),
+    {
+      $group: {
+        _id: "$lead",
+        total: { $sum: 1 },
+        connected: { $sum: { $cond: [{ $eq: ["$status", "answered"] }, 1, 0] } },
+        notConnected: { $sum: { $cond: [{ $in: ["$status", ["missed", "no_answer"]] }, 1, 0] } },
+      },
+    },
+  ]);
+  const byLead = new Map(counted.map((c) => [String(c._id), c]));
+  const targets = ids ?? counted.map((c) => c._id);
+  let changed = 0;
+  for (let i = 0; i < targets.length; i += 1000) {
+    const ops = targets.slice(i, i + 1000).map((id) => {
+      const c = byLead.get(String(id));
+      const want = { callCount: c?.total ?? 0, callConnected: c?.connected ?? 0, callNotConnected: c?.notConnected ?? 0 };
+      return {
+        updateOne: {
+          filter: { _id: id, $or: Object.entries(want).map(([k, v]) => ({ [k]: { $ne: v } })) },
+          update: { $set: want },
+        },
+      };
+    });
+    if (ops.length) changed += (await Lead.collection.bulkWrite(ops, { ordered: false })).modifiedCount;
+  }
+  if (!ids) {
+    // Every lead with no 3CX calls: a count typed by hand before goes back to 0.
+    const withCalls = counted.map((c) => c._id);
+    const r = await Lead.collection.updateMany(
+      { _id: { $nin: withCalls }, $or: [{ callCount: { $gt: 0 } }, { callConnected: { $gt: 0 } }, { callNotConnected: { $gt: 0 } }] },
+      { $set: { callCount: 0, callConnected: 0, callNotConnected: 0 } },
+    );
+    changed += r.modifiedCount;
+  }
+  return changed;
 }
 
 /**
@@ -392,6 +467,7 @@ export async function syncCalls(by = "Schedule"): Promise<SyncSummary> {
       : to - BACKFILL_DAYS * DAY_MS;
     sum.from = new Date(from).toISOString();
     sum.to = new Date(to).toISOString();
+    const touched = new Set<string>();
     for (let a = from; a < to; a += DAY_MS) {
       const b = Math.min(a + DAY_MS, to);
       const r = await syncWindow(a, b, leads, users, now);
@@ -400,8 +476,17 @@ export async function syncCalls(by = "Schedule"): Promise<SyncSummary> {
       sum.calls += r.calls;
       sum.inserted += r.inserted;
       sum.updated += r.updated;
+      for (const id of r.touched) touched.add(id);
       await saveSettings({ syncedTo: new Date(b) });
       await extendLock();
+    }
+    // The leads' call counts: every lead the first time (and whenever COUNTS_VERSION changes) — those with calls
+    // counted, the rest's hand-typed counts back to 0 — otherwise the leads whose calls this run read.
+    if (s.countsVersion !== COUNTS_VERSION) {
+      sum.leadsRecounted = await recountLeadCalls();
+      await saveSettings({ countsVersion: COUNTS_VERSION, countsAt: new Date() });
+    } else {
+      sum.leadsRecounted = await recountLeadCalls(touched);
     }
     await saveSettings({
       lastRun: { ...sum, at: new Date(), by },

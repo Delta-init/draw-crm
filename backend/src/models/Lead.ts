@@ -217,6 +217,9 @@ const leadSchema = new Schema<ILead>(
       trim: true,
       maxlength: [200, "Campaign cannot exceed 200 characters"],
     },
+    // The lead's calls through 3CX (since 2026-10-12): counted by the call sync from lead_calls
+    // (callSyncService.recountLeadCalls) — every call, the connected ones, and the missed + not answered ones.
+    // Not edited by hand any more: the counters' PATCH routes and the lead form leave them alone.
     callNotConnected: {
       type: Number,
       default: 0,
@@ -226,6 +229,11 @@ const leadSchema = new Schema<ILead>(
       type: Number,
       default: 0,
       min: [0, "Call count cannot be negative"],
+    },
+    callConnected: {
+      type: Number,
+      default: 0,
+      min: [0, "Connected call count cannot be negative"],
     },
     firstContactTime: {
       type: Date,

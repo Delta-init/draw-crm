@@ -86,8 +86,10 @@ export interface Lead {
   reminders: Reminder[];
   payments: Payment[];
   activityLogs: ActivityLog[];
+  /** From 3CX (since 2026-10-12): every call, the connected ones, the missed + not answered ones. */
   callNotConnected?: number;
   callCount?: number;
+  callConnected?: number;
   platform?: string;
   campaign?: string;
   leadReceivedTime?: string | null;

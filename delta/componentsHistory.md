@@ -1080,3 +1080,16 @@ A new close starts "Bonus given?" at yes with the chosen courses' bonuses added 
   (Dubai days), filters, sorting, paging, CSV (Export on Calls), Sync now (Super Admin). The Call button stays on each row.
 - `components/leads/CallsPanel.tsx` — the lead's 3CX calls with recordings; the Call button stays.
 - Sidebar Calls → module `calls` (was `leads`); `types/index.ts` adds `calls` (open by default: view, export).
+
+### Change log — 2026-10-12 (Call from the CRM through 3CX)
+- `components/calls/CallFlow.tsx` (new) — `CallFlowProvider` (mounted in the dashboard layout), `useCallFlow`, `dialOf`:
+  the call choice (3CX call / Phone call / copy), the call window (ringing / calling / connected timer / ended, Hang up,
+  Log call), "How did the call go?" (connected, status through the CRM's own paths, notes; Later keeps it in
+  sessionStorage 30 min and a chip brings it back; it reopens after a reload), and the enrolment dialog when Closed is
+  picked. Only for calls started here, only for someone with Edit on Leads.
+- `components/leads/ClickToCall.tsx` — one Call button that opens the call flow (was a dropdown: 3CX web client popup /
+  tel: / copy). Kanban cards get one too.
+- Lead page: the Call Not Connected / Call Count +/- counters → one read-only "Calls — from 3CX" box (calls, connected,
+  not connected). Leads list: a "Calls (3CX)" column. Kanban: "CNC +1" removed; card and preview show the three counts.
+- Leaderboard page: Calls, Connected, Talk time columns and a Revenue / Calls / Talk time switch; the dashboard card
+  shows calls and talk time.

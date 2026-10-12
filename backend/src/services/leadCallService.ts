@@ -57,6 +57,11 @@ async function leadInScope(scope: Scope, leadId: Types.ObjectId): Promise<boolea
   return !!lead.assignedTo && scope.me.equals(lead.assignedTo);
 }
 
+/** Whether the viewer's lead list shows this lead — who may call it from the CRM (Call button, 3CX makecall). */
+export async function canWorkLead(viewer: Viewer, leadId: Types.ObjectId): Promise<boolean> {
+  return leadInScope(await scopeOf(viewer), leadId);
+}
+
 /** Whether the viewer may see (and play) one call: it is in their Calls list, or its lead is theirs. */
 export async function canSeeCall(viewer: Viewer, call: Pick<ILeadCall, "user" | "lead">): Promise<boolean> {
   const scope = await scopeOf(viewer);

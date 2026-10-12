@@ -747,3 +747,34 @@ As in Tetra Commission (`students/calls.ts` there), for leads. **Files**: `lib/t
 6. **Recordings** are never copied: a 10-minute HMAC-signed link (`JWT_SECRET`, bound to call, part, expiry, user) plays
    through `GET /calls/log/recording`, which streams `/xapi/v1/Recordings/Pbx.DownloadRecording(recId=…)` with ranges
    passed through and `Cross-Origin-Resource-Policy: cross-origin`. The 3CX key never reaches a browser.
+
+## Calls from the CRM, counts from 3CX, Leaderboard on 3CX calls (2026-10-12)
+
+**Files**: `lib/threecx.ts` (`threecxPost`; `threecxFetch` takes method/body), `controllers/clickToCallController.ts`
+(new), `services/callSyncService.ts` (`recountLeadCalls`), `services/leadCallService.ts` (`canWorkLead`),
+`routes/callRoutes.ts`, `controllers/leadController.ts` (counter routes), `models/Lead.ts`, `services/leaderboardService.ts`,
+`routes/leaderboardRoutes.ts`.
+
+1. **Counts**: after each sync run, `recountLeadCalls(touched)` counts again, from `lead_calls`, every lead whose calls the
+   run read — the lead a call is on now and the one it was on before (a call read again can move to another lead with
+   that number). `callCount` = all, `callConnected` = answered, `callNotConnected` = missed + no_answer. Written on the
+   raw collection, only where a number changed (no hooks, `updatedAt` untouched). The first run after deploy (and whenever
+   `COUNTS_VERSION` changes — now 2; `app_settings.threecx_calls.countsVersion`) counts every lead that has 3CX calls and
+   resets to 0 every lead with a hand-typed count but no 3CX calls (the user, 2026-10-12). The counter PATCH routes no longer write; the lead form never accepted them.
+2. **Call Control** (Tetra Commission's `studentCalls.ts`): the extension is always the caller's own (`User.extension`),
+   never from the request. `POST /calls/3cx/call`: lead in the caller's lead list (`canWorkLead` = the Calls page's
+   `leadInScope`), `dial` one of the lead's numbers (last 9 digits) or its first; `GET /callcontrol/{ext}` → a device
+   (web client, else the desktop app — never the phone app alone, as the Sales CRM and Tetra Commission; none → 409
+   `no_device` "open your 3CX app or web client") → `POST
+   /callcontrol/{ext}/devices/{id}/makecall {destination, timeout: 30}` (the extension's own makecall if 3CX refuses the
+   device). `GET /calls/3cx/state`: the participant on their extension by call id, else by the lead's number, else the
+   only one; stage ringing / calling (3CX "Dialing") / connected. `POST /calls/3cx/hang-up`: only a participant on their
+   own extension right now → `POST /callcontrol/{ext}/participants/{id}/drop`.
+3. **After the call** (web only, existing paths): reminder `POST /leads/:id/reminders` (Follow Up required, Callback
+   optional; a past time is refused before anything else is saved), `PATCH /leads/:id/status` (not for Closed),
+   `POST /leads/:id/notes` (note + `note_added` activity: "Call through 3CX — connected · Follow Up, 14 Oct 3:00 PM GST",
+   the lost reason, the notes). Closed opens `CloseLeadDialog`; the status changes only when the enrolment is saved.
+4. **Leaderboard**: calls = `lead_calls` in the month by `user` (the call's 3CX extension → its user; calls on nobody's
+   extension count for nobody), in and out: `calls`, `connected`, `talkSeconds`. Months on Draw's calendar (`drawDayStart`).
+   `rankBy` revenue (revenue → closings → follow-ups → calls), calls (→ talk → connected), talk (→ calls → connected).
+   The old `call_logs` (click-to-call clicks) no longer count; the click is still logged there, as before.

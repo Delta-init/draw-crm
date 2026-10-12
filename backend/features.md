@@ -699,3 +699,28 @@ stay in the database and on the QC screen, not on the Calls page.
 **Models Used**: `LeadCall` (`lead_calls`, new), `User.extensionSource` (new), `Lead`, `Team`, `CommissionSettings`, `app_settings`.
 
 **Tests**: `scripts/calls-check.sh` — 103 checks against a stand-in 3CX.
+
+## Call from the CRM through 3CX, call counts from 3CX, "How did the call go?" (2026-10-12)
+
+**What it does**: Every Call button (lead page, leads list, kanban card, Calls page, a lead's Calls section) asks "3CX
+call" or "Phone call", as in Tetra Commission. A 3CX call: 3CX rings the caller's own 3CX app / web client (Call Control
+makecall on their extension), they answer, 3CX dials the lead; a call window follows it (ringing / calling / connected
+with a timer / ended) and can hang up their own leg. After the call (it ended, Log call, or a phone call chosen) — only for
+calls started in the CRM — "How did the call go?": connected yes / no, the next status through Draw's own paths (Follow Up
+/ Callback with the reminder's date and time, Closed through the enrolment dialog, Lost with a reason, any other status),
+and notes saved as a lead note. "Later" puts it aside (sessionStorage, 30 minutes; it reopens after a reload). A lead's
+call counts — calls, connected, not connected (missed + not answered) — now come from the 3CX calls and are no longer
+edited by hand (hand-typed counts on leads with no 3CX calls are reset to 0 once, on the first sync after deploy; shown
+read-only on the lead page, the leads list's Calls column and kanban cards). The Leaderboard's calls
+are 3CX's too (calls, connected, talk time), and it can be ranked by calls or by talk time.
+
+**Routes** (`/api/v1/calls`): `GET /click-to-call` (signed in) → `{ enabled, connected, extension, webClientUrl }`;
+`POST /3cx/call { leadId, dial? }` (`leads:edit`; the lead must be in the caller's lead list; refusals carry
+`errors.code`: `not_connected` / `no_extension` / `no_device` (409), `not_yours` (403)); `GET /3cx/state?callId&dial`
+(the caller's own extension only); `POST /3cx/hang-up { participantId }` (only a participant on their own extension).
+`PATCH /leads/:id/call-count` and `/call-not-connected` now change nothing (they answer with the counts). `GET /leaderboard`
+takes `rankBy` revenue (default) | calls | talk.
+
+**Models Used**: `Lead.callConnected` (new), `Lead.callCount`, `Lead.callNotConnected` (now from 3CX), `LeadCall`, `User.extension`.
+
+**Tests**: `scripts/calls-check.sh` — 180 checks (Cases 6–9 new: counts, Call Control, the popup's status paths, the Leaderboard).

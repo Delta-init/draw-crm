@@ -23,7 +23,21 @@
  *     links refused; 3CX not connected; the lock;
  *   - Case 5: Test connection (as in Tetra Commission) — Super Admin only;
  *     every step, the newest rows of the last 24 hours, a recording opened,
- *     never the key; 3CX unreachable; not connected.
+ *     never the key; 3CX unreachable; not connected;
+ *   - Case 6: a lead's call counts from 3CX (calls / connected / not
+ *     connected) — every lead with calls on the first run after deploy, the
+ *     touched leads after that (a call moving between leads counts on both),
+ *     updatedAt untouched; manual writes (counter routes, the lead form) ignored;
+ *   - Case 7: Call from the CRM (stand-in Call Control) — makecall only for the
+ *     caller's own leads, refused with no extension / no device / not
+ *     connected / another's lead; the call window's state and hang-up only on
+ *     the caller's own extension;
+ *   - Case 8: after the call, the CRM's own status paths — follow-up with its
+ *     reminder date and time, notes with their activity, lost with its reason,
+ *     other statuses, closing through the enrolment (API side);
+ *   - Case 9: the Leaderboard from lead_calls — calls, connected, talk time by
+ *     the call's person, Draw's month boundaries, ranked by revenue / calls /
+ *     talk time; the old click log no longer counted.
  *
  * Run by calls-check.sh. Scratch database only.
  */
@@ -55,6 +69,10 @@ const THREECX_USERS = [
 ];
 const KEY = "stand-in-key";
 const seen = { tokens: 0, logWindows: [] as { from: number; to: number; skip: number }[], recordings: [] as string[], other: [] as string[] };
+type CcParticipant = { id: number; status: string; callid: number; party_caller_id: string; party_dn: string };
+const CC: Record<string, { devices: { device_id: string; user_agent: string }[]; participants: CcParticipant[] }> = {};
+let ccIds = 100;
+const ccSeen = { requests: [] as string[], makecalls: [] as { ext: string; device: string; destination: string; timeout: number }[], drops: [] as { ext: string; id: number }[] };
 const AUDIO = new Uint8Array([82, 73, 70, 70, 1, 2, 3, 4, 5, 6, 7, 8]); // "RIFF…"
 
 const threecx = Bun.serve({
@@ -95,6 +113,30 @@ const threecx = Bun.serve({
         return new Response(AUDIO.slice(a, b + 1), { status: 206, headers: { ...headers, "content-range": `bytes ${a}-${b}/${AUDIO.length}`, "content-length": String(b - a + 1) } });
       }
       return new Response(AUDIO, { headers: { ...headers, "content-length": String(AUDIO.length) } });
+    }
+    // Call Control (the Call button): each extension's signed-in apps and calls.
+    const cc = path.match(/^\/callcontrol\/([^/]+)(?:\/(devices\/([^/]+)\/makecall|makecall|participants\/(\d+)\/drop))?$/);
+    if (cc) {
+      const ext = cc[1]!;
+      ccSeen.requests.push(`${req.method} ${path}`);
+      const dn = CC[ext];
+      if (!dn) return new Response("no such dn", { status: 404 });
+      if (!cc[2] && req.method === "GET") return Response.json({ dn: ext, type: "Wextension", devices: dn.devices, participants: dn.participants });
+      if (req.method !== "POST") return new Response("no", { status: 405 });
+      if (cc[2]!.endsWith("makecall")) {
+        if (cc[3] && !dn.devices.some((d) => d.device_id === decodeURIComponent(cc[3]!))) return new Response("no device", { status: 404 });
+        const body = (await req.json()) as { destination: string; timeout: number };
+        const p = { id: ++ccIds, status: "Dialing", callid: ccIds + 5000, party_caller_id: body.destination, party_dn: "" };
+        dn.participants.push(p);
+        ccSeen.makecalls.push({ ext, device: cc[3] ? decodeURIComponent(cc[3]) : "", ...body });
+        return Response.json({ finalstatus: "Success", result: { id: p.id, callid: p.callid, status: p.status } });
+      }
+      const id = Number(cc[4]);
+      const at = dn.participants.findIndex((x) => x.id === id);
+      if (at < 0) return new Response("no participant", { status: 404 });
+      dn.participants.splice(at, 1);
+      ccSeen.drops.push({ ext, id });
+      return Response.json({ finalstatus: "Success" });
     }
     seen.other.push(path);
     return new Response("not here", { status: 404 });
@@ -500,6 +542,213 @@ disconnect();
 r = await call("POST", "/calls/log/test", "Admin");
 check("not connected: one failed step, saying what to set", r.body.data?.ok === false && r.body.data.steps.length === 1 && /THREECX_API_KEY/.test(r.body.data.steps[0].detail));
 connect();
+
+/* ── Case 6 ──────────────────────────────────────────────────────────────── */
+
+section("Case 6 — a lead's call counts from 3CX; manual writes ignored");
+const { Lead } = await import("../src/models/Lead.js");
+const counts = async (id: Types.ObjectId) => {
+  const l = await db.collection("leads").findOne({ _id: id });
+  return { total: l?.callCount, connected: l?.callConnected, notConnected: l?.callNotConnected, updatedAt: l?.updatedAt as Date | undefined };
+};
+check("the first runs counted every lead once (countsVersion 2)", (await sync.getCallSettings()).countsVersion === 2);
+s = await sync.syncCalls("check");
+let c1 = await counts(L1._id);
+check("Lina: 4 calls (A, C, J and Case 5's call), 3 connected, 1 not connected (C missed)", s.ok && c1.total === 4 && c1.connected === 3 && c1.notConnected === 1, { s, c1 });
+let c3 = await counts(L3._id);
+check("Rami: 2 calls, 1 connected (C2), 1 not connected (D not answered)", c3.total === 2 && c3.connected === 1 && c3.notConnected === 1, c3);
+const L4 = lead("Nadia None", "0549999999", ids.Sam!, alpha, new Date(now - 3 * D));
+await db.collection("leads").insertOne({ ...L4, callCount: 7, callNotConnected: 2 });
+const L5 = lead("Zara Zero", "0548888888", ids.Sam!, alpha, new Date(now - 3 * D));
+await db.collection("leads").insertOne({ ...L5, callCount: 0, callConnected: 0, callNotConnected: 0 });
+const L6 = lead("Hana Hand", "0547777777", ids.Tia!, alpha, new Date(now - 3 * D));
+await db.collection("leads").insertOne({ ...L6, callConnected: 3 });   // only callConnected typed
+await db.collection("leads").updateOne({ _id: L3._id }, { $set: { callCount: 99, callConnected: 99, callNotConnected: 99 } });
+await db.collection("app_settings").updateOne({ _id: "threecx_calls" as any }, { $set: { countsVersion: 0 } });
+s = await sync.syncCalls("check");
+c3 = await counts(L3._id);
+check("the first run after deploy counts every lead with 3CX calls again (Rami's hand-kept 99s → 2 / 1 / 1)", c3.total === 2 && c3.connected === 1 && c3.notConnected === 1 && (s.leadsRecounted ?? 0) >= 1, { c3, s });
+check("…and marks it done (countsVersion 2)", (await sync.getCallSettings()).countsVersion === 2);
+const c4 = await counts(L4._id);
+check("…a lead with hand-typed counts and no 3CX calls goes back to 0 / 0 / 0", c4.total === 0 && c4.connected === 0 && c4.notConnected === 0, c4);
+check("…without touching its updatedAt", c4.updatedAt?.getTime() === (L4.updatedAt as Date).getTime());
+const c6 = await counts(L6._id);
+check("…one with only callConnected typed: 0 too", c6.total === 0 && c6.connected === 0 && c6.notConnected === 0, c6);
+const c5 = await counts(L5._id);
+check("…a lead already at 0 is left alone", c5.total === 0 && c5.updatedAt?.getTime() === (L5.updatedAt as Date).getTime());
+await db.collection("leads").updateOne({ _id: L4._id }, { $set: { callCount: 5 } });
+await sync.syncCalls("check");
+check("…once only: after it, a run counts just the leads it touched (a later hand-typed 5 on a lead without calls stays)", (await counts(L4._id)).total === 5);
+await db.collection("leads").updateOne({ _id: L4._id }, { $set: { callCount: 0 } });
+const ramiUpdated = c3.updatedAt?.getTime();
+ROWS.push(row(now - 10 * 60_000, { call: "NEWR", SourceDn: "101", SourceDisplayName: "Sam S", DestinationDn: "10002", DestinationCallerId: "+971567778888", RingingDuration: "PT30S" }));
+s = await sync.syncCalls("check");
+c3 = await counts(L3._id);
+check("a new call with Rami (not answered): counted on the next run — 3 calls, 1 connected, 2 not connected", s.inserted === 1 && c3.total === 3 && c3.connected === 1 && c3.notConnected === 2, { s, c3 });
+check("…without touching the lead's updatedAt", c3.updatedAt?.getTime() === ramiUpdated);
+check("…and a run with nothing new changes no lead's counts", (await sync.syncCalls("check")).leadsRecounted === 0);
+// A call read again can move to another lead with that number: both leads are counted again.
+const dupBefore = { old: await counts(DUP_OLD._id), nw: await counts(DUP_NEW._id) };
+check("before: Dup Old has G (connected), Dup New has H (not answered)", dupBefore.old.total === 1 && dupBefore.old.connected === 1 && dupBefore.nw.total === 1 && dupBefore.nw.notConnected === 1, dupBefore);
+await db.collection("leads").updateOne({ _id: DUP_OLD._id }, { $set: { assignedTo: ids.Sam } });
+await db.collection("app_settings").updateOne({ _id: "threecx_calls" as any }, { $set: { syncedTo: new Date(now - 5 * D) } });
+s = await sync.syncCalls("check");
+const dupAfter = { old: await counts(DUP_OLD._id), nw: await counts(DUP_NEW._id) };
+check("Dup Old handed to Sam, the calls read again: H moves to Dup Old, G to Dup New — both counted again",
+  dupAfter.old.total === 1 && dupAfter.old.notConnected === 1 && dupAfter.old.connected === 0 && dupAfter.nw.total === 1 && dupAfter.nw.connected === 1 && dupAfter.nw.notConnected === 0, dupAfter);
+check("…the counts always equal the lead's calls in lead_calls",
+  (await Promise.all([L1, L2, L3, DUP_OLD, DUP_NEW].map(async (l) => (await counts(l._id)).total === (await LeadCall.countDocuments({ lead: l._id }))))).every(Boolean));
+
+r = await call("PATCH", `/leads/${L1._id}/call-count`, "Sam", { action: "increment" });
+c1 = await counts(L1._id);
+check("PATCH call-count (an old web app): 200, nothing changed, says the counts are 3CX's", r.status === 200 && r.body.data?.fromThreecx === true && r.body.data?.callCount === 4 && c1.total === 4, r.body);
+r = await call("PATCH", `/leads/${L1._id}/call-not-connected`, "Sam", { action: "decrement" });
+check("PATCH call-not-connected: nothing changed either", r.status === 200 && (await counts(L1._id)).notConnected === 1, r.body);
+r = await call("PUT", `/leads/${L1._id}`, "Admin", { hasWhatsapp: true, callCount: 50, callConnected: 40, callNotConnected: 10 });
+c1 = await counts(L1._id);
+check("the lead form (PUT) with counts in it: saved, counts ignored", r.status === 200 && c1.total === 4 && c1.connected === 3 && c1.notConnected === 1, { status: r.status, c1 });
+check("the lead's page shows the three counts", (await call("GET", `/leads/${L1._id}`, "Admin")).body.data?.callConnected === 3);
+
+/* ── Case 7 ──────────────────────────────────────────────────────────────── */
+
+section("Case 7 — Call from the CRM through 3CX: makecall, the call window, hang up");
+const errCode = (x: { body: Body }) => (x.body as { errors?: { code?: string } }).errors?.code;
+r = await call("GET", "/calls/click-to-call", "Sam");
+check("Sam (ext 101): 3CX calls on, with the web client's address", r.status === 200 && r.body.data?.enabled === true && r.body.data.extension === "101" && r.body.data.webClientUrl === THREECX, r.body.data);
+r = await call("GET", "/calls/click-to-call", "Tom");
+check("Tom (no extension): off — Phone call only", r.body.data?.enabled === false && r.body.data.extension === "" && r.body.data.connected === true, r.body.data);
+check("no sign-in: 401", (await call("GET", "/calls/click-to-call")).status === 401);
+ccSeen.requests = [];
+r = await call("POST", "/calls/3cx/call", "Sam", { leadId: String(L1._id), dial: "050 123 4567" });
+check("3CX has no extension 101: 502, says so", r.status === 502 && /no extension 101/.test(r.body.message ?? ""), r.body);
+CC["101"] = { devices: [], participants: [] };
+r = await call("POST", "/calls/3cx/call", "Sam", { leadId: String(L1._id), dial: "050 123 4567" });
+check("nothing signed in on 101: 409 no_device — 'open your 3CX app or web client'", r.status === 409 && errCode(r) === "no_device" && /open your 3CX app or web client/.test(r.body.message ?? ""), r.body);
+check("…and no call was placed", ccSeen.makecalls.length === 0);
+CC["101"].devices.push({ device_id: "d-phone", user_agent: "3CX Android 18" });
+r = await call("POST", "/calls/3cx/call", "Sam", { leadId: String(L1._id), dial: "050 123 4567" });
+check("only the phone app signed in: 409 no_device — 'open your 3CX app or web client', nothing placed",
+  r.status === 409 && errCode(r) === "no_device" && /open your 3CX app or web client/.test(r.body.message ?? "") && ccSeen.makecalls.length === 0, r.body);
+CC["101"].devices.push({ device_id: "d-iphone", user_agent: "3CX iOS (iPhone)" });
+check("…the iPhone app too: still 409 no_device", errCode(await call("POST", "/calls/3cx/call", "Sam", { leadId: String(L1._id) })) === "no_device" && ccSeen.makecalls.length === 0);
+CC["101"].devices.push({ device_id: "d-desk", user_agent: "3CX Desktop App (Windows)" });
+r = await call("POST", "/calls/3cx/call", "Sam", { leadId: String(L1._id), dial: "050 123 4567" });
+check("the desktop app signed in: the call goes there", r.status === 200 && ccSeen.makecalls.at(-1)?.device === "d-desk", { body: r.body, mc: ccSeen.makecalls });
+await call("POST", "/calls/3cx/hang-up", "Sam", { participantId: r.body.data?.participantId });
+ccSeen.makecalls = [];
+ccSeen.drops = [];
+CC["101"].devices.push({ device_id: "d-web", user_agent: "3CX WebClient (Chrome)" });
+r = await call("POST", "/calls/3cx/call", "Sam", { leadId: String(L1._id), dial: "050 123 4567" });
+const placed = r.body.data;
+check("Sam calls Lina (his lead): placed on his web client, to her number as typed (digits only), 30s timeout",
+  r.status === 200 && ccSeen.makecalls.length === 1 && ccSeen.makecalls[0]!.ext === "101" && ccSeen.makecalls[0]!.device === "d-web" && ccSeen.makecalls[0]!.destination === "0501234567" && ccSeen.makecalls[0]!.timeout === 30, { body: r.body, mc: ccSeen.makecalls });
+check("…returns the call and participant ids for the call window", !!placed?.callId && !!placed?.participantId && placed.extension === "101" && /WebClient/.test(placed.device), placed);
+r = await call("POST", "/calls/3cx/call", "Sam", { leadId: String(L2._id) });
+check("Sam calls Omar (Una's lead, not in his list): 403, nothing placed", r.status === 403 && errCode(r) === "not_yours" && ccSeen.makecalls.length === 1, r.body);
+r = await call("POST", "/calls/3cx/call", "Sam", { leadId: String(L1._id), dial: "0509999999" });
+check("a number that is not the lead's: 400", r.status === 400 && ccSeen.makecalls.length === 1, r.body);
+r = await call("POST", "/calls/3cx/call", "Sam", { leadId: String(new Types.ObjectId()) });
+check("an unknown lead: 404; no lead id: 400", r.status === 404 && (await call("POST", "/calls/3cx/call", "Sam", {})).status === 400);
+r = await call("POST", "/calls/3cx/call", "Tom", { leadId: String(L3._id) });
+check("Tom (team leader, Rami is in his team) but no extension: 409 no_extension", r.status === 409 && errCode(r) === "no_extension", r.body);
+r = await call("POST", "/calls/3cx/call", "Rex", { leadId: String(L1._id) });
+check("a role without Edit on Leads: 403", r.status === 403);
+check("…Sam's own extension is the only one 3CX was asked about", ccSeen.requests.every((x) => /^(GET|POST) \/callcontrol\/101(\/|$)/.test(x)), ccSeen.requests);
+
+r = await call("GET", `/calls/3cx/state?callId=${placed?.callId}&dial=0501234567`, "Sam");
+check("the call window: 3CX says Dialing → calling", r.status === 200 && r.body.data?.participant?.stage === "calling" && r.body.data.participant.id === placed?.participantId, r.body.data);
+CC["101"].participants[0]!.status = "Connected";
+r = await call("GET", `/calls/3cx/state?callId=${placed?.callId}`, "Sam");
+check("…Connected → connected", r.body.data?.participant?.stage === "connected", r.body.data);
+CC["102"] = { devices: [{ device_id: "t-web", user_agent: "3CX WebClient" }], participants: [{ id: 900, status: "Connected", callid: 9900, party_caller_id: "0567778888", party_dn: "" }] };
+ccSeen.requests = [];
+r = await call("GET", "/calls/3cx/state?callId=9900", "Sam");
+check("Sam asking for Tia's call id sees only his own extension's call, never hers", r.body.data?.participant?.id !== 900 && ccSeen.requests.every((x) => x.startsWith("GET /callcontrol/101")), { d: r.body.data, req: ccSeen.requests });
+r = await call("POST", "/calls/3cx/hang-up", "Sam", { participantId: 900 });
+check("Sam hanging up Tia's call: 404, and 3CX is asked to drop nothing", r.status === 404 && ccSeen.drops.length === 0 && CC["102"].participants.length === 1, r.body);
+check("…no participant id: 400", (await call("POST", "/calls/3cx/hang-up", "Sam", {})).status === 400);
+r = await call("POST", "/calls/3cx/hang-up", "Sam", { participantId: placed?.participantId });
+check("Sam hangs up his own call: dropped on his extension", r.status === 200 && ccSeen.drops.length === 1 && ccSeen.drops[0]!.ext === "101" && ccSeen.drops[0]!.id === placed?.participantId, r.body);
+r = await call("GET", `/calls/3cx/state?callId=${placed?.callId}`, "Sam");
+check("…the call window then sees it ended (no participant)", r.status === 200 && r.body.data?.participant === null, r.body.data);
+r = await call("GET", "/calls/3cx/state", "Tia");
+check("Tia's own window sees her call", r.body.data?.participant?.id === 900 && r.body.data.extension === "102");
+check("state / hang-up without an extension: 409", (await call("GET", "/calls/3cx/state", "Tom")).status === 409 && (await call("POST", "/calls/3cx/hang-up", "Tom", { participantId: 900 })).status === 409);
+disconnect();
+r = await call("POST", "/calls/3cx/call", "Sam", { leadId: String(L1._id) });
+check("3CX not connected: 409 not_connected; click-to-call off", r.status === 409 && errCode(r) === "not_connected" && (await call("GET", "/calls/click-to-call", "Sam")).body.data?.enabled === false, r.body);
+check("…state 409 too", (await call("GET", "/calls/3cx/state", "Sam")).status === 409);
+connect();
+
+/* ── Case 8 ──────────────────────────────────────────────────────────────── */
+
+section("Case 8 — after the call: the popup's status paths (the CRM's own)");
+await db.collection("roles").updateOne({ _id: salesRole }, { $set: { "permissions.reminders": { view: true, create: true, edit: true, delete: true, approve: false, export: false } } });
+const remindAt = new Date(Date.now() + 2 * D).toISOString();
+r = await call("PATCH", `/leads/${L1._id}/status`, "Sam", { status: "followup" });
+const r2 = await call("POST", `/leads/${L1._id}/reminders`, "Sam", { title: "Follow-up call", note: "Wants the weekend batch", remindAt });
+let doc = await Lead.findById(L1._id).lean();
+check("follow-up: status Follow Up and the reminder with its date and time saved",
+  r.status === 200 && r2.status === 201 && doc?.status === "followup" && doc.reminders.some((x) => new Date(x.remindAt).toISOString() === remindAt && x.title === "Follow-up call"), { s1: r.status, s2: r2.body });
+check("…recorded in the lead's history (status_changed)", doc!.activityLogs.some((a) => a.action === "status_changed" && (a.changes as any)?.status?.to === "followup"));
+r = await call("POST", `/leads/${L1._id}/reminders`, "Sam", { remindAt: new Date(Date.now() - 2 * D).toISOString() });
+check("…a follow-up time in the past is refused (400)", r.status === 400);
+r = await call("POST", `/leads/${L1._id}/notes`, "Sam", { content: "Call (3CX) — connected · Follow Up, 14 Oct 3:00 PM\nWants the weekend batch" });
+doc = await Lead.findById(L1._id).lean();
+check("the call's notes: a lead note + a note_added activity", r.status === 201 && doc!.notes.some((n) => /Call \(3CX\) — connected/.test(n.content)) && doc!.activityLogs.some((a) => a.action === "note_added"));
+r = await call("PATCH", `/leads/${L3._id}/status`, "Tia", { status: "lost" });
+const lostNote = await call("POST", `/leads/${L3._id}/notes`, "Tia", { content: "Call (3CX) — connected · Lost — reason: Too expensive" });
+doc = await Lead.findById(L3._id).lean();
+check("lost: status Lost, the reason kept in the call's note", r.status === 200 && lostNote.status === 201 && doc?.status === "lost" && doc.notes.some((n) => /reason: Too expensive/.test(n.content)));
+for (const st of ["callback", "not_connected", "cnc", "pending_response", "mia"]) {
+  r = await call("PATCH", `/leads/${L3._id}/status`, "Tia", { status: st });
+  if (r.status !== 200) check(`status ${st}`, false, r.body);
+}
+check("callback, not connected, CNC, pending response, MIA: the same status path", (await Lead.findById(L3._id).lean())?.status === "mia");
+r = await call("GET", `/students/by-lead/${L1._id}`, "Admin");
+check("closing: the enrolment dialog first loads the lead's enrolment (none yet)", r.status === 200 && (r.body.data === null || r.body.data === undefined), r.body);
+check("…the lead stays as it was until an enrolment is saved (the web holds 'closed')", (await Lead.findById(L1._id).lean())?.status === "followup");
+r = await call("PATCH", `/leads/${L1._id}/status`, "Sam", { status: "closed" });
+check("…then the status path closes it", r.status === 200 && (await Lead.findById(L1._id).lean())?.status === "closed");
+r = await call("PATCH", `/leads/${L1._id}/status`, "Sam", { status: "won" });
+check("an unknown status: 400", r.status === 400);
+
+/* ── Case 9 ──────────────────────────────────────────────────────────────── */
+
+section("Case 9 — the Leaderboard counts 3CX calls (lead_calls), by the call's person, on Draw's calendar");
+const lc = (at: string, user: Types.ObjectId | null, status: "answered" | "missed" | "no_answer", talk: number, ext = "") => ({
+  key: `lb:${at}:${String(user)}:${talk}:${status}`, startedAt: new Date(at), direction: "out", status, answered: status === "answered",
+  talkSeconds: talk, ringSeconds: 5, number: "0501234567", numberKey: "501234567", extension: ext, agentName: "", recordingIds: [],
+  recordingUrl: "", reason: "", rows: 1, lead: L1._id, leadName: "Lina Lead", user, userName: "", syncedAt: new Date(),
+});
+await LeadCall.insertMany([
+  lc("2026-05-31T20:30:00Z", ids.Sam!, "answered", 60),  // 1 June 00:30 in Dubai — June
+  lc("2026-06-10T08:00:00Z", ids.Sam!, "answered", 30),
+  lc("2026-06-11T08:00:00Z", ids.Sam!, "no_answer", 0),
+  lc("2026-06-30T21:00:00Z", ids.Sam!, "answered", 999), // 1 July 01:00 in Dubai — not June
+  lc("2026-05-31T19:00:00Z", ids.Sam!, "answered", 999), // 31 May 23:00 in Dubai — not June
+  lc("2026-06-12T08:00:00Z", ids.Tia!, "answered", 200),
+  lc("2026-06-13T08:00:00Z", ids.Tia!, "answered", 10),
+  lc("2026-06-14T08:00:00Z", ids.Una!, "missed", 0),
+  lc("2026-06-15T08:00:00Z", null, "answered", 500, "199"),   // nobody's extension: nobody's call
+]);
+await CallLog.create({ phoneNumber: "0501234567", callType: "Outbound", callDirection: "outbound", callDate: new Date("2026-06-20T08:00:00Z"), initiatedBy: ids.Tom, source: "click_to_call" });
+const board = async (qs: string) => (await call("GET", `/leaderboard?month=2026-06${qs}`, "Admin")).body.data;
+let lb = await board("&rankBy=calls");
+const rowOf = (b: any, n: string) => b?.rows?.find((x: any) => x.userId === String(ids[n]));
+check("June by calls: Sam 3 calls (2 connected, 90s talk) — the 1 June 00:30 Dubai call in, 31 May 23:00 and 1 July 01:00 out",
+  rowOf(lb, "Sam")?.calls === 3 && rowOf(lb, "Sam")?.connected === 2 && rowOf(lb, "Sam")?.talkSeconds === 90, rowOf(lb, "Sam"));
+check("…Tia 2 calls, 2 connected, 210s; Una 1 call, 0 connected", rowOf(lb, "Tia")?.calls === 2 && rowOf(lb, "Tia")?.talkSeconds === 210 && rowOf(lb, "Una")?.calls === 1 && rowOf(lb, "Una")?.connected === 0);
+check("…ranked by calls: Sam 1st, Tia 2nd, Una 3rd", lb?.rankBy === "calls" && rowOf(lb, "Sam")?.rank === 1 && rowOf(lb, "Tia")?.rank === 2 && rowOf(lb, "Una")?.rank === 3, lb?.rows?.slice(0, 4));
+check("…the old click-to-call log no longer counts (Tom 0 calls)", rowOf(lb, "Tom")?.calls === 0);
+check("…a call on nobody's extension is nobody's; Super Admin not on the board", !lb.rows.some((x: any) => x.talkSeconds === 500) && !rowOf(lb, "Admin"));
+lb = await board("&rankBy=talk");
+check("by talk time: Tia 1st (210s), Sam 2nd (90s)", lb?.rankBy === "talk" && rowOf(lb, "Tia")?.rank === 1 && rowOf(lb, "Sam")?.rank === 2);
+lb = await board("");
+check("by default still revenue, then closings, follow-ups, calls (nobody earned: Sam's 3 calls first)", lb?.rankBy === "revenue" && rowOf(lb, "Sam")?.rank === 1 && rowOf(lb, "Tia")?.rank === 2);
+check("rankBy=bogus: 400", (await call("GET", "/leaderboard?rankBy=bogus", "Admin")).status === 400);
+lb = (await call("GET", "/leaderboard", "Admin")).body.data;
+check("no month: this month on Draw's calendar", lb?.month === drawToday().slice(0, 7));
 
 check("the stand-in 3CX was asked nothing it doesn't serve", seen.other.length === 0, seen.other);
 

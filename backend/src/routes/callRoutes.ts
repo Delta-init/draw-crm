@@ -23,6 +23,7 @@ import {
   syncCallsNow,
   testThreecx,
 } from "../controllers/leadCallController.js";
+import { getClickToCall, startThreecxCall, getMyCallState, hangUpMyCall } from "../controllers/clickToCallController.js";
 
 const router = Router();
 
@@ -43,6 +44,13 @@ router.post("/log/sync",                   authenticate, requireSuperAdmin, sync
 router.post("/log/test",                   authenticate, requireSuperAdmin, testThreecx);
 router.get("/log/lead/:leadId",            authenticate, checkPermission("leads", "view"), getLeadCallLog);
 router.get("/log/:id/recording-link",      authenticate, getRecordingLink);
+
+// ── The Call button through 3CX (2026-10-12): rings the caller's own extension, then the lead; the call window
+//    follows it and can hang up — always the caller's own extension, never another's.
+router.get("/click-to-call",               authenticate, getClickToCall);
+router.post("/3cx/call",                   authenticate, checkPermission("leads", "edit"), startThreecxCall);
+router.get("/3cx/state",                   authenticate, getMyCallState);
+router.post("/3cx/hang-up",                authenticate, hangUpMyCall);
 
 // ── Authenticated routes — static BEFORE parameterised /:callId ──────────────
 router.post("/click",           authenticate, logClickToCall);

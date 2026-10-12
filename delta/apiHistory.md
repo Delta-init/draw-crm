@@ -1430,3 +1430,16 @@ beside `paymentMethod` / `paymentReceipt` (the first payment's). Each new paymen
 | `testThreecx()` | — | `POST /calls/log/test` | Super Admin's Test connection (2026-10-12), as in Tetra Commission: `{ ok, steps, sample, parsed }`; `ThreecxTestDialog` |
 
 **Types:** `ThreecxCall`, `CallStats`, `CallPersonRow`, `ThreecxStatus`, `CallLogFilters`, `CallLogResponse`.
+
+## Call from the CRM through 3CX (added 2026-10-12)
+
+| Hook / call | Query key | Endpoint | Notes |
+|---|---|---|---|
+| `useClickToCall()` | `["calls", "click-to-call"]` | `GET /calls/click-to-call` | `{ enabled, connected, extension, webClientUrl }` |
+| (CallFlow) | — | `POST /calls/3cx/call` | `{ leadId, dial }` → `PlacedCall`; refusals carry `errors.code` |
+| (CallFlow) | — | `GET /calls/3cx/state?callId&dial` | `MyCallState`, every 2 s while the call window is open |
+| (CallFlow) | — | `POST /calls/3cx/hang-up` | `{ participantId }` |
+| (CallFlow) | — | `POST /leads/:id/reminders`, `PATCH /leads/:id/status`, `POST /leads/:id/notes` | "How did the call go?" |
+| `useLeaderboard(month?, rankBy?)` | `["leaderboard", month, rankBy]` | `GET /leaderboard?rankBy=` | rows add `connected`, `talkSeconds` |
+
+Removed: `useUpdateCallNotConnected`, `useUpdateCallCount` (the counts come from 3CX). `Lead.callConnected` added.

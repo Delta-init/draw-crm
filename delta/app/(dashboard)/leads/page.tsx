@@ -82,6 +82,7 @@ const ALL_COLUMNS: ColumnDef[] = [
   { id: "reporter",             label: "Reporter",           defaultVisible: false },
   { id: "created",              label: "Created",            defaultVisible: false },
   { id: "lastFollowup",         label: "Last Followup",      defaultVisible: true  },
+  { id: "calls",                label: "Calls (3CX)",        defaultVisible: true  },
   { id: "demo",                 label: "Demo",               defaultVisible: false },
   { id: "firstContactTime",     label: "First Contact",      defaultVisible: false },
   { id: "initialLeadResponse",  label: "Response",           defaultVisible: true  },
@@ -94,6 +95,22 @@ const DEFAULT_VISIBLE = new Set(ALL_COLUMNS.filter((c) => c.defaultVisible).map(
 const LEADS_VIEW_KEY = "crm_leads_view";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** A lead's calls through 3CX (counted from 3CX's calls, 2026-10-12): calls · connected · not connected. */
+function CallCounts({ lead }: { lead: Lead }) {
+  const total = lead.callCount ?? 0;
+  if (!total) return <span className="text-xs text-muted-foreground/40">—</span>;
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums"
+      title={`${total} calls through 3CX — ${lead.callConnected ?? 0} connected, ${lead.callNotConnected ?? 0} not connected`}
+    >
+      <span className="text-sky-400">{total}</span>
+      <span className="text-emerald-400">✓{lead.callConnected ?? 0}</span>
+      <span className="text-orange-400">✗{lead.callNotConnected ?? 0}</span>
+    </span>
+  );
+}
 
 function StatusBadge({ status }: { status: LeadStatus }) {
   return (
@@ -261,6 +278,7 @@ function LeadsPageContent() {
       reporter:             { label: "Reporter",      cls: "px-4 py-3 text-left hidden xl:table-cell" },
       created:              { label: "Created",       cls: "px-4 py-3 text-left hidden xl:table-cell" },
       lastFollowup:         { label: "Last Followup", cls: "px-4 py-3 text-left hidden lg:table-cell" },
+      calls:                { label: "Calls",         cls: "px-4 py-3 text-left hidden lg:table-cell" },
       demo:                 { label: "Demo",          cls: "px-4 py-3 text-left hidden lg:table-cell" },
       firstContactTime:     { label: "First Contact", cls: "px-4 py-3 text-left hidden xl:table-cell" },
       initialLeadResponse:  { label: "Response",      cls: "px-4 py-3 text-left hidden lg:table-cell" },
@@ -377,6 +395,11 @@ function LeadsPageContent() {
           {lead.lastFollowupDate
             ? <span className="text-xs text-muted-foreground">{new Date(lead.lastFollowupDate).toLocaleDateString("en-AE", { timeZone: "Asia/Dubai", day: "2-digit", month: "short", year: "numeric" })}</span>
             : <span className="text-xs text-muted-foreground/40">—</span>}
+        </td>
+      );
+      case "calls": return (
+        <td key="calls" className="px-4 py-4 hidden lg:table-cell">
+          <CallCounts lead={lead} />
         </td>
       );
       case "demo": return (
@@ -1307,6 +1330,7 @@ function LeadsPageContent() {
                                     Followup: {new Date(lead.lastFollowupDate).toLocaleDateString("en-AE", { timeZone: "Asia/Dubai", day: "2-digit", month: "short", year: "numeric" })}
                                   </span>
                                 )}
+                                {(lead.callCount ?? 0) > 0 && <CallCounts lead={lead} />}
                                 {lead.demoScheduled && (
                                   <span className="inline-flex items-center rounded-full bg-violet-500/10 px-2 py-0.5 text-[11px] font-medium text-violet-400">Demo Scheduled</span>
                                 )}

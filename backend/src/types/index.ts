@@ -475,6 +475,7 @@ export interface ILead extends Document {
   campaign?: string;
   callNotConnected: number;
   callCount: number;
+  callConnected: number;
   firstContactTime?: Date | null;
   initialLeadResponse?: InitialLeadResponse | null;
   primaryConcern?: PrimaryConcern | null;

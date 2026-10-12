@@ -19,7 +19,8 @@ interface CallsPanelProps {
 
 /**
  * A lead's calls through 3CX (2026-10-12): when, in or out, connected or missed, who took it, how long, and the
- * recording — synced from 3CX every minute. Only 3CX's calls; the Call button stays as it was.
+ * recording — synced from 3CX every minute. Only 3CX's calls. The Call button opens the call flow (3CX or phone,
+ * then "How did the call go?" — components/calls/CallFlow.tsx).
  */
 export function CallsPanel({ leadId, phone, leadName }: CallsPanelProps) {
   const { data, isLoading, error, refetch, isFetching } = useLeadCallLog(leadId);

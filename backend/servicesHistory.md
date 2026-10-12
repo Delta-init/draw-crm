@@ -724,3 +724,11 @@ This file documents every service in `backend/src/services/`. Read this before w
 - `leadCallService.list(viewer, filters)` — a page of calls + totals + per-person rows + period + 3CX status.
 - `leadCallService.forLead(viewer, leadId)` — a lead's calls (≤ 500) + totals. `canSeeCall(viewer, call)`, `scopeOf(viewer)`.
 - `lib/threecx.ts` — `threecxConfigured`, `threecxFetch`, `threecxJson` (OAuth client credentials, token cached an hour).
+
+## Call from the CRM / counts from 3CX (added 2026-10-12)
+
+- `recountLeadCalls(leadIds?)` (callSyncService) — a lead's `callCount` / `callConnected` / `callNotConnected` from `lead_calls`; no ids = every lead with calls; returns leads changed. `SyncSummary.leadsRecounted`.
+- `canWorkLead(viewer, leadId)` (leadCallService) — the lead is in the viewer's lead list (who may call it).
+- `clickToCallController`: `getClickToCall`, `startThreecxCall`, `getMyCallState`, `hangUpMyCall`, `pickDevice`, `stageOf`.
+- `lib/threecx.ts` — `threecxPost(path, payload)`; `threecxFetch` takes `method` / `body`.
+- `LeaderboardService.getLeaderboard(month?, rankBy = "revenue")` — rows add `connected`, `talkSeconds`; calls from `lead_calls`; `isRankBy`, `RANK_BY`.
