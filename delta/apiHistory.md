@@ -1427,5 +1427,6 @@ beside `paymentMethod` / `paymentReceipt` (the first payment's). Each new paymen
 | `useLeadCallLog(leadId)` | `["calls", "log", "lead", id]` | `GET /calls/log/lead/:leadId` | A lead's calls + stats |
 | `getRecordingLink(callId, i)` | — | `GET /calls/log/:id/recording-link` | 10-minute `/api/v1/calls/log/recording?…` |
 | `useSyncCallsNow()` | — | `POST /calls/log/sync` | Super Admin |
+| `testThreecx()` | — | `POST /calls/log/test` | Super Admin's Test connection (2026-10-12), as in Tetra Commission: `{ ok, steps, sample, parsed }`; `ThreecxTestDialog` |
 
 **Types:** `ThreecxCall`, `CallStats`, `CallPersonRow`, `ThreecxStatus`, `CallLogFilters`, `CallLogResponse`.

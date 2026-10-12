@@ -21,6 +21,7 @@ import {
   getRecordingLink,
   streamRecording,
   syncCallsNow,
+  testThreecx,
 } from "../controllers/leadCallController.js";
 
 const router = Router();
@@ -39,6 +40,7 @@ router.get("/3cx-template",    get3cxTemplate);
 router.get("/log/recording",               streamRecording);
 router.get("/log",                         authenticate, checkPermission("calls", "view"), getCallLog);
 router.post("/log/sync",                   authenticate, requireSuperAdmin, syncCallsNow);
+router.post("/log/test",                   authenticate, requireSuperAdmin, testThreecx);
 router.get("/log/lead/:leadId",            authenticate, checkPermission("leads", "view"), getLeadCallLog);
 router.get("/log/:id/recording-link",      authenticate, getRecordingLink);
 

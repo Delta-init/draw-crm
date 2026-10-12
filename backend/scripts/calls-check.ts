@@ -20,7 +20,10 @@
  *     older 3CX routes still answering;
  *   - Case 4: recordings — a link only for whoever may see the call, played
  *     through the backend (ranges pass through); expired, forged and altered
- *     links refused; 3CX not connected; the lock.
+ *     links refused; 3CX not connected; the lock;
+ *   - Case 5: Test connection (as in Tetra Commission) — Super Admin only;
+ *     every step, the newest rows of the last 24 hours, a recording opened,
+ *     never the key; 3CX unreachable; not connected.
  *
  * Run by calls-check.sh. Scratch database only.
  */
@@ -74,8 +77,10 @@ const threecx = Bun.serve({
       seen.logWindows.push({ from, to, skip });
       const inWindow = ROWS.filter((r) => { const t = Date.parse(String(r.StartTime)); return t >= from && t < to; })
         .sort((a, b) => String(a.StartTime).localeCompare(String(b.StartTime)));
+      if (/StartTime desc/.test(url.searchParams.get("$orderby") ?? "")) inWindow.reverse();
       return Response.json({ value: inWindow.slice(skip, skip + top) });
     }
+    if (path === "/xapi/v1/Defs") return Response.json({ value: [] }, { headers: { "x-3cx-version": "20.0.1" } });
     if (path.startsWith("/xapi/v1/Users")) {
       const skip = Number(url.searchParams.get("$skip") ?? 0), top = Number(url.searchParams.get("$top") ?? 100);
       return Response.json({ value: THREECX_USERS.slice(skip, skip + top) });
@@ -470,6 +475,32 @@ await sync.releaseLock();
 const both = await Promise.all([sync.syncCalls("one"), sync.syncCalls("two")]);
 check("two syncs at once: one runs, the other is skipped", both.filter((x) => x.ok).length === 1 && both.filter((x) => x.skipped === "A sync is already running").length === 1, both);
 check("…and still nothing doubled", (await LeadCall.countDocuments()) === total1 + 1);
+section("Case 5 — Test connection, as in Tetra Commission");
+// Half an hour ago: Sam rings Lina, answered, recorded — and 250 calls to nobody's numbers before it, more than the test reads.
+for (let k = 0; k < 250; k++) ROWS.push(row(now - 20 * H + k * 60_000, { SourceDn: "101", DestinationDn: "10002", DestinationCallerId: `+97155${String(1000000 + k)}`, Answered: true, TalkingDuration: "PT1S" }));
+ROWS.push(row(now - 30 * 60_000, { call: "TEST", SourceDn: "101", SourceDisplayName: "Sam S", DestinationDn: "10002", DestinationCallerId: "+971501234567", Answered: true, TalkingDuration: "PT40S", SrcRecId: 21 }));
+r = await call("POST", "/calls/log/test", "Sam");
+check("Super Admin only (403 for Sam)", r.status === 403);
+r = await call("POST", "/calls/log/test", "Admin");
+const t = r.body.data;
+check("every step, in order, all passed", r.status === 200 && t?.ok === true
+  && (t.steps ?? []).map((x: { name: string }) => x.name).join(",") === "Settings,Sign in,Extensions,Call log,Recordings", t?.steps);
+check("…settings show the address and client, never the key", t?.steps?.[0]?.detail?.includes(THREECX) && t.steps[0].detail.includes("crm-check") && !JSON.stringify(r.body).includes(KEY));
+check("…signed in, with 3CX's version", /Connected — 3CX 20\.0\.1/.test(t?.steps?.[1]?.detail ?? ""), t?.steps?.[1]);
+check("…3CX's users matched by email", /3CX users; \d+ matched to CRM users by email/.test(t?.steps?.[2]?.detail ?? ""), t?.steps?.[2]);
+check("…the newest 200 rows of the last 24 hours, with Sam's call to Lina in them", /200 rows in the last 24 hours/.test(t?.steps?.[3]?.detail ?? "")
+  && (t.parsed ?? []).some((c: { lead: string | null }) => c.lead === "Lina Lead"), t?.steps?.[3]);
+check("…its recording opened (asked of 3CX with a range)", /A recording opened/.test(t?.steps?.[4]?.detail ?? "") && seen.recordings.at(-1) === "21", t?.steps?.[4]);
+check("…and a few rows as 3CX sends them", Array.isArray(t?.sample) && t.sample.length === 3);
+process.env.THREECX_URL = "http://127.0.0.1:9";
+r = await call("POST", "/calls/log/test", "Admin");
+check("3CX unreachable: it stops at Sign in and says why", r.status === 200 && r.body.data?.ok === false && r.body.data.steps.at(-1)?.name === "Sign in"
+  && /reach 3CX|did not answer/.test(r.body.data.steps.at(-1)?.detail ?? ""), r.body.data?.steps);
+disconnect();
+r = await call("POST", "/calls/log/test", "Admin");
+check("not connected: one failed step, saying what to set", r.body.data?.ok === false && r.body.data.steps.length === 1 && /THREECX_API_KEY/.test(r.body.data.steps[0].detail));
+connect();
+
 check("the stand-in 3CX was asked nothing it doesn't serve", seen.other.length === 0, seen.other);
 
 /* ── Done ────────────────────────────────────────────────────────────────── */

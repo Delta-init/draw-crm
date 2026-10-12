@@ -737,4 +737,4 @@ lead name / number filters; sort by date, talk or ring; pages of 50; a CSV; and 
 page lists its calls the same way. A note says when it last synced, or that 3CX is not connected. Each person sees their
 own calls (and their leads'), a team leader their team's, the Super Admin / Reporter / Sales Manager everyone's.
 
-**API**: `GET /calls/log`, `GET /calls/log/lead/:leadId`, `GET /calls/log/:id/recording-link`, `POST /calls/log/sync`.
+**API**: `GET /calls/log`, `GET /calls/log/lead/:leadId`, `GET /calls/log/:id/recording-link`, `POST /calls/log/sync`, `POST /calls/log/test` (Super Admin's Test connection, 2026-10-12 — settings, sign in, extensions, the newest 200 rows of the last 24 hours, one recording; as in Tetra Commission).

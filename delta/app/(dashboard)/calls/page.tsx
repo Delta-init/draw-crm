@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   ArrowDown, ArrowUp, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, Loader2, PhoneCall, PhoneIncoming,
-  PhoneMissed, PhoneOff, PhoneOutgoing, RefreshCw, Search, Timer, Users, X,
+  PhoneMissed, PhoneOff, PhoneOutgoing, PlugZap, RefreshCw, Search, Timer, Users, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import {
 import {
   CallPerson, CallResult, RecordingPlayer, SyncNote, RESULTS, fmtClockDuration, fmtTalkTotal, fmtWhen,
 } from "@/components/calls/callUi";
+import { ThreecxTestDialog } from "@/components/calls/ThreecxTestDialog";
 
 /**
  * Calls (2026-10-12) — every call with a lead through 3CX, synced from 3CX's call log every minute: in or out,
@@ -98,6 +99,7 @@ export default function CallsPage() {
   };
   const { data, isLoading, isFetching, error, refetch } = useCallLog(filters);
   const sync = useSyncCallsNow();
+  const [testing, setTesting] = useState(false);
 
   const calls = data?.calls ?? [];
   const stats = data?.stats;
@@ -176,10 +178,16 @@ export default function CallsPage() {
           </p>
           <div className="mt-2"><SyncNote threecx={data?.threecx} /></div>
         </div>
-        <div className="flex items-center gap-2 self-start">
+        <div className="flex flex-wrap items-center gap-2 self-start">
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
             <RefreshCw className={cn("mr-2 h-3.5 w-3.5", isFetching && "animate-spin")} /> Refresh
           </Button>
+          {/* Super Admin, as Sync now: the connection step by step (2026-10-12). */}
+          {data?.canSync && (
+            <Button variant="outline" size="sm" onClick={() => setTesting(true)}>
+              <PlugZap className="mr-2 h-3.5 w-3.5" /> Test connection
+            </Button>
+          )}
           {data?.canSync && (
             <Button size="sm" onClick={syncNow} disabled={sync.isPending}>
               {sync.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <PhoneCall className="mr-2 h-3.5 w-3.5" />} Sync now
@@ -423,6 +431,8 @@ export default function CallsPage() {
           )}
         </CardContent>
       </Card>
+
+      <ThreecxTestDialog open={testing} onClose={() => setTesting(false)} />
     </div>
   );
 }
