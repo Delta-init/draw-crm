@@ -1,6 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import type { IStudent } from "../types/index.js";
-import { ACADEMIES, PAYMENT_ORIGINAL_CURRENCIES } from "../types/index.js";
+import { ACADEMIES, ENROLMENT_PAYMENT_METHODS, PAYMENT_ORIGINAL_CURRENCIES } from "../types/index.js";
 
 const studentSchema = new Schema<IStudent>(
   {
@@ -62,7 +62,7 @@ const studentSchema = new Schema<IStudent>(
     language: { type: String, enum: ["English", "Malayalam", "Hindi/Urdu", "Tamil"] },
     paymentMethod: {
       type: String,
-      enum: ["cash", "bank_transfer", "cheque", "card", "easebuzz_emi", "tabby", "tamara", "billexpro"],
+      enum: [...ENROLMENT_PAYMENT_METHODS],
     },
     /**
      * Proof the money was taken, uploaded at the close and required there.
@@ -89,7 +89,7 @@ const studentSchema = new Schema<IStudent>(
       type: [
         new Schema(
           {
-            method: { type: String, enum: ["cash", "bank_transfer", "cheque", "card", "easebuzz_emi", "tabby", "tamara", "billexpro"], required: true },
+            method: { type: String, enum: [...ENROLMENT_PAYMENT_METHODS], required: true },
             amount: { type: Number, required: true, min: 0.01 },
             receipt: {
               name: { type: String },

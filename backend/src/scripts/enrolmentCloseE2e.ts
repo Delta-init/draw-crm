@@ -360,6 +360,38 @@ check("...a server without the Bangalore organization lists only Dubai", r.statu
 r = await call("POST", "/students", closeBody(L6, { academy: "bangalore", totalFee: 45000 }), counsellor, BARE_API);
 check("...and refuses a Bangalore close, even with finance switched off", r.status === 422 && /Bangalore finance organization isn't set/.test(String(at(r.body, "message"))), show(r));
 
+// ── Case 5b (before Case 4 switches the counsellor off) ────────────────────
+step("Case 5b — a Dubai close paid in rupees (the user, 2026-10-13): INR Transfer, 1 AED = 22.75 INR");
+{
+  const L8 = await lead("Rupee Client", "+971509000008", "inr@draw-e2e.test");
+  const perInr = 1 / 22.75;
+  const before = received.length;
+  r = await call("POST", "/students", closeBody(L8, {
+    name: "Rupee Client", phone: "+971509000008", email: "inr@draw-e2e.test",
+    paidAmount: 2250, feeStatus: "paid", paymentMethod: "inr_bank_account",
+    payments: [{ method: "inr_bank_account", amount: 2250, receipt, paidAt: "2026-10-02T00:00:00.000Z", currency: "INR", amountInCurrency: 51187.5, exchangeRate: perInr }],
+  }), counsellor);
+  check("a Dubai close paid ₹51,187.50 at 1 AED = 22.75 INR is saved as AED 2,250", r.status === 201 && at(r.body, "data.paidAmount") === 2250, show(r));
+  const st = await Student.findOne({ leadId: L8 }).lean();
+  check("...the payment keeps its rupees and rate, method INR Transfer", st?.payments?.[0]?.currency === "INR" && st?.payments?.[0]?.amountInCurrency === 51187.5
+    && st?.payments?.[0]?.method === "inr_bank_account", JSON.stringify(st?.payments));
+  await waitFor(async () => received.length > before, 8_000);
+  const inrSent = received.at(-1)?.payload.payments as Json[] | undefined;
+  check("...and finance is told: AED 2,250 by INR Bank Account, original ₹51,187.50 at 1 INR = 1/22.75 AED",
+    at(inrSent?.[0], "amountMinor") === 225_000 && at(inrSent?.[0], "method") === "inr_bank_account" && at(inrSent?.[0], "original.currency") === "INR"
+      && at(inrSent?.[0], "original.amountMinor") === 5_118_750 && Math.abs(Number(at(inrSent?.[0], "original.rate")) - perInr) < 1e-9,
+    JSON.stringify(inrSent));
+  const L9 = await lead("Rupee Wrong", "+971509000009", "inr2@draw-e2e.test");
+  const bad = (pay: Json) => call("POST", "/students", closeBody(L9, { name: "Rupee Wrong", phone: "+971509000009", email: "inr2@draw-e2e.test", paidAmount: 2250, feeStatus: "paid", payments: [{ method: "cash", amount: 2250, receipt, paidAt: "2026-10-02T00:00:00.000Z", ...pay }] }), counsellor);
+  r = await bad({ currency: "INR", amountInCurrency: 40000, exchangeRate: perInr });
+  check("rupees that don't come to the AED: 422, saying what they come to", r.status === 422 && /comes to 1,758\.24 AED, not 2,250/.test(String(at(r.body, "message"))), show(r));
+  r = await bad({ currency: "INR", amountInCurrency: 51187.5, exchangeRate: 22.75 });
+  check("a rate the wrong way round (22.75 AED for 1 INR): 422", r.status === 422 && /1 AED = how many INR/.test(String(at(r.body, "message"))), show(r));
+  r = await bad({ currency: "USD", amountInCurrency: 612, exchangeRate: 3.67 });
+  check("another currency on a Dubai close: 422", r.status === 422 && /a Dubai close takes AED, or INR/.test(String(at(r.body, "message"))), show(r));
+  check("...none of those saved", (await Student.countDocuments({ leadId: L9 })) === 0);
+}
+
 // ── Case 6 (before Case 4 switches the counsellor off) ─────────────────────
 step("Case 6 — one email, one client: another client's email refused, and never sent to finance");
 const priya = await Student.findOne({ leadId: L2 }).lean(); // closed in Case 2 with priya@draw-e2e.test

@@ -272,7 +272,8 @@ await refused("AED without its rate: 422", { academy: "bangalore", totalFee: 450
   payments: [pay("cash", 40500), pay("cash", 4500, "no-rate", { currency: "AED", amountInCurrency: 200 })] }, /needs its rate: 1 AED = how many INR/);
 await refused("a Bangalore payment in another currency: 422", { academy: "bangalore", totalFee: 45000, paidAmount: 45000,
   payments: [pay("cash", 45000, "usd", { currency: "USD", amountInCurrency: 540, exchangeRate: 83.3333 })] }, /USD — a Bangalore close takes INR, or AED with its rate/);
-await refused("a Dubai payment in INR: 422", { paidAmount: 500, payments: [pay("cash", 500, "inr", { currency: "INR", amountInCurrency: 11250, exchangeRate: 0.0444 })] }, /a Dubai close is in AED/);
+// Rupees on a Dubai close are taken since 2026-10-13 (enrolment-close-e2e Case 5b); any other currency is not.
+await refused("a Dubai payment in USD: 422", { paidAmount: 500, payments: [pay("cash", 500, "usd2", { currency: "USD", amountInCurrency: 136.24, exchangeRate: 3.67 })] }, /a Dubai close takes AED, or INR/);
 {
   // An edit never changes the academy.
   const blr = await close({ academy: "bangalore", totalFee: 45000, paidAmount: 45000, payments: [pay("cash", 45000)] });

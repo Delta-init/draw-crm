@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { useAllCourses } from "@/hooks/useCourses";
 import { useCorrectEnrolment, useEnrolmentCorrection } from "@/hooks/useEnrolments";
 import { useEmailCheck } from "@/hooks/useStudents";
-import { PaymentRowsEditor, missingInRows, newPaymentRow, rowAedFields, rowAmount, type PaymentRow } from "@/components/students/PaymentRowsEditor";
+import { PaymentRowsEditor, inrRowFields, missingInRows, newPaymentRow, rowAedFields, rowAmount, type PaymentRow } from "@/components/students/PaymentRowsEditor";
 import { AcademyBadge } from "@/components/students/AcademyBadge";
 import { ACADEMY_LABELS, academyOf, bangalorePriceOf, fmtFee, priceFor, type Academy } from "@/lib/academy";
 import type { Course } from "@/types/course";
@@ -72,6 +72,8 @@ function startingRows(s: Student, ownOnLead: number, academy: Academy): PaymentR
       method: p.method, receipt: p.receipt ?? null,
       ...(academy === "bangalore" && p.currency === "AED" && p.amountInCurrency && p.exchangeRate
         ? { paidInAed: true, amountInput: String(p.amountInCurrency), rateInput: String(p.exchangeRate), convertedInput: String(p.amount) }
+        : academy !== "bangalore" && p.currency === "INR" && p.amountInCurrency && p.exchangeRate
+        ? inrRowFields(p.amountInCurrency, p.exchangeRate, p.amount)
         : { amountInput: String(p.amount) }),
     })));
   } else if (!listed.length) {
@@ -243,7 +245,7 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
             receipt: r.receipt,
             paidAt: on,
             ...(r.collectedBefore ? { collectedBefore: true } : {}),
-            ...(bangalore ? rowAedFields(r) : {}),
+            ...rowAedFields(r),
           })),
           hasBonus: bonusChoice === "yes",
           bonusAmount: bonusChoice === "yes" ? bonusAmount : 0,

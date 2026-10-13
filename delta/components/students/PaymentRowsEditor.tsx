@@ -24,6 +24,12 @@ import { ENROLMENT_PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentInAed, ty
  * it. The INR figure is what it counts as. The money already on the lead is
  * AED (the lead's own list is), so in a Bangalore close it is always such a
  * payment: its AED fixed, its rate asked.
+ *
+ * A Dubai close's payment can be handed over in rupees (the user, 2026-10-13):
+ * AED by default, INR picked — or "INR Transfer" as the method, which picks it —
+ * typed in INR with the same rate, 1 AED = so many INR, and its AED worked out
+ * (or typed, and the rate worked out). Finance gets the rupees and 1 INR = so
+ * many AED.
  */
 
 export interface PaymentRow {
@@ -34,9 +40,11 @@ export interface PaymentRow {
   receipt: StoredReceipt | null;
   /** A Bangalore close's payment taken in AED. */
   paidInAed?: boolean;
-  /** Taken in AED: 1 AED = this many INR. */
+  /** A Dubai close's payment taken in INR. */
+  paidInInr?: boolean;
+  /** Taken in the other currency: 1 AED = this many INR, either way. */
   rateInput: string;
-  /** Taken in AED: what it comes to in INR — the figure that counts. */
+  /** Taken in the other currency: what it comes to in the close's (INR, or AED for Dubai) — the figure that counts. */
   convertedInput: string;
   /** The money already on the lead before the close, as one payment. */
   collectedBefore?: boolean;
@@ -65,14 +73,34 @@ const toMoneyInput = (n: number) => String(Math.round(n * 100) / 100);
 /** A rate worked out from two amounts, to ten significant figures. */
 const toRateInput = (n: number) => String(Number(n.toPrecision(10)));
 
-/** What the payment counts as, in the close's currency — the INR worked out when it was taken in AED. */
-export const rowAmount = (r: PaymentRow) => (r.paidInAed ? num(r.convertedInput) : num(r.amountInput));
+/** Taken in the other currency than the close's. */
+const foreign = (r: PaymentRow) => Boolean(r.paidInAed || r.paidInInr);
 
-/** For the close: the AED handed over and its rate, when it was taken in AED — nothing otherwise. */
+/** What the payment counts as, in the close's currency — worked out when it was taken in the other one. */
+export const rowAmount = (r: PaymentRow) => (foreign(r) ? num(r.convertedInput) : num(r.amountInput));
+
+/**
+ * For the close: what was handed over in the other currency and its rate — how much of the close's
+ * currency one unit bought (INR for 1 AED; for rupees on a Dubai close, AED for 1 INR, the inverse of
+ * the "1 AED =" typed) — nothing otherwise.
+ */
 export function rowAedFields(r: PaymentRow): PaymentInAed {
+  if (r.paidInInr) {
+    return num(r.rateInput) > 0
+      ? { currency: "INR", amountInCurrency: num(r.amountInput), exchangeRate: Number((1 / num(r.rateInput)).toPrecision(12)) }
+      : { currency: "INR", amountInCurrency: num(r.amountInput) };
+  }
   if (!r.paidInAed) return {};
   return { currency: "AED", amountInCurrency: num(r.amountInput), exchangeRate: num(r.rateInput) };
 }
+
+/** A Dubai row given back for correcting: rupees and the rate as typed (1 AED = INR), from what was stored. */
+export const inrRowFields = (amountInCurrency: number, exchangeRate: number, amount: number): Partial<PaymentRow> => ({
+  paidInInr: true,
+  amountInput: String(amountInCurrency),
+  rateInput: String(Number((1 / exchangeRate).toPrecision(8))),
+  convertedInput: String(amount),
+});
 
 /**
  * The rows as an academy takes them, when the close switches academy: a Dubai
@@ -83,6 +111,7 @@ export function rowsForAcademy(rows: PaymentRow[], academy: Academy): PaymentRow
   return rows.map((r) => ({
     ...r,
     paidInAed: academy === "bangalore" && Boolean(r.collectedBefore),
+    paidInInr: false,
     rateInput: "",
     convertedInput: "",
   }));
@@ -98,6 +127,8 @@ export function missingInRows(rows: PaymentRow[]): string[] {
       !r.collectedBefore && !(num(r.amountInput) > 0) && (one ? "the amount paid" : `${whose} amount`),
       r.paidInAed && num(r.amountInput) > 0 && !(num(r.rateInput) > 0 && num(r.convertedInput) > 0) &&
         (one ? "the AED rate" : `${whose} AED rate`),
+      r.paidInInr && num(r.amountInput) > 0 && !(num(r.rateInput) > 0 && num(r.convertedInput) > 0) &&
+        (one ? "the INR rate" : `${whose} INR rate`),
       !r.receipt && (one ? "payment receipt" : `${whose} receipt`),
     ].filter(Boolean) as string[];
   });
@@ -116,27 +147,38 @@ export function PaymentRowsEditor({ leadId, rows, onChange, academy = "dubai" }:
     onChange((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   const inr = academy === "bangalore";
 
-  // Taken in AED: the rate and the INR figure follow each other — whichever was
-  // typed last works out the other; a new AED amount keeps the rate.
+  // Taken in the other currency: the rate and the converted figure follow each
+  // other — whichever was typed last works out the other; a new amount keeps the
+  // rate. The rate is always 1 AED = so many INR: AED × rate is rupees, rupees ÷
+  // rate is AED.
+  const convert = (r: PaymentRow, paid: number, rate: number) => (r.paidInInr ? paid / rate : paid * rate);
+  const rateFrom = (r: PaymentRow, paid: number, converted: number) => (r.paidInInr ? paid / converted : converted / paid);
   function setAmount(r: PaymentRow, amountInput: string) {
     const paid = num(amountInput);
-    if (!r.paidInAed) return update(r.id, { amountInput });
-    if (num(r.rateInput) > 0) return update(r.id, { amountInput, convertedInput: paid > 0 ? toMoneyInput(paid * num(r.rateInput)) : "" });
-    if (num(r.convertedInput) > 0 && paid > 0) return update(r.id, { amountInput, rateInput: toRateInput(num(r.convertedInput) / paid) });
+    if (!foreign(r)) return update(r.id, { amountInput });
+    if (num(r.rateInput) > 0) return update(r.id, { amountInput, convertedInput: paid > 0 ? toMoneyInput(convert(r, paid, num(r.rateInput))) : "" });
+    if (num(r.convertedInput) > 0 && paid > 0) return update(r.id, { amountInput, rateInput: toRateInput(rateFrom(r, paid, num(r.convertedInput))) });
     update(r.id, { amountInput });
   }
   function setRate(r: PaymentRow, rateInput: string) {
     const paid = num(r.amountInput);
     const rate = num(rateInput);
-    update(r.id, { rateInput, convertedInput: paid > 0 && rate > 0 ? toMoneyInput(paid * rate) : "" });
+    update(r.id, { rateInput, convertedInput: paid > 0 && rate > 0 ? toMoneyInput(convert(r, paid, rate)) : "" });
   }
   function setConverted(r: PaymentRow, convertedInput: string) {
     const paid = num(r.amountInput);
-    const inrAmount = num(convertedInput);
-    update(r.id, { convertedInput, rateInput: paid > 0 && inrAmount > 0 ? toRateInput(inrAmount / paid) : "" });
+    const converted = num(convertedInput);
+    update(r.id, { convertedInput, rateInput: paid > 0 && converted > 0 ? toRateInput(rateFrom(r, paid, converted)) : "" });
   }
   // Switching currency starts the rate afresh: no feed is trusted for it, the seller enters it.
   const setPaidInAed = (r: PaymentRow, paidInAed: boolean) => update(r.id, { paidInAed, rateInput: "", convertedInput: "" });
+  const setPaidInInr = (r: PaymentRow, paidInInr: boolean) => update(r.id, { paidInInr, rateInput: "", convertedInput: "" });
+  // "INR Transfer" is rupees: on a Dubai close it picks INR for the row; on a Bangalore one, the close's own.
+  function setMethod(r: PaymentRow, method: string) {
+    if (method !== "inr_bank_account" || r.collectedBefore) return update(r.id, { method });
+    if (inr) return update(r.id, { method, ...(r.paidInAed ? { paidInAed: false, rateInput: "", convertedInput: "" } : {}) });
+    update(r.id, { method, ...(r.paidInInr ? {} : { paidInInr: true, rateInput: "", convertedInput: "" }) });
+  }
 
   async function attach(id: string, file: File) {
     update(id, { uploading: true, uploadError: "" });
@@ -163,7 +205,7 @@ export function PaymentRowsEditor({ leadId, rows, onChange, academy = "dubai" }:
           >
             <div className="flex items-center gap-2">
               <span className="w-5 shrink-0 text-[10px] font-semibold text-muted-foreground">{i + 1}.</span>
-              <Select value={r.method} onValueChange={(v) => update(r.id, { method: v })}>
+              <Select value={r.method} onValueChange={(v) => setMethod(r, v)}>
                 <SelectTrigger className="h-8 w-[130px] shrink-0 text-xs" aria-label={`Payment ${i + 1} method`}>
                   <SelectValue placeholder="Paid by…" />
                 </SelectTrigger>
@@ -181,7 +223,7 @@ export function PaymentRowsEditor({ leadId, rows, onChange, academy = "dubai" }:
                 </div>
               ) : (
                 <>
-                  {inr && (
+                  {inr ? (
                     <Select value={r.paidInAed ? "AED" : "INR"} onValueChange={(v) => setPaidInAed(r, v === "AED")}>
                       <SelectTrigger className="h-8 w-[76px] shrink-0 text-xs" aria-label={`Payment ${i + 1} currency`}>
                         <SelectValue>{r.paidInAed ? "AED" : "INR"}</SelectValue>
@@ -191,12 +233,22 @@ export function PaymentRowsEditor({ leadId, rows, onChange, academy = "dubai" }:
                         <SelectItem value="AED" className="text-xs">Paid in AED</SelectItem>
                       </SelectContent>
                     </Select>
+                  ) : (
+                    <Select value={r.paidInInr ? "INR" : "AED"} onValueChange={(v) => setPaidInInr(r, v === "INR")}>
+                      <SelectTrigger className="h-8 w-[76px] shrink-0 text-xs" aria-label={`Payment ${i + 1} currency`}>
+                        <SelectValue>{r.paidInInr ? "INR" : "AED"}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AED" className="text-xs">AED</SelectItem>
+                        <SelectItem value="INR" className="text-xs">Paid in INR</SelectItem>
+                      </SelectContent>
+                    </Select>
                   )}
                   <Input
                     type="number" min="0" step="0.01" value={r.amountInput}
                     onChange={(e) => setAmount(r, e.target.value)}
-                    placeholder={r.paidInAed ? "Amount in AED" : inr ? "Amount (₹)" : "Amount"} className="h-8 min-w-0 flex-1 text-xs"
-                    aria-label={`Payment ${i + 1} amount${r.paidInAed ? " in AED" : inr ? " in INR" : ""}`}
+                    placeholder={r.paidInAed ? "Amount in AED" : r.paidInInr || inr ? "Amount (₹)" : "Amount (AED)"} className="h-8 min-w-0 flex-1 text-xs"
+                    aria-label={`Payment ${i + 1} amount${r.paidInAed ? " in AED" : r.paidInInr || inr ? " in INR" : ""}`}
                   />
                 </>
               )}
@@ -212,6 +264,26 @@ export function PaymentRowsEditor({ leadId, rows, onChange, academy = "dubai" }:
                 </motion.button>
               )}
             </div>
+            {/* Taken in INR on a Dubai close: the rate (1 AED = INR), and what it comes to in AED — the figure that counts. */}
+            {!inr && r.paidInInr && !r.collectedBefore && (
+              <div className="flex flex-wrap items-center gap-1.5 pl-7 text-[11px] text-muted-foreground">
+                <span>1 AED =</span>
+                <Input
+                  type="number" min="0" step="any" value={r.rateInput}
+                  onChange={(e) => setRate(r, e.target.value)}
+                  placeholder="rate" className="h-7 w-24 text-xs"
+                  aria-label={`Payment ${i + 1}: 1 AED in INR`}
+                />
+                <span>INR →</span>
+                <Input
+                  type="number" min="0" step="0.01" value={r.convertedInput}
+                  onChange={(e) => setConverted(r, e.target.value)}
+                  placeholder="in AED" className="h-7 w-28 text-xs"
+                  aria-label={`Payment ${i + 1} in AED`}
+                />
+                <span>{num(r.convertedInput) > 0 ? fmtAED(num(r.convertedInput)) : "AED"}</span>
+              </div>
+            )}
             {/* Taken in AED: the rate, and what it comes to in INR — the figure that counts. */}
             {inr && r.paidInAed && (
               <div className="flex flex-wrap items-center gap-1.5 pl-7 text-[11px] text-muted-foreground">

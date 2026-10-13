@@ -88,21 +88,31 @@ const currencyOf = (academy: Academy) => (academy === "bangalore" ? "INR" : "AED
  * a percent for rounding. A figure typed in the wrong currency is refused
  * rather than billed. Nothing for a payment in the close's own currency.
  *
- * A Dubai close is in AED throughout, so it takes nothing else; a Bangalore
- * close takes INR, or AED with its rate.
+ * A Bangalore close takes INR, or AED with its rate. A Dubai close takes AED,
+ * or rupees with their rate — 1 INR = so many AED (the user, 2026-10-13); never
+ * the money already on the lead, which is AED.
  */
 function foreignPart(raw: PaymentInput, amount: number, n: string, academy: Academy): Pick<IStudentPayment, "currency" | "amountInCurrency" | "exchangeRate"> {
   const currency = typeof raw?.currency === "string" ? raw.currency.trim().toUpperCase() : "";
   const own = currencyOf(academy);
   if (!currency || currency === own) return {};
-  if (academy !== "bangalore" || currency !== "AED") {
-    throw createError(
-      academy === "bangalore"
-        ? `${n} is in ${currency} — a Bangalore close takes INR, or AED with its rate.`
-        : `${n} is in ${currency} — a Dubai close is in AED.`,
-      422,
-    );
+  if (academy !== "bangalore") {
+    if (currency !== "INR") throw createError(`${n} is in ${currency} — a Dubai close takes AED, or INR with its rate.`, 422);
+    if (raw?.collectedBefore) throw createError(`${n} was already on the lead in AED, so it cannot be in INR.`, 422);
+    const inInr = Number(raw?.amountInCurrency);
+    if (!Number.isFinite(inInr) || inInr <= 0) throw createError(`${n} needs the amount paid in INR.`, 422);
+    const perInr = Number(raw?.exchangeRate);
+    if (!Number.isFinite(perInr) || perInr <= 0 || perInr > 1) throw createError(`${n} needs its rate: 1 AED = how many INR.`, 422);
+    const aedExpected = Math.round(inInr * perInr * 100);
+    if (Math.abs(minor(amount) - aedExpected) > Math.max(1, Math.round(aedExpected * 0.005))) {
+      throw createError(
+        `${n}: ${money(inInr)} INR at 1 AED = ${money(1 / perInr)} INR comes to ${money(aedExpected / 100)} AED, not ${money(amount)}.`,
+        422,
+      );
+    }
+    return { currency: "INR", amountInCurrency: minor(inInr) / 100, exchangeRate: perInr };
   }
+  if (currency !== "AED") throw createError(`${n} is in ${currency} — a Bangalore close takes INR, or AED with its rate.`, 422);
   const inAed = Number(raw?.amountInCurrency);
   if (!Number.isFinite(inAed) || inAed <= 0) throw createError(`${n} needs the amount paid in AED.`, 422);
   const rate = Number(raw?.exchangeRate);
@@ -762,10 +772,11 @@ export class StudentService {
               method: p.method,
               amountMinor: Math.round(p.amount * 100),
               paidOn: new Date(p.paidAt).toISOString().slice(0, 10),
-              // Cash a Bangalore close took in AED: what was handed over, and
-              // how many INR one AED bought — finance's own field for it.
-              ...(bangalore && p.currency === "AED" && p.amountInCurrency && p.exchangeRate
-                ? { original: { currency: "AED", amountMinor: Math.round(p.amountInCurrency * 100), rate: p.exchangeRate } }
+              // Cash a Bangalore close took in AED, or rupees a Dubai close took:
+              // what was handed over, and how much of the close's currency one
+              // unit bought — finance's own field for it.
+              ...((bangalore ? p.currency === "AED" : p.currency === "INR") && p.amountInCurrency && p.exchangeRate
+                ? { original: { currency: p.currency, amountMinor: Math.round(p.amountInCurrency * 100), rate: p.exchangeRate } }
                 : {}),
               ...(p.receipt?.key && p.receipt.url
                 ? {

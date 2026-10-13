@@ -349,7 +349,7 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
         receipt: r.receipt as StoredReceipt,
         paidAt: new Date(enrollmentDate).toISOString(),
         ...(r.collectedBefore ? { collectedBefore: true } : {}),
-        ...(bangalore ? rowAedFields(r) : {}),
+        ...rowAedFields(r),
       })),
       academy,
       leadId: lead._id,

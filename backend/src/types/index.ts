@@ -348,6 +348,8 @@ export const ENROLMENT_PAYMENT_METHODS = [
   "tabby",
   "tamara",
   "billexpro",
+  // Rupees into the INR account (the user, 2026-10-13) — finance's "INR Bank Account".
+  "inr_bank_account",
 ] as const;
 export type EnrolmentPaymentMethod = (typeof ENROLMENT_PAYMENT_METHODS)[number];
 
@@ -360,6 +362,7 @@ export const PAYMENT_METHOD_LABELS: Record<EnrolmentPaymentMethod, string> = {
   tabby: "Tabby",
   tamara: "Tamara",
   billexpro: "BillExPro",
+  inr_bank_account: "INR Transfer",
 };
 
 /**
@@ -380,7 +383,8 @@ export const academyOf = (v: unknown): Academy => (v === "bangalore" ? "bangalor
  * payment carries what was handed over, in AED, and the rate — 1 AED = so many
  * INR. Its `amount` is the INR figure, the one that counts.
  */
-export const PAYMENT_ORIGINAL_CURRENCIES = ["AED"] as const;
+// AED on a Bangalore close; INR on a Dubai one (the user, 2026-10-13).
+export const PAYMENT_ORIGINAL_CURRENCIES = ["AED", "INR"] as const;
 export type PaymentOriginalCurrency = (typeof PAYMENT_ORIGINAL_CURRENCIES)[number];
 
 /** A file kept in object storage, as the enrolment records it. */
@@ -534,7 +538,10 @@ export interface IStudentPayment {
   paidAt: Date;
   /** The money already on the lead before the close, as one payment. */
   collectedBefore?: boolean;
-  /** A Bangalore close's payment taken in AED: "AED", how much of it, and 1 AED = `exchangeRate` INR. Absent otherwise. */
+  /**
+   * Handed over in the other currency: on a Bangalore close "AED", how much of it, and 1 AED = `exchangeRate` INR;
+   * on a Dubai close "INR", how much, and 1 INR = `exchangeRate` AED (the user, 2026-10-13). Absent otherwise.
+   */
   currency?: PaymentOriginalCurrency;
   amountInCurrency?: number;
   exchangeRate?: number;
