@@ -160,8 +160,9 @@ export class TeamService {
       course?: string;
     }
   ) {
-    const page  = Math.max(1, parseInt(filters.page  ?? "1",  10));
-    const limit = Math.min(500, Math.max(1, parseInt(filters.limit ?? "10", 10)));
+    // Up to the team Kanban's largest page; not a number ("abc") is the default.
+    const page  = Math.max(1, parseInt(filters.page  ?? "1",  10) || 1);
+    const limit = Math.min(1000, Math.max(1, parseInt(filters.limit ?? "10", 10) || 10));
     const skip  = (page - 1) * limit;
 
     const query: Record<string, unknown> = { team: teamId };

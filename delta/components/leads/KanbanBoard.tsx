@@ -18,8 +18,10 @@ import {
   Eye, Loader2, Phone, Mail, User2, ExternalLink,
   Calendar, Clock, BookOpen, Users, StickyNote, Bell, PhoneOff, PhoneCall, X,
   Pencil, CreditCard, MoreHorizontal, AlarmClock, MessageSquarePlus,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -933,6 +935,81 @@ const kanbanCollision: CollisionDetection = (args) => {
   return pointer.length > 0 ? pointer : rectIntersection({ ...args, droppableContainers: zones });
 };
 
+// ── Kanban pages (2026-10-13) ─────────────────────────────────────────────────
+// A board shows one page of leads — 500 unless the viewer picks another size —
+// with Previous / Next when there are more. It used to ask for 500 and quietly
+// get the server's 300, with no way to see the rest. The size is remembered
+// per browser; a new filter goes back to page 1.
+
+export const KANBAN_PAGE_SIZES = [100, 300, 500, 1000] as const;
+const KANBAN_PAGE_SIZE_KEY = "draw-kanban-page-size";
+
+export function useKanbanPaging(resetKey: string) {
+  const [pageSize, setPageSizeState] = useState<number>(() => {
+    try {
+      const saved = Number(localStorage.getItem(KANBAN_PAGE_SIZE_KEY));
+      return (KANBAN_PAGE_SIZES as readonly number[]).includes(saved) ? saved : 500;
+    } catch {
+      return 500; // server render, private window, blocked storage
+    }
+  });
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [resetKey]);
+
+  const setPageSize = (size: number) => {
+    setPageSizeState(size);
+    setPage(1);
+    try { localStorage.setItem(KANBAN_PAGE_SIZE_KEY, String(size)); } catch { /* not kept, still applied */ }
+  };
+  return { page, setPage, pageSize, setPageSize };
+}
+
+interface KanbanPagerProps {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPage: (page: number) => void;
+  onPageSize: (size: number) => void;
+}
+
+/** "Show 500 · 1–500 of 839 ‹ ›" — shown once a board has more leads than the smallest page. */
+export function KanbanPager({ page, pageSize, total, onPage, onPageSize }: KanbanPagerProps) {
+  if (total <= KANBAN_PAGE_SIZES[0]) return null;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const from = Math.min(total, (page - 1) * pageSize + 1);
+  const to = Math.min(total, page * pageSize);
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2 pb-2 text-xs text-muted-foreground">
+      <span>Show</span>
+      <Select value={String(pageSize)} onValueChange={(v) => onPageSize(Number(v))}>
+        <SelectTrigger className="h-7 w-[84px] text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {KANBAN_PAGE_SIZES.map((size) => (
+            <SelectItem key={size} value={String(size)} className="text-xs">{size.toLocaleString()}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <span className="tabular-nums">
+        {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
+      </span>
+      <Button
+        variant="outline" size="sm" className="h-7 w-7 p-0"
+        disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="Previous page"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+      </Button>
+      <Button
+        variant="outline" size="sm" className="h-7 w-7 p-0"
+        disabled={page >= pages} onClick={() => onPage(page + 1)} aria-label="Next page"
+      >
+        <ChevronRight className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+}
+
 export interface KanbanBoardProps {
   filters: LeadFilters;
   canEdit: boolean;
@@ -953,8 +1030,14 @@ export function KanbanBoard({ filters, canEdit }: KanbanBoardProps) {
 
   const { mutate: updateStatus } = useUpdateLeadStatus();
 
-  const { data, isLoading } = useLeads({ ...filters, page: 1, limit: 500 });
+  const { page, setPage, pageSize, setPageSize } = useKanbanPaging(JSON.stringify(filters));
+  const { data, isLoading } = useLeads({ ...filters, page, limit: pageSize });
   const allLeads = data?.data ?? [];
+  const total = data?.pagination?.total ?? allLeads.length;
+  // Fewer leads than the page we were on (moved, closed, filtered) — back to the first.
+  useEffect(() => {
+    if (page > 1 && total > 0 && page > Math.ceil(total / pageSize)) setPage(1);
+  }, [page, pageSize, total, setPage]);
 
   const grouped = columnOrder.reduce<Record<LeadStatus, Lead[]>>((acc, s) => {
     acc[s] = []; return acc;
@@ -1047,6 +1130,7 @@ export function KanbanBoard({ filters, canEdit }: KanbanBoardProps) {
 
   return (
     <>
+      <KanbanPager page={page} pageSize={pageSize} total={total} onPage={setPage} onPageSize={setPageSize} />
       <DndContext
         sensors={sensors}
         collisionDetection={kanbanCollision}

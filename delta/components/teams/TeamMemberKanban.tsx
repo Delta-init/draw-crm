@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { useTeamLeads, useAssignLeadToMember } from "@/hooks/useTeams";
 import { useAllCourses } from "@/hooks/useCourses";
-import { KanbanBoard } from "@/components/leads/KanbanBoard";
+import { KanbanBoard, KanbanPager, useKanbanPaging } from "@/components/leads/KanbanBoard";
 import { LeadPreviewPopup } from "@/components/leads/KanbanBoard";
 import { TodayLeadsButton } from "@/components/leads/LeadsDateFilter";
 import { Button } from "@/components/ui/button";
@@ -375,8 +375,14 @@ function MemberKanban({
   const [activeColMemberId, setActiveColMemberId] = useState<string | null>(null);
 
   const { mutate: assignToMember } = useAssignLeadToMember(teamId);
-  const { data, isLoading } = useTeamLeads(teamId, { ...filters, limit: 500 } as Parameters<typeof useTeamLeads>[1]);
+  // A page at a time, as on the status board (see KanbanPager).
+  const { page, setPage, pageSize, setPageSize } = useKanbanPaging(JSON.stringify(filters));
+  const { data, isLoading } = useTeamLeads(teamId, { ...filters, page, limit: pageSize } as Parameters<typeof useTeamLeads>[1]);
   const allLeads = data?.data ?? [];
+  const total = data?.pagination?.total ?? allLeads.length;
+  useEffect(() => {
+    if (page > 1 && total > 0 && page > Math.ceil(total / pageSize)) setPage(1);
+  }, [page, pageSize, total, setPage]);
 
   // Deduplicated member list: leaders first then members
   const members = useMemo<User[]>(() => {
@@ -506,6 +512,8 @@ function MemberKanban({
   const hasUnassigned = grouped["unassigned"].length > 0;
 
   return (
+    <>
+    <KanbanPager page={page} pageSize={pageSize} total={total} onPage={setPage} onPageSize={setPageSize} />
     <DndContext
       sensors={sensors}
       collisionDetection={memberKanbanCollision}
@@ -580,6 +588,7 @@ function MemberKanban({
         )}
       </DragOverlay>
     </DndContext>
+    </>
   );
 }
 

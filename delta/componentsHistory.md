@@ -1093,3 +1093,7 @@ A new close starts "Bonus given?" at yes with the chosen courses' bonuses added 
   not connected). Leads list: a "Calls (3CX)" column. Kanban: "CNC +1" removed; card and preview show the three counts.
 - Leaderboard page: Calls, Connected, Talk time columns and a Revenue / Calls / Talk time switch; the dashboard card
   shows calls and talk time.
+
+### Change log — 2026-10-13 (Kanban pages)
+- `components/leads/KanbanBoard.tsx` — exports `KANBAN_PAGE_SIZES` (100 / 300 / 500 / 1000), `useKanbanPaging(resetKey)` (page + size; the size kept per browser in `draw-kanban-page-size`, default 500; a new filter goes back to page 1) and `KanbanPager` ("Show 500 · 1–500 of 839 ‹ ›", only once a board has more than 100 leads). The status board asks for one page at a time (it asked for 500 and got the server's 300).
+- `components/teams/TeamMemberKanban.tsx` — the by-member board pages the same way (it asked for 500, all it could get).

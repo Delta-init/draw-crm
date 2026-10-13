@@ -738,3 +738,9 @@ page lists its calls the same way. A note says when it last synced, or that 3CX 
 own calls (and their leads'), a team leader their team's, the Super Admin / Reporter / Sales Manager everyone's.
 
 **API**: `GET /calls/log`, `GET /calls/log/lead/:leadId`, `GET /calls/log/:id/recording-link`, `POST /calls/log/sync`, `POST /calls/log/test` (Super Admin's Test connection, 2026-10-12 — settings, sign in, extensions, the newest 200 rows of the last 24 hours, one recording; as in Tetra Commission).
+
+## Kanban pages (2026-10-13)
+
+- **Where**: the Kanban on the Leads page and the profile page (`KanbanBoard`), and the team page's by-member board (`TeamMemberKanban`)
+- **What**: one page of leads at a time — Show 100 / 300 / 500 / 1,000 (500 to start, remembered per browser) — with "1–500 of 839" and Previous / Next; shown once a board has more than 100 leads. A new filter goes back to page 1.
+- **Backend**: lead lists give up to 1,000 a page (was 300; the team's 500)

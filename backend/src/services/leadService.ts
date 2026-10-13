@@ -346,10 +346,11 @@ export class LeadService {
 
   // ── List ─────────────────────────────────────────────────────────────────────
   async getLeads(filters: LeadFilters, userId?: string, userRole?: IRole) {
-    const page = Math.max(1, parseInt(filters.page ?? "1", 10));
+    // Not a number ("abc") is the default, not NaN handed to skip/limit.
+    const page = Math.max(1, parseInt(filters.page ?? "1", 10) || 1);
     const limit = Math.min(
-      300,
-      Math.max(1, parseInt(filters.limit ?? "10", 10)),
+      1000, // the Kanban's largest page (was 300, which cut its 500 short)
+      Math.max(1, parseInt(filters.limit ?? "10", 10) || 10),
     );
     const skip = (page - 1) * limit;
 
@@ -694,10 +695,12 @@ export class LeadService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async getLeadsByUser(userId: string, filters: LeadFilters) {
-    const page = Math.max(1, parseInt(filters.page ?? "1", 10));
+    // Not a number ("abc") is the default — it used to mean no limit at all.
+    // Still 300: the profile and user pages ask for 100 at most.
+    const page = Math.max(1, parseInt(filters.page ?? "1", 10) || 1);
     const limit = Math.min(
       300,
-      Math.max(1, parseInt(filters.limit ?? "10", 10)),
+      Math.max(1, parseInt(filters.limit ?? "10", 10) || 10),
     );
     const skip = (page - 1) * limit;
 
@@ -915,17 +918,18 @@ export class LeadService {
 
     await Promise.all(updates);
 
-    // ── Trigger intra-team auto-split for every lead that was just assigned a team
-    await Promise.all(
-      leadsToAssign.map((lead, i) =>
-        autoSplitLead(
-          assignedTeams[i].team._id.toString(),
-          lead._id.toString(),
-          lead.reporter?.toString() ?? "",
-          memberOverrides?.[assignedTeams[i].team._id.toString()],
-        ),
-      ),
-    );
+    // ── Trigger intra-team auto-split for every lead that was just assigned a team.
+    // One lead at a time: each split reads the team's round-robin turn (or its
+    // members' lead counts) and moves it on. Started all at once they all read
+    // the same turn, and a whole upload went to one person (2026-10-12: 838).
+    for (let i = 0; i < leadsToAssign.length; i++) {
+      await autoSplitLead(
+        assignedTeams[i].team._id.toString(),
+        leadsToAssign[i]._id.toString(),
+        leadsToAssign[i].reporter?.toString() ?? "",
+        memberOverrides?.[assignedTeams[i].team._id.toString()],
+      );
+    }
 
     return { assigned: results.length, results };
   }
@@ -1074,12 +1078,11 @@ export class LeadService {
       }),
     );
 
-    // ── Trigger intra-team auto-split for each lead moved to this team
-    await Promise.all(
-      leads.map((lead) =>
-        autoSplitLead(teamId, lead._id.toString(), performedById),
-      ),
-    );
+    // ── Trigger intra-team auto-split for each lead moved to this team — one at
+    // a time, so the round-robin turn moves on (see autoAssignLeads).
+    for (const lead of leads) {
+      await autoSplitLead(teamId, lead._id.toString(), performedById);
+    }
 
     return { updated: leads.length };
   }

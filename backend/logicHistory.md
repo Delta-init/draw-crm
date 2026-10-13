@@ -778,3 +778,10 @@ As in Tetra Commission (`students/calls.ts` there), for leads. **Files**: `lib/t
    extension count for nobody), in and out: `calls`, `connected`, `talkSeconds`. Months on Draw's calendar (`drawDayStart`).
    `rankBy` revenue (revenue → closings → follow-ups → calls), calls (→ talk → connected), talk (→ calls → connected).
    The old `call_logs` (click-to-call clicks) no longer count; the click is still logged there, as before.
+
+---
+
+## Splitting a bulk upload, and the size of a lead list (2026-10-13)
+
+- A bulk upload, auto-assign and a bulk team assign split their leads **one at a time**: each `autoSplitLead` reads the team's round-robin turn (or its members' counts) and moves it on before the next lead is split. Run together they all read the same turn and one person got the whole upload. An upload of several hundred takes a few seconds longer.
+- The lists behind the Kanbans give up to **1,000** leads a page (`getLeads`, the team's leads) — the Kanban's largest page. It was 300 (500 for a team), which cut the Kanban's 500 short without saying so. `getLeadsByUser` stays at 300 (its pages ask for 100 at most). A page or limit that is not a number is the default (1 / 10) — a limit of "xyz" used to mean no limit at all.

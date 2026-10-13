@@ -260,3 +260,11 @@ router.patch("/:teamId/leads/:leadId/assign", authenticate, checkPermission("tea
 **Bug:** Every date filter read `YYYY-MM-DD` as a UTC day (`T00:00:00.000Z` / `setUTCHours`), and every report bucket grouped with `$dateToString` / `$month` / `$isoWeek` in UTC. For Draw's team a UTC day runs from the early morning to the early morning, so a lead or payment between local midnight and then counted on the day before — a month-end's last hours in the new month — and the revenue card's Today / This Month came from the server's clock.
 **Fix:** `utils/drawTime.ts` (`DRAW_TZ`, `drawDayRange`, `drawDayStart` / `drawDayEnd`, `drawMonthStart`): every range in reportService, exportController, leadService, teamService and the revenue card is whole days on Draw's calendar, and every bucket carries `timezone: DRAW_TZ`. `scripts/draw-dates-e2e.sh` places data in the hours the calendars disagree; 4 of its 5 checks fail on the old code.
 **Rule:** A calendar date from a filter is a day on Draw's clock, never `new Date(date + "T00:00:00.000Z")`; a `$dateToString` / `$month` / `$isoWeek` always names its timezone.
+
+---
+
+## [2026-10-13] A bulk upload's round robin gave every lead to one person
+
+**Bug:** `autoAssignLeads` (bulk upload, auto-assign) and `bulkAssignLeadsToTeam` started every lead's `autoSplitLead` at once with `Promise.all`. Each split reads the team's `settings.roundRobinIndex` (or its members' lead counts), picks that member and saves the next turn — all 838 of the 12 Oct "LEAD MBS - CLD" upload read the same turn before any saved, and every one went to Karthika Ramachandran ("Auto-assigned … via round robin").
+**Fix:** both call `autoSplitLead` one lead at a time (`for … await`), so each reads the turn the one before moved on. The 838 were shared out afterwards by `root/outputs/draw-karthika-split/split-karthika-leads.ts`.
+**Rule:** Anything that reads a shared counter or a count and then writes it back — a round robin, "fewest leads" — runs one at a time, never under `Promise.all`.
