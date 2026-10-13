@@ -33,6 +33,8 @@ export const CRM_MODULES = [
   "pay",
   // The 3CX calls with leads (2026-10-12): view the Calls page, export its CSV.
   "calls",
+  /* Balance payments (2026-10-13): part-paid closes and the next payment, for finance to approve. Open by default. */
+  "balancePayments",
 ] as const;
 
 export type CrmModule = (typeof CRM_MODULES)[number];
@@ -54,6 +56,7 @@ export const MODULE_LABELS: Record<CrmModule, string> = {
   leaderboard: "Leaderboard",
   pay: "My Pay",
   calls: "Calls (3CX)",
+  balancePayments: "Balance payments",
 };
 
 export type PermissionsMap = Partial<Record<CrmModule, ModulePermissions>>;
@@ -74,6 +77,7 @@ export const OPEN_BY_DEFAULT: Partial<Record<CrmModule, Partial<ModulePermission
   tracker: { view: true, edit: true },
   // Open to everyone; the server shows each person their own calls, their team's, or everyone's.
   calls: { view: true, export: true },
+  balancePayments: { view: true, create: true },
 };
 
 /** A role's permissions on one module — what it was given, or the module's default. */

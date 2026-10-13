@@ -42,6 +42,12 @@ export const CRM_MODULES = [
    * team's or everyone's (leadCallService).
    */
   "calls",
+  /*
+   * Balance payments (2026-10-13): part-paid closes, each person's own, a team
+   * leader's teams', everyone's for a Super Admin or the Sales Manager. View sees
+   * the page, create records a payment for finance. Open by default.
+   */
+  "balancePayments",
 ] as const;
 
 export type CrmModule = (typeof CRM_MODULES)[number];
@@ -61,6 +67,7 @@ export const OPEN_BY_DEFAULT: Partial<Record<CrmModule, Partial<ModulePermission
   tracker: { view: true, edit: true },
   // The Calls page was open to everyone with Leads (2026-10-12: 3CX calls, scoped per person).
   calls: { view: true, export: true },
+  balancePayments: { view: true, create: true },
 };
 
 export type PermissionsMap = {
