@@ -1097,3 +1097,8 @@ A new close starts "Bonus given?" at yes with the chosen courses' bonuses added 
 ### Change log — 2026-10-13 (Kanban pages)
 - `components/leads/KanbanBoard.tsx` — exports `KANBAN_PAGE_SIZES` (100 / 300 / 500 / 1000), `useKanbanPaging(resetKey)` (page + size; the size kept per browser in `draw-kanban-page-size`, default 500; a new filter goes back to page 1) and `KanbanPager` ("Show 500 · 1–500 of 839 ‹ ›", only once a board has more than 100 leads). The status board asks for one page at a time (it asked for 500 and got the server's 300).
 - `components/teams/TeamMemberKanban.tsx` — the by-member board pages the same way (it asked for 500, all it could get).
+
+### Change log — 2026-10-13 (exact money figures)
+- `lib/currency.ts` — `fmtFull` caps at two decimals and reads a missing amount as 0; `fmtCompact` is now only for chart axes.
+- `app/(dashboard)/reports/page.tsx` — `fmtUSD` is `fmtFull` (was `fmtCompact`); `KpiCard` puts the value on its own full-width line, smaller when long (> 7 / > 10 characters); the revenue chart's Y axis keeps `fmtCompact`.
+- `app/(dashboard)/teams/[teamId]/page.tsx` — `fmtUSD` is `fmtFull`; new local `MoneyFigure` for the Total Received / Total Pending / Avg per Lead cards; the Y axis keeps `fmtCompact`.

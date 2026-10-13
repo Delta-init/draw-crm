@@ -744,3 +744,9 @@ own calls (and their leads'), a team leader their team's, the Super Admin / Repo
 - **Where**: the Kanban on the Leads page and the profile page (`KanbanBoard`), and the team page's by-member board (`TeamMemberKanban`)
 - **What**: one page of leads at a time — Show 100 / 300 / 500 / 1,000 (500 to start, remembered per browser) — with "1–500 of 839" and Previous / Next; shown once a board has more than 100 leads. A new filter goes back to page 1.
 - **Backend**: lead lists give up to 1,000 a page (was 300; the team's 500)
+
+## Exact money figures (2026-10-13)
+
+- **Where**: Reports (KPI cards, rankings, leaderboards, Top Revenue Earners, tables, chart tooltips) and the team page (revenue cards, member revenue)
+- **What**: the whole amount — "$2,250", "$71,570.25" — where it used to be shortened to one decimal ("$2.3K"). Only chart axes stay short ("$1.5K"), being the scale, not a figure. At most two decimals (`fmtFull`).
+- **Cards**: the figure sits on its own line under the title and icon, a size smaller when long, so the whole amount fits on a phone (`KpiCard` on Reports, `MoneyFigure` on the team page)
