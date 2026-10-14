@@ -9,6 +9,7 @@ import {
   setUserRoleFromPortal,
   provisionFromPortal,
 } from "../services/portalService.js";
+import { enrolmentFlowForPortal } from "../services/portalEnrolmentFlow.js";
 import { CallFilterError, callsForPortal, recordingLinkForPortal } from "../services/portalCalls.js";
 
 const router = Router();
@@ -128,6 +129,18 @@ router.get(
     if (link === "bad") { sendError(res, "Invalid call or recording", 400); return; }
     if (!link) { sendError(res, "No recording for this call", 404); return; }
     sendSuccess(res, "Recording link", link);
+  }),
+);
+
+/**
+ * The enrolment workflow, for Root's Pending page (2026-10-14): every close
+ * handed to finance — its steps as My Enrolments shows them, where it stands
+ * and whom that waits on. Read only.
+ */
+router.get(
+  "/enrolment-flow",
+  wrap(async (_req, res) => {
+    sendSuccess(res, "Enrolment flow", await enrolmentFlowForPortal());
   }),
 );
 
