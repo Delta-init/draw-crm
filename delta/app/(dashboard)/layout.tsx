@@ -8,6 +8,7 @@ import { navItems } from "@/components/layout/Sidebar";
 import { CRM_MODULES } from "@/types";
 import { useReminderNotifications } from "@/hooks/useReminderNotifications";
 import { RecentPageTracker } from "@/components/shared/CommandPalette";
+import { SaleCelebration } from "@/components/shared/SaleCelebration";
 import { CallFlowProvider } from "@/components/calls/CallFlow";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -62,6 +63,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-dvh overflow-hidden bg-slate-200 dark:bg-background pwa-safe-top">
       <RecentPageTracker />
+      <SaleCelebration />
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Every Call button's dialogs: 3CX or phone, the call window, "How did the call go?" */}
