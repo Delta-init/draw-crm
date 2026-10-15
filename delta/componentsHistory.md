@@ -1133,3 +1133,10 @@ A new close starts "Bonus given?" at yes with the chosen courses' bonuses added 
 - `components/layout/Sidebar.tsx` — Activity (`permModule: "activity"`).
 - `components/notifications/NotificationBell.tsx` — `idle_self`, `idle_alert` (Coffee).
 - `app/(dashboard)/layout.tsx` — `useActivityHeartbeat()`.
+
+### Change log — 2026-10-15 (currency on the account)
+- `app/(dashboard)/settings/page.tsx` — the Currency card uses `chooseCurrency`; its text says the choice follows you.
+- `app/(dashboard)/layout.tsx` — `useSyncedCurrency()`; the page sits in `CurrencyRedraw` (new,
+  `components/shared/CurrencyRedraw.tsx`), which draws it again when the account's currency arrives as the app opens —
+  not on a pick in Settings, nor while someone is typing.
+- `app/(dashboard)/settings/page.tsx` — its toasts go through `@/lib/toast` (the app's toaster; `sonner`'s never showed).

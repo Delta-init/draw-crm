@@ -599,3 +599,9 @@ too: no token check (that is the main namespace's), one screen per connection, a
 | POST | `/api/v1/auth/logout` | `authenticate` → `logout` |
 
 `activity` is a new box on the Roles screen — not open by default.
+
+### Preferences (2026-10-15)
+
+| Method | Route | Chain |
+|--------|-------|-------|
+| GET / PUT | `/api/v1/auth/preferences` | `authenticate` (a View-as pass can read, not write) → `getPreferences` / `updatePreferences` (zod, strict) |

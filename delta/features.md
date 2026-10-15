@@ -788,3 +788,12 @@ own calls (and their leads'), a team leader their team's, the Super Admin / Repo
   in the bell (while the CRM is open) and by push — no email. While the HRMS isn't answering they wait — the Activity
   page's badge says "paused".
 - **Sign-out**: recorded when someone presses Logout.
+
+## Currency follows you (2026-10-15)
+
+- Settings → Currency is kept on your account as well as this device, so every device you sign in on shows amounts in
+  the currency you picked. When the app opens it takes the account's (and redraws the page, unless you're typing). A
+  device that already had one picked before this (not the USD default) asks — "Keep it on your account?", at up to
+  three openings — since on a shared computer it may be someone else's; a choice the device holds for another person
+  goes back to USD. A pick that can't reach the account is kept on the device, for you, and sent next time: the newest
+  pick wins, by when it was picked. Not while viewing as someone (picks are refused then).

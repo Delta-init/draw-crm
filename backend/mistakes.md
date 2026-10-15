@@ -305,3 +305,9 @@ router.patch("/:teamId/leads/:leadId/assign", authenticate, checkPermission("tea
   Sales CRM's rounds: a lunch clock-out isn't idle time; stretches end on sign-out, clock-out, leave or the day's end,
   alerts on or off, one open per person; alerts wait while the HRMS is linked but not answering; failures remembered
   per day.
+
+## [2026-10-15] Currency on the account — what the test rounds found (fixed before shipping)
+
+- **A pick time taken from the device's clock** let a slow clock's fresh picks lose and a fast clock's late pick win.
+  **Fix**: a save sent at once is "now" by this server; a late one sends how long ago it was made (`pickedAgoMs`, on
+  the device's own clock) and is placed at server time minus that.
