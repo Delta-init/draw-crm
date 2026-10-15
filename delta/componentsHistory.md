@@ -1102,3 +1102,19 @@ A new close starts "Bonus given?" at yes with the chosen courses' bonuses added 
 - `lib/currency.ts` — `fmtFull` caps at two decimals and reads a missing amount as 0; `fmtCompact` is now only for chart axes.
 - `app/(dashboard)/reports/page.tsx` — `fmtUSD` is `fmtFull` (was `fmtCompact`); `KpiCard` puts the value on its own full-width line, smaller when long (> 7 / > 10 characters); the revenue chart's Y axis keeps `fmtCompact`.
 - `app/(dashboard)/teams/[teamId]/page.tsx` — `fmtUSD` is `fmtFull`; new local `MoneyFigure` for the Total Received / Total Pending / Avg per Lead cards; the Y axis keeps `fmtCompact`.
+
+### Change log — 2026-10-15 (the open leaderboard, a TV board)
+- `app/public/leaderboard/page.tsx` (new, the same as the Sales CRM's) — outside the dashboard layout, no sign-in. Its
+  own theme tokens as CSS variables (solid colours; dark unless `public-leaderboard-dark` = "0" in this browser) and a
+  boot script, so a light screen never flashes dark. `PersonCard` (a phone layout and a desktop / TV grid with a header
+  row; 1st–3rd in gold / silver / bronze — border, side bar, badge, the ranked figure), `RankMark` (`Trophy3D` for the
+  leader only, turning with CSS; numbered badges below), `Flash`, `TargetBar` / `TargetFigure`, `LeadsNow` (the leads
+  held now, by status), `Clock` (Dubai). Controls fade after 4 s idle and the pointer hides (≥ 1024 px); auto-scroll
+  after 20 s idle when taller than the screen (≥ 1024 px); full screen; ▲ / ▼ for 8 s after a live re-order.
+- `app/public/leaderboard/layout.tsx` (new) — title "Leaderboard — Draw", dark status bar.
+- `app/(dashboard)/leaderboard/page.tsx` — Today column (current month only); **Public link** (copies, else opens).
+- `hooks/useLeaderboard.ts` — `usePublicLeaderboard`, `useLeaderboardLive`, `RANK_OPTIONS`, `fmtTalk`,
+  `DEFAULT_TALK_TARGETS`, the new optional row fields.
+- The open board's statuses are named from `lib/statusConfig.ts` (`STATUS_META`), in pipeline order with closed and lost
+  last; an unknown key in its own words ("unknown" → "Unknown"). Its month and clock follow `DRAW_TZ` (`lib/drawDates.ts`).
+- Shared links carry og site name and type.

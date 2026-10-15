@@ -401,3 +401,28 @@ reminderScheduler.tick()
 - **Web Push** — delivers via the browser's push infrastructure even when the app is closed. Slightly delayed. Requires user to grant notification permission.
 
 Both fire for the same reminder — the frontend is expected to deduplicate by `reminderId` (e.g., if the socket reminder arrives first, the push notification that arrives shortly after should not cause a double-toast).
+
+---
+
+## The open leaderboard — namespace `/public-leaderboard` (2026-10-15)
+
+**File**: `src/services/leaderboardLive.ts`, opened from `initSocket` (`src/socket.ts`).
+
+| Property | Value |
+|----------|-------|
+| **Namespace** | `/public-leaderboard` — no sign-in (the main namespace's token check is its own) |
+| **Cap** | One screen per connection ("This connection already has a screen"); 200 screens, those still joining included — the 201st gets `connect_error` "Too many screens…" (the page then refreshes every 30 s and tries again a minute later) |
+| **Server → screen** | `leaderboard:changed` `{ month: "2026-10", at: ISO time }` — nothing about anyone |
+| **Screen → server** | nothing (ignored) |
+| **When** | once as a screen joins, and at the next count after the board changes — every 5 s while counting is quick, up to a minute when it's slow |
+| **Frontend** | `useLeaderboardLive` (`delta/hooks/useLeaderboard.ts`) → refetches `GET /public/leaderboard` |
+
+```
+first screen joins → the watch starts: a count now, the next after 20× as long as it took (5 s – 1 min)
+  └─ count: getLeaderboard(this month, revenue) → everything shown, as one string
+      ├─ same as the last look → nothing
+      └─ different (or the watch's first look) → drop the kept answers, keep this count
+          └─ nsp.emit("leaderboard:changed", { month, at }) → every screen fetches the board
+a screen joins a running watch → socket.emit("leaderboard:changed", what was last told)
+the last screen leaves → the watch stops 15 s later (unless one joins meanwhile); one watcher count at a time
+```

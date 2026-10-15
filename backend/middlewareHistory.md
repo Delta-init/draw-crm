@@ -578,3 +578,12 @@ admin (401 when ended, expired, mismatched, or the admin is no longer an active 
 refuses anything but GET/HEAD/OPTIONS with 403 "View only…". `authenticateViewAsExit` is the same without that refusal — only the
 stop route uses it. Ordinary tokens take exactly the old path. `requireSuperAdmin` (new, `permissions.ts`): the Super Admin only —
 not a module a role can be granted.
+
+### The open leaderboard (2026-10-15)
+
+| Method | Route | Chain |
+|--------|-------|-------|
+| GET | `/api/v1/public/leaderboard` | none (open) → `month` (1900-01 … next month) / `rankBy` checked (400) → `getPublicLeaderboard` (503 when busy) |
+
+Mounted as `/public` in `routes/index.ts`, after `/leaderboard`. The socket's `/public-leaderboard` namespace is open
+too: no token check (that is the main namespace's), one screen per connection, at most 200 screens.

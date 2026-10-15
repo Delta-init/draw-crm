@@ -750,3 +750,23 @@ own calls (and their leads'), a team leader their team's, the Super Admin / Repo
 - **Where**: Reports (KPI cards, rankings, leaderboards, Top Revenue Earners, tables, chart tooltips) and the team page (revenue cards, member revenue)
 - **What**: the whole amount — "$2,250", "$71,570.25" — where it used to be shortened to one decimal ("$2.3K"). Only chart axes stay short ("$1.5K"), being the scale, not a figure. At most two decimals (`fmtFull`).
 - **Cards**: the figure sits on its own line under the title and icon, a size smaller when long, so the whole amount fits on a phone (`KpiCard` on Reports, `MoneyFigure` on the team page)
+
+## The open leaderboard — a TV board, live (2026-10-15)
+
+- **Where**: `/public/leaderboard` — no sign-in; the Leaderboard page's **Public link** button copies it (or opens it
+  where copying isn't allowed). For a TV on the wall or a phone. The same board as the Sales CRM's.
+- **What**: only the leaderboard — a card per salesperson, the month's revenue, calls (connected), call time against
+  1,000 minutes a month and today's calls and call time against 100 minutes (bars blue on the way, green with a tick
+  once reached), closings, follow-ups (leads moved to Follow Up) and the leads each holds now by status. Ranked by
+  revenue, calls or call time.
+- **Look**: dark unless a screen is switched to light (remembered on that screen); solid colours only, blue the main one;
+  1st gold, 2nd silver, 3rd bronze, everyone else the same; a turning 3D trophy for the leader only.
+- **Live**: the board changes the moment the API says so (within about 5 s of a sale, a call or a lead moving); the
+  cards slide to their new places, ▲ / ▼ shows who moved for a few seconds, a changed figure shows blue for a moment.
+  The badge says Connecting, Live, or Reconnecting (then it still refreshes every 30 s; every minute while live). A wall
+  screen moves on to the new month at midnight on the 1st (Dubai). Statuses are named as this CRM names them. Not for
+  search engines.
+- **On a TV**: the controls (rank, month, refresh, light / dark, full screen) and the pointer fade after 4 s untouched
+  and come back with the mouse; untouched for 20 s, a board taller than the screen glides down, rests and goes back up
+  (big screens only). The Dubai clock ticks in the corner.
+- **Signed-in Leaderboard page**: a Today column (calls · call time today) for the current month.
