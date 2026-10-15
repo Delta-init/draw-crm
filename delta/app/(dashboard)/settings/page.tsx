@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { useCurrencyStore, CURRENCIES } from "@/lib/store/currencyStore";
 import { fmtCompact, fmtFull } from "@/lib/currency";
 import { toast } from "sonner";
+import { IdleAlertsCard } from "@/components/settings/IdleAlertsCard";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -281,6 +282,11 @@ export default function SettingsPage() {
 
           </CardContent>
         </Card>
+      </motion.div>
+
+      {/* Idle alerts — who has gone quiet in the CRM, and the working hours that counts in (2026-10-15) */}
+      <motion.div variants={itemVariants}>
+        <IdleAlertsCard />
       </motion.div>
     </motion.div>
   );

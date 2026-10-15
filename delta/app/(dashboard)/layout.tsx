@@ -7,6 +7,7 @@ import { useAuthStore } from "@/lib/store/authStore";
 import { navItems } from "@/components/layout/Sidebar";
 import { CRM_MODULES } from "@/types";
 import { useReminderNotifications } from "@/hooks/useReminderNotifications";
+import { useActivityHeartbeat } from "@/hooks/useActivityHeartbeat";
 import { RecentPageTracker } from "@/components/shared/CommandPalette";
 import { SaleCelebration } from "@/components/shared/SaleCelebration";
 import { CallFlowProvider } from "@/components/calls/CallFlow";
@@ -15,6 +16,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { isAuthenticated, hasPermission } = useAuthStore();
   const router = useRouter();
   useReminderNotifications();
+  // Every minute the app is open: whether anyone used it — the Activity page and idle alerts.
+  useActivityHeartbeat();
 
   useEffect(() => {
     if (typeof window !== "undefined" && !isAuthenticated) {

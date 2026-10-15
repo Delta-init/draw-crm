@@ -1118,3 +1118,18 @@ A new close starts "Bonus given?" at yes with the chosen courses' bonuses added 
 - The open board's statuses are named from `lib/statusConfig.ts` (`STATUS_META`), in pipeline order with closed and lost
   last; an unknown key in its own words ("unknown" → "Unknown"). Its month and clock follow `DRAW_TZ` (`lib/drawDates.ts`).
 - Shared links carry og site name and type.
+
+### Change log — 2026-10-15 (Activity, with the HRMS — as in the Sales CRM)
+- `app/(dashboard)/activity/page.tsx` (new) — stats, People / Attendance / Sign-ins / Idle alerts; cards below `lg`,
+  tables from it; `ShiftLine` under each person's status; the Attendance tab's day picker ("Today" back).
+- `components/activity/AttendanceTable.tsx` (new) — the day's counts, then a card per person (phones, tablets) or a
+  table (shift, in, out, sessions, worked, day, now); `dayBadge`, `nowBadge`, `clockAt`, `shiftText`; "isn't linked
+  yet" / "didn't answer". No "on a break" count — this CRM has no Take break.
+- `components/activity/TeamAttendanceTab.tsx` (new) — a team's page → Attendance; a 403 says so, no "Try again".
+- `components/settings/IdleAlertsCard.tsx` (new) — Settings → Idle alerts: switch, limit, team leaders, working hours;
+  read-only without Settings edit.
+- `components/shared/ListStates.tsx`, `Pager.tsx`, `StatCard.tsx`, `lib/animations.ts` (new, from the Sales CRM).
+- `app/(dashboard)/teams/[teamId]/page.tsx` — the Attendance tab, for its leaders or the Activity box.
+- `components/layout/Sidebar.tsx` — Activity (`permModule: "activity"`).
+- `components/notifications/NotificationBell.tsx` — `idle_self`, `idle_alert` (Coffee).
+- `app/(dashboard)/layout.tsx` — `useActivityHeartbeat()`.

@@ -817,3 +817,49 @@ As in Tetra Commission (`students/calls.ts` there), for leads. **Files**: `lib/t
    count too, so a pile of joins in one request can't get past it. A joining screen's "gone before it got in" listener
    comes off once it's in, so joining and leaving on one connection can't pile listeners up. Nothing a screen sends is listened to. It only
    reads, and only while a screen is connected to that process.
+
+## Activity and idle alerts, with the HRMS (2026-10-15)
+
+**Files**: `services/activityService.ts`, `services/idleAlertScheduler.ts`, `services/attendanceDayService.ts`,
+`services/settingsService.ts`, `controllers/activityController.ts`, `controllers/authController.ts`,
+`utils/requestMeta.ts`, `lib/hrms.ts`. Brought over from the Sales CRM, less its "Take break".
+
+1. **On record**: a sign-in (password or SSO) → `LoginEvent` login + `UserPresence.lastLoginAt/lastIp/lastDevice`; a
+   refused one (401 / 403 only) → `login_failed` with `wrong_password` / `unknown_email` / `deactivated` /
+   `no_account` (SSO); `POST /auth/logout` → `logout` + `lastLogoutAt`, and an open idle stretch ends. Writing a
+   record never throws into a sign-in or a sign-out; an email is cut to 200 characters for the record.
+2. **Heartbeat**: `lastSeenAt` always, `lastActiveAt` when `active` ($max — only forward); one active minute per
+   clock minute (`ActivityDay.lastMinute`), however many tabs; an alerted idle stretch ends.
+3. **Status**: signed out (after the last sign-in and not seen since, give or take 90 s) → signed out / offline; used
+   in the last 2 min → active; seen in the last 2½ min → no activity; seen today → app closed; else not seen today.
+4. **Idle alert** (`sweepIdleUsers`, every minute): on, and in working hours; last active today, not signed out since.
+   By the HRMS (`attendanceForDay` — `attendance-day`): only someone clocked in — never on leave or clocked out. The
+   HRMS linked but not answering → nobody alerted that minute (`idle: "hrms unavailable"`, People's
+   `idleRule.paused`); not linked → activity alone. Quiet since = the later of their last activity and the start of
+   the HRMS session they're in now; alerted once it reaches the limit of working time, once per stretch (alerted
+   already when `idleAlertedAt >= since`; the presence update is filtered on `lastActiveAt` and `idleAlertedAt <
+   since`, so someone back meanwhile, or a second sweep at the same moment, doesn't alert again). Not Super Admins,
+   not deactivated accounts. Told: the person (`idle_self`), the Super Admins and, if switched on, their team's
+   leaders (`idle_alert`) — live on the socket (`notification` to `user:<id>`, the bell's) and by push; nothing stored.
+   **A stretch ends** when they're back, sign out, are known to have clocked out (at the clock-out) or gone on leave
+   (an unknown state ends nothing), or the day ends — checked every sweep, alerts on or off. One open stretch per
+   person: a new one closes the old at the clock-out between. People's "Alerted" = an open stretch.
+5. **Attendance** (`attendanceForDay`): the active users (all, a team's leaders and members, or a search) → the HRMS's
+   `attendance-day` by email (200 a call, kept a minute per person and day; two HRMS rows for one email → the one with
+   a record that day, then one with its own shift) → shift, first in, last out, sessions, worked / late minutes,
+   status, leave, WFH; today, `now` = the HRMS's leave / in / out. Sorted: in (by clock-in), not in yet, out again, on
+   leave, a day off, not in the HRMS. The HRMS not linked or not answering (or answering anything but its API's list)
+   → `available: false`, `linked`, and why; the rows still say who they are. A row the HRMS couldn't read (today, its
+   `now` empty) is unknown: no "now", sorted last, not counted as not in yet.
+6. **People**: today's `attendance`, `workDay`, `shift`, `clockedInAt`, `clockedOutAt` from the same lookup.
+7. **The IP on record** (`utils/requestMeta.clientIp`): behind our own proxy (a local, private or carrier-grade-NAT
+   socket address) the last X-Forwarded-For hop — the one that proxy added — else its X-Real-IP; reached directly,
+   the socket's address.
+8. **Settings** (`settingsService`): one `AppSetting` document ("app"), created with its defaults the first time it's
+   read; read through a 30 s cache; a save checks the hours end after they start (also against what's stored when
+   only one of them is sent).
+9. **Read with care** (2026-10-15, after the tests): every HRMS row is cleaned before use — a missing or odd shift,
+   record, leave or session is left empty, a row with no email dropped — so one odd row (an older HRMS, bad data)
+   can't fail the page or the idle sweep for everyone. Signed in today with no heartbeat (an app) → "here today".
+   While alerts are paused (the HRMS linked but not answering) the log says so every 10 minutes. Settings refuse an
+   idle limit longer than the working day while alerts are on (it could never fire).

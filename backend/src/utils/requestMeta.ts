@@ -1,17 +1,30 @@
 import type { Request } from "express";
 
 /**
- * Who is on the other end of a request, as far as the request says — for the
- * "View as" session record (services/impersonationService.ts). Display only: never a security check,
- * since a client not behind our proxy can send any X-Forwarded-For it likes.
+ * Who is on the other end of a request — for the "View as" session record (services/impersonationService.ts) and
+ * the sign-in history (services/activityService.ts).
  */
 
-/** The caller's IP: the first X-Forwarded-For hop when behind a proxy, else the socket's. */
+// Loopback, private, link-local and carrier-grade NAT (100.64.0.0/10) — where our own proxy or load balancer speaks from.
+const PROXY_HOP = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|::1$|fc|fd|fe80:)/i;
+
+/**
+ * The caller's IP, as our side saw it. Behind our own proxy (the socket is a local or private address) it is the
+ * last X-Forwarded-For hop — the one that proxy added; earlier hops are whatever the client sent and are not
+ * believed (a refused sign-in must not get to name its own address) — or, from a proxy that sends no
+ * X-Forwarded-For, its X-Real-IP. Reached directly, it is the socket's address and the headers are ignored.
+ */
 export function clientIp(req: Request): string {
-  const xff = req.headers["x-forwarded-for"];
-  const forwarded = (Array.isArray(xff) ? xff[0] : xff)?.split(",")[0]?.trim();
-  const realIp = req.headers["x-real-ip"];
-  const ip = forwarded || (Array.isArray(realIp) ? realIp[0] : realIp) || req.socket?.remoteAddress || req.ip || "";
+  const socket = String(req.socket?.remoteAddress ?? req.ip ?? "").replace(/^::ffff:/, "");
+  const header = (name: string) => {
+    const v = req.headers[name];
+    return (Array.isArray(v) ? v.join(",") : v ?? "").split(",").map((h) => h.trim()).filter(Boolean);
+  };
+  let ip = socket;
+  if (PROXY_HOP.test(socket)) {
+    const hops = header("x-forwarded-for");
+    ip = hops.length ? hops[hops.length - 1]! : header("x-real-ip")[0] ?? socket;
+  }
   return ip.replace(/^::ffff:/, "").slice(0, 64);
 }
 

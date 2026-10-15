@@ -30,6 +30,7 @@ import {
   getUpcomingBatch,
   getTeamMemberSplit,
 } from "../controllers/teamController.js";
+import { teamAttendanceHandler } from "../controllers/activityController.js";
 import { exportTeamPdf } from "../controllers/exportController.js";
 import { authenticate } from "../middleware/auth.js";
 import { checkPermission } from "../middleware/permissions.js";
@@ -54,6 +55,8 @@ router.get( "/:id/leads",                  checkPermission("leads", "view"), get
 router.get( "/:id/member-stats",           checkPermission("leads", "view"), getTeamMemberStats);
 router.get( "/:id/member-split",           checkPermission("leads", "view"), getTeamMemberSplit);
 router.get( "/:id/logs",                   checkPermission("leads", "view"), getTeamLogs);
+// The HRMS shift and the day's clock-ins for the team (2026-10-15): its leaders, the Activity box, or a Super Admin.
+router.get( "/:id/attendance",             teamAttendanceHandler);
 router.post("/:id/auto-assign",            checkPermission("leads", "edit"), autoAssignTeamLeads);
 
 // ── Bulk team-lead operations (must come BEFORE /:leadId routes) ──────────────

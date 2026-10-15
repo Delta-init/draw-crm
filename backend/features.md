@@ -758,3 +758,44 @@ nothing (anything sent is ignored).
 
 **Tests**: `scripts/leaderboard-check.sh` — 67 checks (scratch mongod; the live line in Case 5, with raw WebSocket
 screens and a pile of joins in one polling request; the open door's limits in Case 6).
+
+## Activity — who is here, sign-ins, idle alerts, the HRMS's shift and clock-ins (2026-10-15)
+
+**What it does**: As in the Sales CRM. The Activity page (the Super Admin, and any role given the Activity box) shows
+everyone's status now (active / no activity / app closed / signed out / not seen today), their day so far, their HRMS
+shift and today's clock-in, every sign-in (and refused one, with why) and sign-out, and the idle alerts that went out.
+Its Attendance tab — and a team's page, for its leaders — show the HRMS's day for each person: the shift, the first
+clock-in, the last clock-out, every session, worked and late minutes, the day's status, and where they are now. Idle
+alerts (Settings → Idle alerts, off by default): someone who used the app today, hasn't signed out and has done
+nothing in it for the limit of working time is alerted once per quiet stretch — only while clocked in on the HRMS,
+never on leave (activity alone while the HRMS isn't linked or can't say); the quiet time counts from their last
+clock-in when that came later (a lunch clock-out isn't idle time); they, the Super Admins and (if switched on) their
+team leaders are told in the bell (live, while the CRM is open) and by push. No email. While the HRMS is linked but
+not answering, alerts wait (the page says "paused"): it can't tell who is on leave. A stretch ends when they're back,
+sign out, clock out, go on leave, or the day ends — alerts on or off — one open stretch per person at a time. This
+CRM has no "Take break", so nothing here waits on one.
+
+**Routes**:
+- `POST /api/v1/activity/heartbeat` (signed in) — `{ active }`, every minute the app is open. A View-as pass can't.
+- `GET /api/v1/activity/people?search&teamId`, `/logins?page&limit&userId&kind&from&to`, `/idle?page&limit&userId`,
+  `/attendance?day&teamId&search` — `activity:view`. `day` YYYY-MM-DD, no later than tomorrow; today by default.
+- `GET /api/v1/teams/:id/attendance?day` — the Super Admin, a role with `activity:view`, or one of that team's
+  leaders (403 otherwise; 404 an unknown team).
+- `GET /api/v1/settings/app` (`settings:view`), `PUT /api/v1/settings/app` (`settings:edit`) — the idle-alert rule
+  and the working hours (new: this CRM's first settings kept on the server).
+- `POST /api/v1/auth/logout` (signed in) — the sign-out on record (always 200). Sign-ins and refused sign-ins
+  (password and SSO) are recorded by `/auth/login` and `/auth/sso-login`; recording never stops anyone signing in.
+
+**HRMS**: `GET /integrations/directory/attendance-day` (read only) for shifts, clock-ins and who is clocked in now —
+by email, signed with `HRMS_API_URL` / `HRMS_CLIENT_ID` / `HRMS_INTEGRATION_SECRET` (optional `HRMS_ORG_ID`; the same
+values the Sales CRM holds), kept a minute; a failed ask is remembered a minute too, per day. Unset: "the HRMS isn't
+linked" (and alerts go by activity alone).
+
+**Models Used**: `LoginEvent`, `UserPresence`, `ActivityDay`, `IdleStretch`, `AppSetting` (new), `User`, `Team`,
+`Role`, `PushSubscription`.
+
+**Scheduler**: `idleAlertScheduler` — every 60 s where `RUN_SCHEDULERS` is on; while the switch is off it only closes
+stretches left open from an earlier day.
+
+**Tests**: `scripts/activity-check.sh` — 80 checks (scratch mongod, stand-in HRMS, the bell's live notices caught off
+the socket server).

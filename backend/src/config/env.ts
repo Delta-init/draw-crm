@@ -69,6 +69,21 @@ const envSchema = z.object({
    */
   FINANCE_ORG_ID_BANGALORE:   z.string().default(""),
 
+  /*
+   * The HRMS, for the Activity page (2026-10-15): each person's shift and the
+   * day's clock-ins and clock-outs (the Attendance tab), and idle alerts only
+   * for people clocked in. Its signed integration API, as the Sales CRM, the
+   * Root portal and Tetra Commission call it — HRMS_CLIENT_ID /
+   * HRMS_INTEGRATION_SECRET are the HRMS's INTEGRATION_CLIENT_ID /
+   * INTEGRATION_SECRET (the same values the Sales CRM holds). Unset, the
+   * Attendance tab says the HRMS isn't linked and idle alerts go by activity
+   * alone. HRMS_ORG_ID is optional: people are matched by email.
+   */
+  HRMS_API_URL:            z.string().default(""),
+  HRMS_CLIENT_ID:          z.string().default(""),
+  HRMS_INTEGRATION_SECRET: z.string().default(""),
+  HRMS_ORG_ID:             z.string().default(""),
+
   /**
    * Object storage for payment receipts.
    *

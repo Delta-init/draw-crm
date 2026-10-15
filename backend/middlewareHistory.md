@@ -587,3 +587,15 @@ not a module a role can be granted.
 
 Mounted as `/public` in `routes/index.ts`, after `/leaderboard`. The socket's `/public-leaderboard` namespace is open
 too: no token check (that is the main namespace's), one screen per connection, at most 200 screens.
+
+### Activity and settings (2026-10-15)
+
+| Method | Route | Chain |
+|--------|-------|-------|
+| POST | `/api/v1/activity/heartbeat` | `authenticate` (a View-as pass is refused, as every write) → `heartbeatHandler` |
+| GET | `/api/v1/activity/people` · `/logins` · `/idle` · `/attendance` | `authenticate` → `checkPermission("activity","view")` → handler (zod) |
+| GET | `/api/v1/teams/:id/attendance` | `authenticate` (router) → `teamAttendanceHandler`: Super Admin, `activity:view`, or a leader of that team |
+| GET / PUT | `/api/v1/settings/app` | `authenticate` → `checkPermission("settings","view" / "edit")` → handler (zod, strict) |
+| POST | `/api/v1/auth/logout` | `authenticate` → `logout` |
+
+`activity` is a new box on the Roles screen — not open by default.

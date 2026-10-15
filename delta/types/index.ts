@@ -35,6 +35,8 @@ export const CRM_MODULES = [
   "calls",
   /* Balance payments (2026-10-13): part-paid closes and the next payment, for finance to approve. Open by default. */
   "balancePayments",
+  /* Activity (2026-10-15): who is here, sign-ins, idle alerts, the HRMS shift and clock-ins. The Super Admin's until given. */
+  "activity",
 ] as const;
 
 export type CrmModule = (typeof CRM_MODULES)[number];
@@ -57,6 +59,7 @@ export const MODULE_LABELS: Record<CrmModule, string> = {
   pay: "My Pay",
   calls: "Calls (3CX)",
   balancePayments: "Balance payments",
+  activity: "Activity",
 };
 
 export type PermissionsMap = Partial<Record<CrmModule, ModulePermissions>>;

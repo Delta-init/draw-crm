@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell, BellOff, X, CheckCircle2, UserCheck,
-  MessageCircle, StickyNote, ExternalLink, Loader2,
+  MessageCircle, StickyNote, ExternalLink, Loader2, Coffee,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,9 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   team_message:   { icon: MessageCircle, color: "text-blue-400",   bg: "bg-blue-500/15"   },
   status_changed: { icon: CheckCircle2,  color: "text-violet-400", bg: "bg-violet-500/15" },
   note_added:     { icon: StickyNote,    color: "text-green-400",  bg: "bg-green-500/15"  },
+  // Idle alerts (2026-10-15): to the person who went quiet, and to the super admins and team leaders.
+  idle_self:      { icon: Coffee,        color: "text-amber-400",  bg: "bg-amber-500/15"  },
+  idle_alert:     { icon: Coffee,        color: "text-amber-400",  bg: "bg-amber-500/15"  },
 };
 const DEFAULT_TYPE = { icon: Bell, color: "text-primary", bg: "bg-primary/15" };
 

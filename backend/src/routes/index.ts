@@ -19,6 +19,8 @@ import mentorRoutes from "./mentorRoutes.js";
 import commissionRoutes from "./commissionRoutes.js";
 import leaderboardRoutes from "./leaderboardRoutes.js";
 import publicRoutes from "./publicRoutes.js";
+import activityRoutes from "./activityRoutes.js";
+import settingsRoutes from "./settingsRoutes.js";
 
 const router = Router();
 
@@ -47,6 +49,9 @@ router.use("/mentors", mentorRoutes);
 router.use("/commission", commissionRoutes);
 router.use("/leaderboard", leaderboardRoutes);
 router.use("/public", publicRoutes); // no sign-in: the open leaderboard only
+// Who is here, sign-ins, idle alerts and the HRMS attendance (2026-10-15), and the settings they keep.
+router.use("/activity", activityRoutes);
+router.use("/settings", settingsRoutes);
 
 // Health check
 router.get("/health", (_req, res) => {

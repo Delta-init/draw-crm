@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
 import api from "@/lib/axios";
 import { useAuthStore } from "@/lib/store/authStore";
-import { leaveViewAsForSignOut } from "@/lib/impersonation";
+import { getViewAs, leaveViewAsForSignOut } from "@/lib/impersonation";
 import type { LoginFormValues } from "@/lib/validations/authSchema";
 import type { ApiResponse, LoginResponse } from "@/types";
 
@@ -42,9 +42,22 @@ export const useLogout = () => {
   const queryClient = useQueryClient();
 
   return () => {
+    const viewing = typeof window !== "undefined" && !!getViewAs();
     // Signing out while viewing as someone ends that session too, and forgets
     // the admin's own sign-in that was kept aside — the sign-out below is complete.
-    leaveViewAsForSignOut();
+    const adminToken = leaveViewAsForSignOut();
+    // The sign-out on record (the Activity page), under whoever is signing out — the admin when they were viewing as
+    // someone, never that person. fetch with keepalive, not the api client: the client puts the stored token on every
+    // call, and the request has to outlive the page going to /login.
+    const token = viewing ? adminToken : typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+    if (token) {
+      fetch("/api/v1/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: "{}",
+        keepalive: true,
+      }).catch(() => undefined);
+    }
     // clearAuth();
     toast.success("Logged out successfully");
     if (typeof window !== "undefined") {

@@ -48,6 +48,12 @@ export const CRM_MODULES = [
    * the page, create records a payment for finance. Open by default.
    */
   "balancePayments",
+  /*
+   * Activity (2026-10-15, as in the Sales CRM): who is here, sign-ins, idle
+   * alerts, and the HRMS shift and clock-ins (the Attendance tab). View only.
+   * Not open by default — the Super Admin's, until given.
+   */
+  "activity",
 ] as const;
 
 export type CrmModule = (typeof CRM_MODULES)[number];
@@ -633,5 +639,85 @@ export interface IImpersonation {
   ip: string;
   userAgent: string;
   device: string;
+  createdAt: Date;
+}
+
+// ─── The CRM's own settings (2026-10-15): Settings → Idle alerts ────────────
+export interface IAppSettings {
+  key: "app";
+  idleAlerts: {
+    enabled: boolean;
+    /** Minutes without activity in the app, while signed in during working hours. */
+    limitMinutes: number;
+    notifyTeamLeaders: boolean;
+  };
+  workingHours: {
+    /** IANA zone the times below are in, e.g. "Asia/Dubai". */
+    timezone: string;
+    /** 0 = Sunday … 6 = Saturday. */
+    days: number[];
+    /** "HH:MM", 24-hour. */
+    start: string;
+    end: string;
+  };
+  updatedBy: Types.ObjectId | null;
+  updatedAt?: Date;
+}
+
+// ─── Activity: sign-ins, presence, idle (2026-10-15, as in the Sales CRM) ────
+export type LoginEventKind = "login" | "login_failed" | "logout";
+export type LoginFailReason = "wrong_password" | "unknown_email" | "deactivated" | "no_account";
+
+/** One sign-in, refused sign-in or sign-out — the Activity page's sign-in history. */
+export interface ILoginEvent {
+  _id: Types.ObjectId;
+  user: Types.ObjectId | null;
+  email: string;
+  kind: LoginEventKind;
+  method: "password" | "sso" | null;
+  reason: LoginFailReason | null;
+  ip: string;
+  userAgent: string;
+  device: string;
+  deviceType: "desktop" | "mobile" | "tablet" | "app" | "unknown";
+  createdAt: Date;
+}
+
+/** Where each person is, one document per user — refreshed by the web app's heartbeat. */
+export interface IUserPresence {
+  _id: Types.ObjectId;
+  user: Types.ObjectId;
+  /** Any heartbeat: the app was open. */
+  lastSeenAt: Date | null;
+  /** A heartbeat after someone used the app. */
+  lastActiveAt: Date | null;
+  lastLoginAt: Date | null;
+  lastLogoutAt: Date | null;
+  lastIp: string;
+  lastDevice: string;
+  /** An idle alert was sent for the quiet stretch that began at lastActiveAt (or at a later clock-in). */
+  idleAlertedAt: Date | null;
+}
+
+/** Active minutes per person per day (in the working hours' time zone). */
+export interface IActivityDay {
+  _id: Types.ObjectId;
+  user: Types.ObjectId;
+  day: string;
+  activeMinutes: number;
+  firstActiveAt: Date | null;
+  lastActiveAt: Date | null;
+  /** Epoch minute last counted: one active minute per minute, however many tabs are open. */
+  lastMinute: number;
+  createdAt: Date;
+}
+
+/** A stretch of no activity that raised an idle alert; ends when the person is back, signs out or stops working. */
+export interface IIdleStretch {
+  _id: Types.ObjectId;
+  user: Types.ObjectId;
+  since: Date;
+  alertedAt: Date;
+  endedAt: Date | null;
   createdAt: Date;
 }

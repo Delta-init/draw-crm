@@ -292,3 +292,16 @@ router.patch("/:teamId/leads/:leadId/assign", authenticate, checkPermission("tea
   (13 at once), past the two-at-a-time limit. **Fix**: one watcher count at a time, shared by every watch, and the
   watch goes on 15 s after the last screen leaves. Also: a "close" listener piled up per join on one connection (now
   taken off once the screen is in).
+
+## [2026-10-15] Activity and idle alerts — what the test round found (fixed before shipping)
+
+- **One HRMS row without a shift took down People, Attendance and the idle sweep** for everyone ("null is not an
+  object (evaluating 'h.schedule.name')"). **Fix**: every row is cleaned first — odd fields left empty, a row with
+  no email (or `null`) dropped, inside the guarded call so a bad answer is remembered like any other.
+- **An idle limit longer than the working day was accepted** — quiet time counts within one day, so it could never
+  fire. **Fix**: refused while alerts are on (never in the way of switching them off); the card says so too.
+- **Small ones**: a sign-in with no heartbeat showed "Not seen today"; a 169.254 socket wasn't taken as our proxy;
+  `settings:edit` without `view` could change what its screen won't show. All fixed. Also carried over from the
+  Sales CRM's rounds: a lunch clock-out isn't idle time; stretches end on sign-out, clock-out, leave or the day's end,
+  alerts on or off, one open per person; alerts wait while the HRMS is linked but not answering; failures remembered
+  per day.

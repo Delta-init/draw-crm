@@ -426,3 +426,11 @@ first screen joins → the watch starts: a count now, the next after 20× as lon
 a screen joins a running watch → socket.emit("leaderboard:changed", what was last told)
 the last screen leaves → the watch stops 15 s later (unless one joins meanwhile); one watcher count at a time
 ```
+
+## Idle alerts on the bell (2026-10-15)
+
+```
+sweepIdleUsers → notify({ userIds, type: "idle_self" | "idle_alert", title, body, url })
+  ├─ emitToUser(id, "notification", { type, title, body, url, createdAt })   — the bell, live; nothing stored
+  └─ sendPushToUsers(userIds, { title, body, url, tag, data: { type } })    — every device with notifications on
+```

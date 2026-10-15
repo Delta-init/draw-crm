@@ -14,6 +14,7 @@ import { startSplitScheduler } from "./services/splitScheduler.js";
 import { startBackupScheduler } from "./services/backupService.js";
 import { startFinanceHandoverWorker } from "./services/financeHandoverWorker.js";
 import { startCallSyncWorker } from "./services/callSyncService.js";
+import { startIdleAlertScheduler } from "./services/idleAlertScheduler.js";
 
 const app = express();
 
@@ -57,6 +58,8 @@ const start = async () => {
     startFinanceHandoverWorker();
     // 3CX calls with leads, every minute (off without THREECX_* or with RUN_SCHEDULERS=false).
     startCallSyncWorker();
+    // Idle alerts, every minute (off until switched on in Settings; not with RUN_SCHEDULERS=false).
+    startIdleAlertScheduler();
   });
 };
 

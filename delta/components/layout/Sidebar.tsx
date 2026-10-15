@@ -28,6 +28,7 @@ import {
   Trophy,
   Wallet,
   HandCoins,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/lib/store/uiStore";
@@ -60,6 +61,8 @@ export const navItems: { href: string; label: string; icon: React.ElementType; p
   { href: "/courses",   label: "Courses",            icon: BookOpen,        permModule: "courses"   },
   { href: "/reports",   label: "Reports",            icon: BarChart2,       permModule: "reports"   },
   { href: "/users",     label: "Users",              icon: Users,           permModule: "users"     },
+  /* Who is here, sign-ins, idle alerts, and the HRMS shift and clock-ins (2026-10-15). The Super Admin's until given. */
+  { href: "/activity",  label: "Activity",           icon: Activity,        permModule: "activity" },
   { href: "/students",  label: "Students",           icon: GraduationCap,   permModule: "students"  },
   { href: "/enrolments",label: "My Enrolments",      icon: Receipt,         permModule: null        },
   /* Part-paid closes and their next payments, for finance to approve (2026-10-13); the number is what is overdue or due in 3 days. */

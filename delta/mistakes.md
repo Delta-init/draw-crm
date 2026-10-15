@@ -404,7 +404,7 @@ No `min` attribute on `datetime-local` input, and no frontend validation.
 
 Copy the template at the top and place it at the **top** of the correct category section.
 
-**Entry count**: 13
+**Entry count**: 15
 *(Increment every time you add a mistake)*
 
 ## [2026-10-15] The open leaderboard page — what the test round found (fixed before shipping)
@@ -418,3 +418,14 @@ Copy the template at the top and place it at the **top** of the correct category
 - **"Reconnecting" before the live line had ever connected.** **Fix**: Connecting / Live / Reconnecting.
 - **The live line stayed down after the server dropped it** ("io server disconnect" isn't retried by socket.io).
   **Fix**: try again in 2 s, as `lib/socket.ts` does.
+
+## [2026-10-15] The Activity page — what the test round found (fixed before shipping)
+
+- **The four Activity tabs pushed a phone's page wider** (an `inline-flex w-fit` bar that never wraps). **Fix**: the
+  bar scrolls sideways inside the page.
+- **Signing out while viewing as someone recorded no sign-out for the admin.** **Fix**: the admin's own token (from
+  `leaveViewAsForSignOut`) goes with the sign-out, by `fetch` with `keepalive` — the api client would put the stored
+  token on it, and the page is leaving for /login.
+- **Small ones**: an emptied time field let Save through to a vague "Validation failed"; the idle-alerts empty state
+  offered Settings to people who can't open it; a link straight to a team's Attendance showed members a blank tab; a
+  server's reason (a day too far ahead) was hidden behind "Could not load this list". All fixed.

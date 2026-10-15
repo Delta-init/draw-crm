@@ -744,3 +744,16 @@ This file documents every service in `backend/src/services/`. Read this before w
   (the `/public-leaderboard` namespace and its watcher), `liveLeaderboardState()` (`screens`, `joining`, `watching`,
   `everyMs` — for the checks); `PUBLIC_LEADERBOARD_NAMESPACE`, `LEADERBOARD_CHANGED`, `LIVE_EVERY_MS`,
   `LIVE_SLOWEST_MS`, `MAX_SCREENS`, `LINGER_MS`.
+
+## Activity (added 2026-10-15)
+
+- `activityService` — `recordLogin(req, user, method)`, `recordLoginFailure(req, email, error, method)`,
+  `recordLogout(req, userId)`, `recordHeartbeat(userId, active, now?)`, `listPeople({ search?, teamId? })`,
+  `listLoginEvents(q)`, `listIdleStretches(q)`, `sweepIdleUsers(now?)` → `{ alerted, ended, idle? }`.
+- `idleAlertScheduler` — `startIdleAlertScheduler()` (60 s; a slow pass is never overlapped; not with
+  `RUN_SCHEDULERS=false`).
+- `attendanceDayService` — `attendanceForDay({ day, teamId?, search?, userIds? })`, `dubaiToday()`,
+  `isAttendanceDay(v)`, `teamPeople(teamId)`, `leadsTeam(userId, teamId)`, `hrmsLooksUp()`, `forgetAttendanceDays()`.
+- `settingsService` — `getAppSettings()`, `updateAppSettings(input, userId)`, `isWithinWorkingHours(settings, at?)`.
+- `lib/hrms.ts` — `hrmsConfigured()`, `hrmsGet(path, query)` (signed, 8 s, throws a sentence fit to show).
+- `utils/workingHours.ts` — working-time arithmetic in the working hours' own zone.
