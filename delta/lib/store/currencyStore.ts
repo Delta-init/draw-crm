@@ -30,7 +30,7 @@ interface CurrencyState {
 export const useCurrencyStore = create<CurrencyState>()(
   persist(
     (set) => ({
-      currencyCode: "USD",
+      currencyCode: "AED", // the default until someone picks (the user, 2026-10-15)
       setCurrency: (code) => set({ currencyCode: code }),
     }),
     { name: "crm_currency" },
@@ -39,5 +39,5 @@ export const useCurrencyStore = create<CurrencyState>()(
 
 export function getActiveCurrency(): CurrencyOption {
   const code = useCurrencyStore.getState().currencyCode;
-  return CURRENCIES.find((c) => c.code === code) ?? CURRENCIES[0];
+  return CURRENCIES.find((c) => c.code === code) ?? CURRENCIES.find((c) => c.code === "AED")!;
 }

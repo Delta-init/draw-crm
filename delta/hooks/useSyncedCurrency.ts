@@ -25,7 +25,7 @@ const PENDING = "crm_currency_pending"; // per person: a pick not on their accou
 const ASKED = "crm_currency_asked"; // per person: how often "keep it on your account?" was asked — { [userId]: n }
 const SEEN = "crm_currency_seen"; // per person: when the account's currency was picked, as this device last saw it
 const ASK_AT_MOST = 3;
-const DEFAULT = "USD";
+const DEFAULT = "AED"; // the user, 2026-10-15: AED for everyone who hasn't picked
 
 interface Prefs {
   currency: string | null;
