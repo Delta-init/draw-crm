@@ -14,7 +14,7 @@ import { useCurrencyStore, CURRENCIES } from "@/lib/store/currencyStore";
 import { chooseCurrency } from "@/hooks/useSyncedCurrency";
 import { fmtCompact, fmtFull } from "@/lib/currency";
 import { toast } from "@/lib/toast";
-import { IdleAlertsCard } from "@/components/settings/IdleAlertsCard";
+import { AutomationSettingsCard } from "@/components/settings/AutomationSettingsCard";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -286,9 +286,9 @@ export default function SettingsPage() {
         </Card>
       </motion.div>
 
-      {/* Idle alerts — who has gone quiet in the CRM, and the working hours that counts in (2026-10-15) */}
+      {/* Automation & alerts — inactive leads (2026-10-16), idle alerts (2026-10-15) and the working hours they count in */}
       <motion.div variants={itemVariants}>
-        <IdleAlertsCard />
+        <AutomationSettingsCard />
       </motion.div>
     </motion.div>
   );

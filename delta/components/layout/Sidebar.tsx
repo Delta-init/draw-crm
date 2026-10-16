@@ -29,6 +29,7 @@ import {
   Wallet,
   HandCoins,
   Activity,
+  Hourglass,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/lib/store/uiStore";
@@ -61,6 +62,8 @@ export const navItems: { href: string; label: string; icon: React.ElementType; p
   { href: "/courses",   label: "Courses",            icon: BookOpen,        permModule: "courses"   },
   { href: "/reports",   label: "Reports",            icon: BarChart2,       permModule: "reports"   },
   { href: "/users",     label: "Users",              icon: Users,           permModule: "users"     },
+  /* Leads nobody acted on in time (2026-10-16). The Super Admin's until given. */
+  { href: "/inactive-leads", label: "Inactive Leads", icon: Hourglass,      permModule: "inactive-leads" },
   /* Who is here, sign-ins, idle alerts, and the HRMS shift and clock-ins (2026-10-15). The Super Admin's until given. */
   { href: "/activity",  label: "Activity",           icon: Activity,        permModule: "activity" },
   { href: "/students",  label: "Students",           icon: GraduationCap,   permModule: "students"  },
@@ -101,8 +104,11 @@ function NavLinks({ collapsed = false, onNavigate }: NavLinksProps) {
     if (!accessToken) return;
     const socket = getSocket(accessToken);
 
-    function handleNotification(payload: { data?: { type?: string } }) {
-      if (payload?.data?.type === "lead_assigned") {
+    function handleNotification(payload: { type?: string; data?: { type?: string } }) {
+      // A stored notice carries its type at the top, an older one inside data. A lead handed to them, or one moved
+      // away for inactivity: the new-leads count changes.
+      const type = payload?.type ?? payload?.data?.type;
+      if (type === "lead_assigned" || type === "inactive_lead_moved") {
         queryClient.invalidateQueries({ queryKey: ["leads", "stats", userId] });
       }
     }

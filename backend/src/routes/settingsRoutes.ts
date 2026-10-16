@@ -3,7 +3,7 @@ import { authenticate } from "../middleware/auth.js";
 import { checkPermission } from "../middleware/permissions.js";
 import { getAppSettingsHandler, updateAppSettingsHandler } from "../controllers/settingsController.js";
 
-/** The CRM's own settings (Settings → Idle alerts): the idle-alert rule and the working hours it counts in. */
+/** The CRM's own settings (Settings → Automation & alerts): the inactive-lead and idle-alert rules and the working hours they count in. */
 const router = Router();
 
 router.use(authenticate);

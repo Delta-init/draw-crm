@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
-import { Clock, Loader2, Save, Info, ArrowRight, Coffee } from "lucide-react";
+import { Zap, Timer, Clock, Loader2, Save, Info, ArrowRight, Coffee } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,14 +12,18 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/store/authStore";
 import { useAppSettings, useUpdateAppSettings } from "@/hooks/useAppSettings";
+import { useLeadSources } from "@/hooks/useLeads";
 import type { AppSettings } from "@/types/settings";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-/** What the card edits. */
-type Draft = Pick<AppSettings, "idleAlerts" | "workingHours">;
+/** What the card edits — enabledAt is the server's to set. */
+type Draft = Pick<AppSettings, "idleAlerts" | "workingHours"> & {
+  inactiveLeads: Omit<AppSettings["inactiveLeads"], "enabledAt">;
+};
 
 interface DurationInputProps {
   id: string;
@@ -56,23 +60,31 @@ const minutesOf = (hhmm: string) => {
   return h * 60 + m;
 };
 
+const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" });
+
 const draftOf = (s: AppSettings): Draft => ({
+  inactiveLeads: {
+    autoReassign: s.inactiveLeads?.autoReassign ?? false,
+    limitMinutes: s.inactiveLeads?.limitMinutes ?? 45,
+    excludedSources: [...(s.inactiveLeads?.excludedSources ?? [])].sort(byName),
+  },
   idleAlerts: { ...s.idleAlerts },
   workingHours: { ...s.workingHours, days: [...s.workingHours.days] },
 });
 
 // ── Component ──────────────────────────────────────────────────────────────────
 /**
- * "Idle alerts" on the Settings page (2026-10-15, as in the Sales CRM's
- * "Automation & alerts"): when someone at work has gone quiet in the CRM, and
- * the working hours that counts in. This CRM tells people in the bell while it
- * is open and by push — no email.
+ * "Automation & alerts" on the Settings page, as in the Sales CRM: leads
+ * nobody acted on in time, and whether they move on (2026-10-16); when someone
+ * at work has gone quiet in the CRM (2026-10-15); and the working hours both
+ * count in. This CRM tells people in the bell while it is open and by push —
+ * no email.
  *
- * Ships switched off. Shown to those with Settings view — the Settings page
+ * Everything that acts on real leads or people ships switched off. Shown to those with Settings view — the Settings page
  * itself is open to everyone — and changed only by those with Settings edit;
  * the rest see it read-only.
  */
-export function IdleAlertsCard() {
+export function AutomationSettingsCard() {
   const user = useAuthStore((s) => s.user);
   const hasPermission = useAuthStore((s) => s.hasPermission);
   // The signed-in user comes from localStorage: decide only once in the browser, so the server's HTML matches.
@@ -82,6 +94,7 @@ export function IdleAlertsCard() {
   const canEdit = canView && hasPermission("settings", "edit");
   const { data, isLoading, error } = useAppSettings(canView);
   const save = useUpdateAppSettings();
+  const { data: sourceList = [] } = useLeadSources();
 
   const [draft, setDraft] = useState<Draft | null>(null);
   useEffect(() => {
@@ -96,6 +109,8 @@ export function IdleAlertsCard() {
   const problems = useMemo(() => {
     if (!draft) return [];
     const p: string[] = [];
+    if (draft.inactiveLeads.limitMinutes < 5) p.push("The inactive-lead limit must be at least 5 minutes.");
+    if (draft.inactiveLeads.limitMinutes > 7 * 24 * 60) p.push("The inactive-lead limit can be at most 7 days.");
     if (draft.idleAlerts.limitMinutes < 5) p.push("The idle limit must be at least 5 minutes.");
     if (draft.idleAlerts.limitMinutes > 24 * 60) p.push("The idle limit can be at most 24 hours.");
     if (!draft.workingHours.days.length) p.push("Pick at least one working day.");
@@ -125,7 +140,7 @@ export function IdleAlertsCard() {
   if (error || !draft || !data) {
     return (
       <Card className="border-border/50 bg-card/80">
-        <CardContent className="p-6 text-sm text-muted-foreground">Could not load the idle-alert settings.</CardContent>
+        <CardContent className="p-6 text-sm text-muted-foreground">Could not load the automation settings.</CardContent>
       </Card>
     );
   }
@@ -144,11 +159,11 @@ export function IdleAlertsCard() {
     <Card className="border-border/50 bg-card/80">
       <CardHeader className="pb-4">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <Coffee className="h-4 w-4 text-primary" />
-          Idle alerts
+          <Zap className="h-4 w-4 text-primary" />
+          Automation & alerts
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Be told when someone at work has gone quiet in the CRM. Off until you switch it on.
+          When the CRM steps in on its own. Anything that acts on real leads or people stays off until you switch it on.
         </p>
         {!canEdit && (
           <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -158,10 +173,73 @@ export function IdleAlertsCard() {
       </CardHeader>
 
       <CardContent className="space-y-6">
+        {/* ── Inactive leads ── */}
+        <Section
+          icon={Timer}
+          title="Inactive leads"
+          description="A lead counts as acted on when its owner changes the status, adds a note, logs a call or sets a reminder. The clock only runs in working hours."
+        >
+          <div className="flex items-center justify-between gap-4">
+            <Label htmlFor="auto-reassign" className="text-sm">Move leads nobody acted on to the next team member</Label>
+            <Switch
+              id="auto-reassign"
+              checked={draft.inactiveLeads.autoReassign}
+              onCheckedChange={(v) => set("inactiveLeads", { autoReassign: v })}
+              disabled={!canEdit}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm text-muted-foreground">Counts as inactive after</span>
+            <DurationInput
+              id="inactive-limit"
+              minutes={draft.inactiveLeads.limitMinutes}
+              onChange={(m) => set("inactiveLeads", { limitMinutes: m })}
+              disabled={!canEdit}
+              maxHours={168}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">Never move leads from these sources</p>
+            <MultiSelect
+              selected={draft.inactiveLeads.excludedSources ?? []}
+              onChange={(v) => set("inactiveLeads", { excludedSources: [...v].sort(byName) })}
+              options={Array.from(new Set([...sourceList, ...(draft.inactiveLeads.excludedSources ?? [])]))
+                .sort(byName)
+                .map((x) => ({ value: x, label: x }))}
+              placeholder="None — every source can move"
+              searchPlaceholder="Search sources…"
+              emptyText="No source matches."
+              disabled={!canEdit}
+              className="max-w-md"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Their leads still show on the Inactive Leads page, marked &ldquo;Not moved · source&rdquo;, and can be moved by hand.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>
+              {data.settings.inactiveLeads?.autoReassign && data.settings.inactiveLeads.enabledAt
+                ? `Moving leads assigned since ${new Date(data.settings.inactiveLeads.enabledAt).toLocaleString("en-GB", {
+                    timeZone: data.settings.workingHours.timezone,
+                    day: "2-digit",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}. Older ones are moved by hand.`
+                : "Switched on, it only moves leads assigned from then on — older ones are moved by hand."}
+            </span>
+            {hasPermission("inactive-leads", "view") && (
+              <Link href="/inactive-leads" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+                See inactive leads <ArrowRight className="h-3 w-3" />
+              </Link>
+            )}
+          </div>
+        </Section>
+
         {/* ── Idle alerts ── */}
         <Section
           icon={Coffee}
-          title="When someone goes quiet"
+          title="Idle alerts"
           description="Alert the employee and the super admins when someone who used the app today, and hasn't signed out, has done nothing in it for a while during working hours — only while they are clocked in on the HRMS (by activity alone if the HRMS isn't linked); never on leave. Quiet time counts from when they clocked back in, so lunch isn't idle time. One alert per quiet stretch; super admins aren't tracked. In the bell while the CRM is open, and by push — no email."
         >
           <div className="flex items-center justify-between gap-4">
@@ -201,7 +279,7 @@ export function IdleAlertsCard() {
         </Section>
 
         {/* ── Working hours ── */}
-        <Section icon={Clock} title="Working hours" description="Idle alerts only run inside these hours, in this time zone — by default 10:00–19:00 GST, Monday to Saturday.">
+        <Section icon={Clock} title="Working hours" description="Both clocks above only run inside these hours, in this time zone — by default 10:00–19:00 GST, Monday to Saturday.">
           <div className="flex flex-wrap gap-1.5">
             {DAYS.map((label, day) => {
               const on = draft.workingHours.days.includes(day);

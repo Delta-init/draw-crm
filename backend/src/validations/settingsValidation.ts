@@ -21,12 +21,29 @@ const zoneName = (tz: string): string | null => {
 };
 
 /**
- * A partial update of the CRM's settings (Settings → Idle alerts): send only
- * what changed. The limit is in minutes — the page converts from hours and
- * minutes.
+ * A partial update of the CRM's settings (Settings → Automation & alerts):
+ * send only what changed. Limits are in minutes — the page converts from
+ * hours and minutes.
  */
 export const updateAppSettingsSchema = z
   .object({
+    inactiveLeads: z
+      .object({
+        autoReassign: z.boolean().optional(),
+        limitMinutes: z.number().int().min(5, "At least 5 minutes").max(7 * 24 * 60, "At most 7 days").optional(),
+        // Lead sources never moved automatically — kept as written, one of each whatever its case
+        excludedSources: z
+          .array(z.string().trim().min(1).max(100))
+          .max(100)
+          .transform((a) => {
+            const seen = new Map<string, string>();
+            for (const x of a) if (!seen.has(x.toLowerCase())) seen.set(x.toLowerCase(), x);
+            return [...seen.values()];
+          })
+          .optional(),
+      })
+      .strict()
+      .optional(),
     idleAlerts: z
       .object({
         enabled: z.boolean().optional(),

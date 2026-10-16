@@ -21,6 +21,8 @@ import leaderboardRoutes from "./leaderboardRoutes.js";
 import publicRoutes from "./publicRoutes.js";
 import activityRoutes from "./activityRoutes.js";
 import settingsRoutes from "./settingsRoutes.js";
+import notificationRoutes from "./notificationRoutes.js";
+import inactiveLeadRoutes from "./inactiveLeadRoutes.js";
 
 const router = Router();
 
@@ -52,6 +54,9 @@ router.use("/public", publicRoutes); // no sign-in: the open leaderboard only
 // Who is here, sign-ins, idle alerts and the HRMS attendance (2026-10-15), and the settings they keep.
 router.use("/activity", activityRoutes);
 router.use("/settings", settingsRoutes);
+// The bell's kept notifications, and the Inactive leads page (2026-10-16, as in the Sales CRM)
+router.use("/notifications", notificationRoutes);
+router.use("/inactive-leads", inactiveLeadRoutes);
 
 // Health check
 router.get("/health", (_req, res) => {

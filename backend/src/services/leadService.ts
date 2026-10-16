@@ -287,6 +287,127 @@ async function autoSplitLead(
   }
 }
 
+// ── Moving an inactive lead on: whose turn it is, by the team's split rule ───
+// (2026-10-16, with the Inactive leads page, as in the Sales CRM.) The same
+// rule autoSplitLead above applies — pool, inactive and absent members, equal
+// load or round robin — with people taken out of the running. autoSplitLead is
+// left exactly as it was: new leads split as they always have.
+
+// Moves for the SAME team run one after another, so each pick sees the
+// previous one's assignment and round-robin cursor. Different teams in parallel.
+const teamMoveQueues = new Map<string, Promise<void>>();
+
+/** Runs `task` after every inactive-lead move already queued for this team. */
+export function runInTeamQueue<T>(teamId: string, task: () => Promise<T>): Promise<T> {
+  const prev = teamMoveQueues.get(teamId) ?? Promise.resolve();
+  const run = prev.then(task);
+  // Guard the chain so one failure can never wedge the queue.
+  const tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  teamMoveQueues.set(teamId, tail);
+  void tail.finally(() => {
+    if (teamMoveQueues.get(teamId) === tail) teamMoveQueues.delete(teamId);
+  });
+  return run;
+}
+
+/** A team as the split reads it: leaders and members populated with at least `_id`. */
+export interface SplitTeam {
+  _id: { toString(): string };
+  leaders: Array<{ _id: { toString(): string } }>;
+  members: Array<{ _id: { toString(): string } }>;
+  inactiveMembers?: Array<{ toString(): string }>;
+  absentToday?: Array<{ userId: { toString(): string }; date: Date }>;
+  settings?: {
+    splitMode?: "round_robin" | "equal_load";
+    roundRobinIndex?: number;
+    includedMembers?: Array<{ toString(): string }>;
+    roundRobinStartDate?: Date | string | null;
+  };
+}
+
+/** The next member in a rotation from `cursor` who is not excluded, and where the cursor goes after them. */
+function nextInRotation(pool: string[], cursor: number, excluded: Set<string>): { pick: string; next: number } | null {
+  for (let k = 0; k < pool.length; k++) {
+    const i = (cursor + k) % pool.length;
+    if (!excluded.has(pool[i])) return { pick: pool[i], next: (i + 1) % pool.length };
+  }
+  return null;
+}
+
+/**
+ * The member the team's split rule gives a lead to, or null when nobody in the
+ * pool can take it. Round robin advances the team's cursor, so call it inside
+ * runInTeamQueue.
+ *
+ * `exclude` takes people out of the running without changing whose turn it
+ * is: an inactive lead is never moved to its current owner, nor to anyone who
+ * lost it before — their turn passes to the next person in line.
+ */
+export async function pickSplitAssignee(team: SplitTeam, opts: { exclude?: string[] } = {}): Promise<string | null> {
+  const teamId = team._id.toString();
+  const settings = team.settings ?? {};
+  const excluded = new Set(opts.exclude ?? []);
+
+  const allMemberIds = [
+    ...team.leaders.map((u) => u._id.toString()),
+    ...team.members.map((u) => u._id.toString()),
+  ].filter((id, i, arr) => arr.indexOf(id) === i);
+
+  const inactiveSet = new Set((team.inactiveMembers ?? []).map((id) => id.toString()));
+
+  // Absent today — entries matching today's AED date
+  const todayMidnight = istMidnightUTC();
+  const tomorrowMidnight = new Date(todayMidnight.getTime() + 86400000);
+  const absentSet = new Set(
+    (team.absentToday ?? [])
+      .filter((a) => a.date >= todayMidnight && a.date < tomorrowMidnight)
+      .map((a) => a.userId.toString()),
+  );
+
+  // team.settings.includedMembers → all members
+  const includedSet = (settings.includedMembers ?? [])
+    .map((id) => id.toString())
+    .filter((id) => allMemberIds.includes(id));
+  const pool = (includedSet.length > 0 ? includedSet : allMemberIds).filter(
+    (id) => !inactiveSet.has(id) && !absentSet.has(id),
+  );
+  const candidates = pool.filter((id) => !excluded.has(id));
+  if (candidates.length === 0) return null;
+
+  if (settings.splitMode === "equal_load") {
+    const counts = await Promise.all(
+      candidates.map((id) =>
+        Lead.countDocuments({
+          assignedTo: id,
+          status: {
+            $in: ["new", "assigned", "followup", "interested", "cnc", "callback", "rnr", "whatsapp"],
+          },
+        }),
+      ),
+    );
+    return candidates[counts.indexOf(Math.min(...counts))];
+  }
+
+  // round_robin — with roundRobinStartDate, the member with fewest leads
+  // assigned since that date (earliest in pool order on a tie); otherwise the
+  // stored cursor, skipping whoever is excluded.
+  const startDate = settings.roundRobinStartDate ? new Date(settings.roundRobinStartDate) : null;
+  if (startDate) {
+    const counts = await Promise.all(
+      candidates.map((id) => Lead.countDocuments({ assignedTo: id, assignedAt: { $gte: startDate } })),
+    );
+    return candidates[counts.indexOf(Math.min(...counts))];
+  }
+
+  const turn = nextInRotation(pool, settings.roundRobinIndex ?? 0, excluded);
+  if (!turn) return null;
+  await Team.updateOne({ _id: teamId }, { $set: { "settings.roundRobinIndex": turn.next } });
+  return turn.pick;
+}
+
 // Public wrapper so teamController can call autoSplitLead without coupling to LeadService class
 export async function autoSplitLeadPublic(
   teamId: string,

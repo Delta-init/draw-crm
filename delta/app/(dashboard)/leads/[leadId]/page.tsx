@@ -70,6 +70,7 @@ const ACTION_CONFIG: Record<ActivityAction, { icon: React.ElementType; color: st
   note_added: { icon: MessageSquarePlus, color: "text-green-400", bg: "bg-green-500/15" },
   note_updated: { icon: PencilLine, color: "text-cyan-400", bg: "bg-cyan-500/15" },
   note_deleted: { icon: Minus, color: "text-red-400", bg: "bg-red-500/15" },
+  inactive_reassigned: { icon: ArrowRightLeft, color: "text-amber-400", bg: "bg-amber-500/15" },
 };
 
 const noteSchema = z.object({ content: z.string().min(1, "Note cannot be empty").max(2000) });
@@ -398,7 +399,7 @@ function ActivityTimeline({ logs }: { logs: ActivityLog[] }) {
                 icon: Activity, color: "text-muted-foreground", bg: "bg-muted",
               };
               const Icon = cfg.icon;
-              const by = getUserName(log.performedBy as User | string);
+              const by = log.performedBy ? getUserName(log.performedBy as User | string) : "System";
 
               return (
                 <motion.div

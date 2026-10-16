@@ -5,15 +5,26 @@ import type { IAppSettings } from "../types/index.js";
  * The CRM's own settings — one document, keyed "app" (2026-10-15, with the
  * Activity page, as in the Sales CRM).
  *
- * What Settings → Idle alerts edits: when an idle employee is flagged, and the
- * working hours that counts in — by default 10:00–19:00 GST, Monday to
- * Saturday. No email: this CRM tells people in the app and by push. Read
- * through settingsService, which caches it for the scheduler that asks every
- * minute.
+ * What Settings → Automation & alerts edits: when an untouched lead counts as
+ * inactive and whether it moves on (2026-10-16, as in the Sales CRM), when an
+ * idle employee is flagged, and the working hours both count in — by default
+ * 10:00–19:00 GST, Monday to Saturday. No email: this CRM tells people in the
+ * app and by push. Read through settingsService, which caches it for the
+ * schedulers that ask every minute.
  */
 const appSettingSchema = new Schema<IAppSettings>(
   {
     key: { type: String, enum: ["app"], default: "app", unique: true },
+
+    inactiveLeads: {
+      // Off until a Super Admin switches it on — it moves real leads between real people
+      autoReassign: { type: Boolean, default: false },
+      limitMinutes: { type: Number, default: 45, min: 5, max: 7 * 24 * 60 },
+      // Stamped by the server when automatic moves are switched on, cleared when off
+      enabledAt:    { type: Date, default: null },
+      // Lead sources the automatic mover leaves alone (matched without regard to case)
+      excludedSources: { type: [String], default: [] },
+    },
 
     idleAlerts: {
       enabled:           { type: Boolean, default: false },

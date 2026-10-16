@@ -16,7 +16,8 @@ export type ActivityAction =
   | "team_assigned"
   | "note_added"
   | "note_updated"
-  | "note_deleted";
+  | "note_deleted"
+  | "inactive_reassigned";
 
 export interface LeadNote {
   _id: string;
@@ -63,7 +64,8 @@ export interface ActivityLog {
   _id: string;
   action: ActivityAction;
   description: string;
-  performedBy: User | string;
+  /** Missing when the CRM did it on its own (a lead moved on for inactivity) — shown as "System". */
+  performedBy?: User | string | null;
   changes?: Record<string, { from: unknown; to: unknown }>;
   createdAt: string;
 }

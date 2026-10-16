@@ -55,6 +55,11 @@ export const CRM_MODULES = [
    * Not open by default — the Super Admin's, until given.
    */
   "activity",
+  /*
+   * Inactive leads (2026-10-16, as in the Sales CRM): view the page, edit to
+   * move leads on. Not open by default — the Super Admin's, until given.
+   */
+  "inactive-leads",
 ] as const;
 
 export type CrmModule = (typeof CRM_MODULES)[number];
@@ -430,7 +435,8 @@ export type ActivityAction =
   | "team_assigned"
   | "note_added"
   | "note_updated"
-  | "note_deleted";
+  | "note_deleted"
+  | "inactive_reassigned";
 
 export interface ILeadNote {
   _id: Types.ObjectId;
@@ -469,7 +475,8 @@ export interface IActivityLog {
   _id: Types.ObjectId;
   action: ActivityAction;
   description: string;
-  performedBy: Types.ObjectId | IUser;
+  /** Absent when the CRM did it on its own (a lead moved on for inactivity) — shown as "System". */
+  performedBy?: Types.ObjectId | IUser;
   changes?: Record<string, { from: unknown; to: unknown }>;
   createdAt: Date;
 }
@@ -512,6 +519,8 @@ export interface ILead extends Document {
   comments?: string | null;
   createdAt: Date;
   updatedAt: Date;
+  /** Moves for inactivity — absent until the first one. */
+  inactivity?: ILeadInactivity;
 }
 
 export interface LeadFilters {
@@ -647,9 +656,22 @@ export interface IImpersonation {
   createdAt: Date;
 }
 
-// ─── The CRM's own settings (2026-10-15): Settings → Idle alerts ────────────
+// ─── The CRM's own settings (2026-10-15): Settings → Automation & alerts ───
 export interface IAppSettings {
   key: "app";
+  inactiveLeads: {
+    /** Move a lead nobody acted on to the next team member. Ships off. */
+    autoReassign: boolean;
+    /** How long after assignment, in minutes, a lead with no action counts as inactive. */
+    limitMinutes: number;
+    /**
+     * When automatic moves were last switched on. Only leads assigned since then
+     * move on their own — switching it on never sweeps up the whole backlog.
+     */
+    enabledAt: Date | null;
+    /** Lead sources the automatic mover never moves (matched without regard to case). */
+    excludedSources?: string[];
+  };
   idleAlerts: {
     enabled: boolean;
     /** Minutes without activity in the app, while signed in during working hours. */
@@ -725,4 +747,56 @@ export interface IIdleStretch {
   alertedAt: Date;
   endedAt: Date | null;
   createdAt: Date;
+}
+
+// ─── Inactive leads (2026-10-16, as in the Sales CRM) ─────────────────────────
+export interface ILeadInactivity {
+  /** Everyone who lost this lead for not acting on it. */
+  lostBy: Types.ObjectId[];
+  moves: number;
+  lastMovedAt: Date | null;
+  /** Nobody left in the team to move it to, for the current assignment. */
+  stuckAt: Date | null;
+}
+
+/** One lead moved on because its owner did not act on it — automatically, or by hand from the Inactive leads page. */
+export interface ILeadMove {
+  _id: Types.ObjectId;
+  lead: Types.ObjectId;
+  leadName: string;
+  team: Types.ObjectId | null;
+  from: Types.ObjectId;
+  to: Types.ObjectId;
+  kind: "automatic" | "manual";
+  /** Who moved it by hand; null when the CRM did. */
+  by: Types.ObjectId | null;
+  /** Working minutes the lead had waited without action when it moved. */
+  inactiveMinutes: number;
+  createdAt: Date;
+}
+
+// ─── Notifications kept for the bell (2026-10-16, as in the Sales CRM) ────────
+/**
+ * A notice kept for one person, so the bell still has it after a reload.
+ * The live copy goes out on the socket as before; this is the record.
+ */
+export interface INotification {
+  _id: Types.ObjectId;
+  user: Types.ObjectId;
+  type: string;
+  title: string;
+  body: string;
+  url: string;
+  readAt: Date | null;
+  createdAt: Date;
+}
+
+export interface NotificationDTO {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  url: string;
+  read: boolean;
+  createdAt: string;
 }

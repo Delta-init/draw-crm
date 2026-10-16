@@ -38,6 +38,7 @@ const activityLogSchema = new Schema<IActivityLog>(
         "note_added",
         "note_updated",
         "note_deleted",
+        "inactive_reassigned",
       ],
     },
     description: {
@@ -46,10 +47,11 @@ const activityLogSchema = new Schema<IActivityLog>(
       trim: true,
       maxlength: [500, "Description cannot exceed 500 characters"],
     },
+    // Left out when the CRM did it on its own (a lead moved on for inactivity) —
+    // every screen that lists activity shows those as "System".
     performedBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
     changes: {
       type: Schema.Types.Mixed,
@@ -290,6 +292,21 @@ const leadSchema = new Schema<ILead>(
       maxlength: [2000, "Comments cannot exceed 2000 characters"],
       default: null,
     },
+    // Moves for inactivity (Settings → Automation & alerts). Absent until the first one.
+    inactivity: {
+      type: new Schema(
+        {
+          // Everyone who lost this lead for not acting on it — never moved back to them automatically
+          lostBy: [{ type: Schema.Types.ObjectId, ref: "User" }],
+          moves: { type: Number, default: 0 },
+          lastMovedAt: { type: Date, default: null },
+          // Nobody left in the team to move it to, for the current assignment — left for a super admin
+          stuckAt: { type: Date, default: null },
+        },
+        { _id: false },
+      ),
+      default: undefined,
+    },
   },
   {
     timestamps: true,
@@ -306,6 +323,8 @@ leadSchema.index({ assignedTo: 1 });
 leadSchema.index({ team: 1 });
 leadSchema.index({ reporter: 1 });
 leadSchema.index({ createdAt: -1 });
+// The Inactive leads page and its automatic mover: untouched leads by when they were handed over.
+leadSchema.index({ status: 1, assignedAt: 1 });
 
 handOverOnAssign(leadSchema);
 

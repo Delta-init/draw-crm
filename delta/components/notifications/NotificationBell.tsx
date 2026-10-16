@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell, BellOff, X, CheckCircle2, UserCheck,
   MessageCircle, StickyNote, ExternalLink, Loader2, Coffee,
+  ArrowRightLeft, AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,10 @@ import { usePushNotification } from "@/hooks/usePushNotification";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { toast } from "@/lib/toast";
 import { NotificationTests } from "@/components/notifications/NotificationTests";
+import {
+  useNotifications, useMarkAllNotificationsRead, useDeleteNotification, useClearNotifications,
+} from "@/hooks/useNotifications";
+import type { AppNotificationDTO } from "@/types/notification";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -31,7 +36,20 @@ interface AppNotification {
   url?: string;
   createdAt: string;
   read: boolean;
+  /** Kept on the server (it has a stored id): reading, dismissing and clearing it stick (2026-10-16). */
+  stored?: boolean;
 }
+
+/** Newest first, one of each id, at most 50. */
+function mergeNotifications(a: AppNotification[], b: AppNotification[]): AppNotification[] {
+  const byId = new Map<string, AppNotification>();
+  for (const n of [...a, ...b]) if (!byId.has(n.id)) byId.set(n.id, n);
+  return Array.from(byId.values())
+    .sort((x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime())
+    .slice(0, 50);
+}
+
+const fromStored = (n: AppNotificationDTO): AppNotification => ({ ...n, url: n.url || undefined, stored: true });
 
 const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
   lead_assigned:  { icon: UserCheck,     color: "text-teal-400",   bg: "bg-teal-500/15"   },
@@ -41,6 +59,10 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   // Idle alerts (2026-10-15): to the person who went quiet, and to the super admins and team leaders.
   idle_self:      { icon: Coffee,        color: "text-amber-400",  bg: "bg-amber-500/15"  },
   idle_alert:     { icon: Coffee,        color: "text-amber-400",  bg: "bg-amber-500/15"  },
+  // Inactive leads (2026-10-16): one of yours moved on, moves made automatically, and leads nobody is left to take.
+  inactive_lead_moved:  { icon: ArrowRightLeft, color: "text-amber-400", bg: "bg-amber-500/15" },
+  inactive_leads_moved: { icon: ArrowRightLeft, color: "text-amber-400", bg: "bg-amber-500/15" },
+  inactive_leads_stuck: { icon: AlertTriangle,  color: "text-red-400",   bg: "bg-red-500/15"   },
 };
 const DEFAULT_TYPE = { icon: Bell, color: "text-primary", bg: "bg-primary/15" };
 
@@ -241,8 +263,28 @@ export function NotificationBell() {
   const { accessToken } = useAuthStore();
   const { permission, isSubscribed, isLoading: pushLoading, requestPermission } = usePushNotification();
   const isMobile = useIsMobile();
+  const { data: storedList } = useNotifications(Boolean(accessToken));
+  const markAllStoredRead = useMarkAllNotificationsRead();
+  const deleteStored = useDeleteNotification();
+  const clearStored = useClearNotifications();
 
   const unread = notifications.filter((n) => !n.read).length;
+
+  // ── What the server kept: loaded on sign-in and after every change ─────────
+  useEffect(() => {
+    if (!storedList) return;
+    const stored = storedList.items.map(fromStored);
+    const known = new Set(stored.map((n) => n.id));
+    const newest = stored.reduce((t, n) => Math.max(t, new Date(n.createdAt).getTime()), 0);
+    // Live-only notices (older events that are not stored) stay; stored ones are replaced by the server's copy —
+    // except one that came on the socket after this list was read, which the list can't have yet.
+    setNotifications((prev) =>
+      mergeNotifications(
+        stored,
+        prev.filter((n) => !n.stored || (!known.has(n.id) && new Date(n.createdAt).getTime() > newest))
+      )
+    );
+  }, [storedList]);
 
   // ── Show push permission banner if not yet granted ────────────────────────
   useEffect(() => {
@@ -260,13 +302,19 @@ export function NotificationBell() {
     if (!accessToken || typeof window === "undefined") return;
     const socket = getSocket(accessToken);
 
-    const handler = (payload: Omit<AppNotification, "id" | "read">) => {
+    const handler = (
+      payload: Omit<AppNotification, "id" | "read" | "type"> & { id?: string; type?: string; data?: { type?: string } },
+    ) => {
       const notif: AppNotification = {
         ...payload,
-        id: `${Date.now()}-${Math.random()}`,
+        // A stored notice carries its type at the top; older live-only events put it inside `data`.
+        type: payload.type ?? payload.data?.type ?? "",
+        // Stored notices arrive with their id; older live-only events get one made up here.
+        id: payload.id ?? `${Date.now()}-${Math.random()}`,
         read: false,
+        stored: Boolean(payload.id),
       };
-      setNotifications((prev) => [notif, ...prev].slice(0, 50));
+      setNotifications((prev) => mergeNotifications([notif], prev));
       toast(notif.title, {
         description: notif.body,
         duration: 5000,
@@ -298,14 +346,20 @@ export function NotificationBell() {
   }, [open, isMobile]);
 
   const markAllRead = useCallback(() => {
+    if (notifications.some((n) => n.stored && !n.read)) markAllStoredRead.mutate();
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  }, []);
+  }, [notifications, markAllStoredRead]);
 
   const dismiss = useCallback((id: string) => {
+    const target = notifications.find((n) => n.id === id);
+    if (target?.stored) deleteStored.mutate(id);
     setNotifications((prev) => prev.filter((n) => n.id !== id));
-  }, []);
+  }, [notifications, deleteStored]);
 
-  const clearAll = useCallback(() => setNotifications([]), []);
+  const clearAll = useCallback(() => {
+    if (notifications.some((n) => n.stored)) clearStored.mutate();
+    setNotifications([]);
+  }, [notifications, clearStored]);
 
   const handleOpen = useCallback(() => {
     setOpen((v) => !v);

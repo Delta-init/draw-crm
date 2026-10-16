@@ -4,15 +4,19 @@ import type { IAppSettings } from "../types/index.js";
 import type { UpdateAppSettingsInput } from "../validations/settingsValidation.js";
 
 /**
- * The CRM's settings document, read and written (Settings → Idle alerts).
+ * The CRM's settings document, read and written (Settings → Automation & alerts).
  *
- * Read through a 30-second cache: the idle-alert scheduler asks on every tick,
- * and a change on the Settings page reaching it within half a minute is soon
- * enough. Writing clears the cache, so the page itself always sees what it
+ * Read through a 30-second cache: the idle-alert and inactive-lead schedulers
+ * ask on every tick, and a change on the Settings page reaching them within
+ * half a minute is soon enough. Writing clears the cache, so the page itself always sees what it
  * just saved.
  */
 
-export type AppSettingsDTO = Omit<IAppSettings, "updatedBy" | "updatedAt"> & {
+export type AppSettingsDTO = Omit<IAppSettings, "inactiveLeads" | "updatedBy" | "updatedAt"> & {
+  inactiveLeads: Omit<IAppSettings["inactiveLeads"], "enabledAt" | "excludedSources"> & {
+    enabledAt: string | null;
+    excludedSources: string[];
+  };
   updatedBy: string | null;
   updatedAt: string | null;
 };
@@ -23,6 +27,13 @@ let cache: { at: number; value: AppSettingsDTO } | null = null;
 function toDTO(doc: IAppSettings): AppSettingsDTO {
   return {
     key: "app",
+    // Settings saved before this group existed read as its defaults (a lean read fills none in).
+    inactiveLeads: {
+      autoReassign: doc.inactiveLeads?.autoReassign ?? false,
+      limitMinutes: doc.inactiveLeads?.limitMinutes ?? 45,
+      enabledAt: doc.inactiveLeads?.enabledAt ? new Date(doc.inactiveLeads.enabledAt).toISOString() : null,
+      excludedSources: doc.inactiveLeads?.excludedSources ?? [],
+    },
     idleAlerts: {
       enabled: doc.idleAlerts.enabled,
       limitMinutes: doc.idleAlerts.limitMinutes,
@@ -90,6 +101,11 @@ export async function updateAppSettings(input: UpdateAppSettingsInput, userId: s
     }
   }
 
+  // Automatic moves count from the moment they are switched on — never the backlog before it.
+  const autoReassign = input.inactiveLeads?.autoReassign;
+  if (autoReassign !== undefined && autoReassign !== current.inactiveLeads.autoReassign) {
+    set["inactiveLeads.enabledAt"] = autoReassign ? new Date() : null;
+  }
   // Nothing to save: not a save (nor a new "updated by").
   if (Object.keys(set).length === 1) return current;
 
@@ -112,8 +128,8 @@ export async function updateAppSettings(input: UpdateAppSettingsInput, userId: s
 
 /**
  * Whether a moment falls inside the working hours — in their own time zone,
- * not the server's. Idle alerts only run inside them, so nobody is flagged at
- * midnight.
+ * not the server's. Idle alerts and the inactive-lead clock only run inside
+ * them, so nobody is flagged at midnight.
  */
 export function isWithinWorkingHours(settings: Pick<AppSettingsDTO, "workingHours">, at: Date = new Date()): boolean {
   const { timezone, days, start, end } = settings.workingHours;

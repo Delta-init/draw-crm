@@ -37,6 +37,8 @@ export const CRM_MODULES = [
   "balancePayments",
   /* Activity (2026-10-15): who is here, sign-ins, idle alerts, the HRMS shift and clock-ins. The Super Admin's until given. */
   "activity",
+  /* Inactive leads (2026-10-16): view the page, edit to move leads on. The Super Admin's until given. */
+  "inactive-leads",
 ] as const;
 
 export type CrmModule = (typeof CRM_MODULES)[number];
@@ -60,6 +62,7 @@ export const MODULE_LABELS: Record<CrmModule, string> = {
   calls: "Calls (3CX)",
   balancePayments: "Balance payments",
   activity: "Activity",
+  "inactive-leads": "Inactive Leads",
 };
 
 export type PermissionsMap = Partial<Record<CrmModule, ModulePermissions>>;
