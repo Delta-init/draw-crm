@@ -27,7 +27,7 @@ export const getCallLog = async (req: AuthenticatedRequest, res: Response, next:
     }
     const f: CallFilters = {
       preset: q(req.query.preset), from: q(req.query.from), to: q(req.query.to),
-      direction: q(req.query.direction), result: q(req.query.result), person: q(req.query.person),
+      direction: q(req.query.direction), result: q(req.query.result), lead: q(req.query.lead), person: q(req.query.person),
       search: q(req.query.search), sort: q(req.query.sort), order: q(req.query.order),
       page: q(req.query.page), limit: q(req.query.limit),
     };

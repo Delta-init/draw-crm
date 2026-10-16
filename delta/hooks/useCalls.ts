@@ -201,6 +201,8 @@ export interface CallLogFilters {
   to?:        string;
   direction?: "in" | "out" | "";
   result?:    "connected" | "missed" | "not_answered" | "";
+  /** Calls with a lead, with a number no lead has, or both (2026-10-16 — every call is kept now). */
+  lead?:      "with" | "without" | "";
   person?:    string;
   search?:    string;
   sort?:      "date" | "talk" | "ring";
