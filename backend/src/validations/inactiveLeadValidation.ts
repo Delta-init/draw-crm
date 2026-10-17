@@ -40,6 +40,14 @@ export const listLeadMovesQuery = z.object({
   dateTo: optionalQuery(day),
 });
 
+// GET /inactive-leads/workflow — the Workflow tab: leads that came in over these Dubai days and where they went
+export const leadWorkflowQuery = z.object({
+  from: optionalQuery(day),
+  to: optionalQuery(day),
+  teamId: optionalQuery(objectId),
+  personId: optionalQuery(objectId),
+});
+
 // GET /inactive-leads/people — the Move dialog's people
 export const movePeopleQuery = z.object({
   search: optionalQuery(z.string().trim().max(100)),
