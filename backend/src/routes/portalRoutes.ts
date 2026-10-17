@@ -10,6 +10,7 @@ import {
   provisionFromPortal,
 } from "../services/portalService.js";
 import { enrolmentFlowForPortal } from "../services/portalEnrolmentFlow.js";
+import { listInactiveLeads } from "../services/inactiveLeadService.js";
 import { CallFilterError, callsForPortal, recordingLinkForPortal } from "../services/portalCalls.js";
 
 const router = Router();
@@ -141,6 +142,20 @@ router.get(
   "/enrolment-flow",
   wrap(async (_req, res) => {
     sendSuccess(res, "Enrolment flow", await enrolmentFlowForPortal());
+  }),
+);
+
+/**
+ * Inactive leads, for Root's Pending → Sales tab (2026-10-17): the leads whose
+ * owner has not acted on them within the Settings limit — exactly this CRM's
+ * Inactive leads page, longest waiting first (its first 2000; `summary.capped`
+ * says when there were more). Read only: nothing is moved.
+ */
+router.get(
+  "/inactive-leads",
+  wrap(async (_req, res) => {
+    const list = await listInactiveLeads({ page: 1, limit: 2000 });
+    sendSuccess(res, "Inactive leads", { items: list.items, summary: list.summary, rule: list.rule });
   }),
 );
 
