@@ -7,6 +7,7 @@ import type { Academy, IRole, IStudent, IStudentPayment, EnrolmentLanguage, Enro
 import { ACADEMIES, ACADEMY_LABELS, ENROLMENT_LANGUAGES, ENROLMENT_PAYMENT_METHODS, PAYMENT_METHOD_LABELS, academyOf } from "../types/index.js";
 import { emailKey, emailPattern, samePerson, takenMessage, type EmailHolder, type Person } from "../utils/clientEmail.js";
 import { announceSaleClosed } from "./saleAnnouncement.js";
+import { syncSalesNote } from "./financeSalesNote.js";
 
 function createError(msg: string, status: number) {
   return Object.assign(new Error(msg), { statusCode: status });
@@ -601,6 +602,7 @@ export class StudentService {
       "demoScheduled", "demoAttended", "firstContactTime", "lastFollowupDate",
       "enrollmentDate", "feeStatus", "totalFee", "paidAmount", "notes", "status",
     ];
+    const noteBefore = (student.notes ?? "").trim();
     for (const field of allowed) {
       if (data[field] !== undefined) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -631,6 +633,8 @@ export class StudentService {
     student.feeStatus     = this.computeFeeStatus(total, paid, data.feeStatus);
 
     await student.save();
+    // A changed note reaches finance straight away (financeSalesNote.ts).
+    if ((student.notes ?? "").trim() !== noteBefore) await syncSalesNote(id);
     return this.populateStudent(id);
   }
 
@@ -755,6 +759,10 @@ export class StudentService {
         : {}),
       modeOfStudy: "online" as const,
       language: student.language ?? "",
+      // The note written at the close, for finance only — kept apart from the
+      // invoice's own notes, which are printed for the client. Kept up to date
+      // afterwards by financeSalesNote.ts.
+      salesNote: (student.notes ?? "").trim(),
       ...(student.paymentMethod ? { declaredPaymentMethod: student.paymentMethod } : {}),
       ...(student.paymentReceipt?.key
         ? {
