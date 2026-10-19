@@ -7,7 +7,8 @@
  *   - Case 2: a call matched only by the extension, unanswered, counts too; two overlapping calls are taken off once;
  *   - Case 3: the owner on a call right now — listed as on a call, the mover leaves it, a super admin can still move it
  *     by hand; off the call it moves;
- *   - Case 4: 3CX not answering, or not connected — nobody counts as on a call, the mover carries on.
+ *   - Case 4: 3CX not answering, or not connected — nobody counts as on a call, the mover carries on;
+ *   - Case 5: the page lists only leads that came in from 1 October 2026 (Dubai) on; the mover is unchanged.
  *
  * Run by inactive-leads-oncall-check.sh. Scratch database only.
  */
@@ -147,6 +148,33 @@ delete process.env.THREECX_API_KEY;
 const offLead = await lead("Dan No 3CX", ids.Dan, "11:00");
 forgetLiveCalls();
 check("3CX not connected: due as usual", (await listed("13:03")).find((i) => i.id === String(offLead))?.autoMove === "due", (await listed("13:03")).map((i) => [i.name, i.autoMove]));
+
+section("Case 5 — the page lists leads that came in from 1 October 2026 (Dubai) on (the user, 2026-10-19)");
+{
+  const at = (iso: string) => new Date(iso);
+  const old = async (name: string, created: string, original?: string) => {
+    const _id = new Types.ObjectId();
+    await Lead.collection.insertOne({
+      _id, name, phone: `+9715${String(10_000_000 + ++seq)}`, email: `l${seq}@test.local`, source: "META", status: "assigned", assignedTo: ids.Ann, assignedAt: gst("11:00"),
+      team: alpha, reporter: ids.Admin, notes: [], reminders: [], payments: [], activityLogs: [], followUps: [], callCount: 0, firstContactTime: null,
+      createdAt: at(created), updatedAt: at(created), ...(original ? { originalCreatedAt: at(original) } : {}),
+    });
+    return String(_id);
+  };
+  const sept = await old("Came in 30 Sep 23:50", "2026-09-30T23:50:00+04:00");
+  const oct1 = await old("Came in 1 Oct 00:10", "2026-10-01T00:10:00+04:00");
+  const handed = await old("Came in Sep, handed over Oct", "2026-10-19T11:00:00+04:00", "2026-09-25T10:00:00+04:00");
+  const back = await old("Came in Oct, handed over again", "2026-10-19T11:00:00+04:00", "2026-10-05T10:00:00+04:00");
+  const shown = new Set((await listed("13:10")).map((i) => i.id));
+  check("30 September 23:50 Dubai: hidden", !shown.has(sept));
+  check("1 October 00:10 Dubai: shown", shown.has(oct1));
+  check("first came in on 25 September, handed over in October: hidden", !shown.has(handed));
+  check("first came in on 5 October, handed over later: shown", shown.has(back));
+  const list = await svc.listInactiveLeads({ page: 1, limit: 100 } as never, gst("13:10"));
+  check("the page's count follows the list", list.summary.total === list.items.length && !list.items.some((i) => i.id === sept || i.id === handed), list.summary);
+  await svc.sweepInactiveLeads(gst("13:10"));
+  check("the automatic mover is unchanged: the hidden September lead still moves", (await ownerOf(new Types.ObjectId(sept))) !== String(ids.Ann));
+}
 
 fake3cx.stop(true);
 await mongoose.connection.dropDatabase();

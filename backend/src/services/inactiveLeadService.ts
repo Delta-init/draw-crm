@@ -82,7 +82,17 @@ interface CandidateFilter {
   skipStuck?: boolean;
   /** Leave out leads from these sources (the automatic mover's excluded sources). */
   excludeSources?: string[];
+  /** Only leads that came in (first created — a hand-over keeps the first date) at or after this. */
+  cameInFrom?: Date;
 }
+
+/**
+ * The Inactive leads page lists only leads that came in from 1 October 2026 (Dubai) on (the user, 2026-10-19:
+ * "show only this month onwards leads in the inactive leads in Draw CRM" — fixed, by when the lead came in). Older ones
+ * are hidden from the page and its counts, not changed; the automatic mover is unaffected (it only ever moves leads
+ * assigned since it was switched on).
+ */
+const PAGE_FROM = new Date("2026-10-01T00:00:00+04:00");
 
 interface Person {
   id: string;
@@ -274,6 +284,9 @@ async function findInactiveLeads(f: CandidateFilter): Promise<{ leads: Candidate
     const rx = new RegExp(escapeRegex(f.search), "i");
     match.$or = [{ name: rx }, { phone: rx }, { email: rx }, { source: rx }];
   }
+  if (f.cameInFrom) {
+    match.$and = [{ $or: [{ originalCreatedAt: { $gte: f.cameInFrom } }, { originalCreatedAt: { $in: [null] }, createdAt: { $gte: f.cameInFrom } }] }];
+  }
 
   const notActed: PipelineStage[] = [];
   if (f.skipStuck) {
@@ -408,7 +421,7 @@ export async function listInactiveLeads(
   const cutoff = workingCutoff(settings.workingHours, now, settings.inactiveLeads.limitMinutes);
   const range = drawDayRange(q.dateFrom, q.dateTo);
   const found = await findInactiveLeads({
-    cutoff, teamId: q.teamId, ownerId: q.ownerId, search: q.search, dateFrom: range.$gte, dateTo: range.$lte,
+    cutoff, teamId: q.teamId, ownerId: q.ownerId, search: q.search, dateFrom: range.$gte, dateTo: range.$lte, cameInFrom: PAGE_FROM,
   });
   const { capped } = found;
   // Past the limit once the owners' call time is taken off — as the mover counts.
