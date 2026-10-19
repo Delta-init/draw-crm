@@ -108,7 +108,7 @@ function NavLinks({ collapsed = false, onNavigate }: NavLinksProps) {
       // A stored notice carries its type at the top, an older one inside data. A lead handed to them, or one moved
       // away for inactivity: the new-leads count changes.
       const type = payload?.type ?? payload?.data?.type;
-      if (type === "lead_assigned" || type === "inactive_lead_moved") {
+      if (type === "lead_assigned" || type === "inactive_lead_moved" || type === "new_lead") {
         queryClient.invalidateQueries({ queryKey: ["leads", "stats", userId] });
       }
     }

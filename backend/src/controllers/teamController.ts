@@ -8,6 +8,7 @@ import { emitTeamUpdate, emitToUser } from "../socket.js";
 import { sendPushToUsers } from "../services/pushService.js";
 import { Team } from "../models/Team.js";
 import { Lead } from "../models/Lead.js";
+import { collectAssignments } from "../services/leadAlertService.js";
 
 const teamService   = new TeamService();
 const reportService = new ReportService();
@@ -823,9 +824,11 @@ export async function redistributeToday(
 
     // Re-assign each lead using autoSplitLeadPublic with present pool override.
     // bypassSplitTime=true so manual redistribute always works regardless of splitTime.
-    for (const lead of leadsToRedistribute) {
-      await autoSplitLeadPublic(teamId, lead._id.toString(), performedById, presentPool, true);
-    }
+    await collectAssignments(async () => {
+      for (const lead of leadsToRedistribute) {
+        await autoSplitLeadPublic(teamId, lead._id.toString(), performedById, presentPool, true);
+      }
+    });
 
     sendSuccess(res, `Redistributed ${leadsToRedistribute.length} leads to present members`, {
       redistributed: leadsToRedistribute.length,

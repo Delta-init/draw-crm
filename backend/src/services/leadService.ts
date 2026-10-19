@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import { Lead } from "../models/Lead.js";
 import { drawDayRange } from "../utils/drawTime.js";
 import { User } from "../models/User.js";
@@ -14,6 +15,7 @@ import type {
   ActivityAction,
   IRole,
 } from "../types/index.js";
+import { collectAssignments } from "./leadAlertService.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -268,7 +270,9 @@ async function autoSplitLead(
           activityLogs: {
             action: "lead_assigned",
             description: `Auto-assigned to "${user.name}" via ${team.settings.splitMode === "equal_load" ? "equal load" : "round robin"}`,
-            performedBy: performedById,
+            // The scheduler passes "system": not a person, and an ObjectId field can't hold it — the log failed, and the
+            // notice after it never went (2026-10-19). Left out, the screens show it as "System".
+            ...(Types.ObjectId.isValid(performedById) ? { performedBy: performedById } : {}),
             createdAt: new Date(),
           },
         },
@@ -936,123 +940,126 @@ export class LeadService {
     teamIds?: string[],
     memberOverrides?: Record<string, string[]>,
   ): Promise<AutoAssignResult> {
-    // Empty array means "no teams selected → skip auto-assign entirely"
-    if (Array.isArray(teamIds) && teamIds.length === 0) {
-      return { assigned: 0, results: [] };
-    }
-
-    const query =
-      leadIds && leadIds.length > 0
-        ? { _id: { $in: leadIds } }
-        : { status: "new", team: null };
-
-    const leadsToAssign = await Lead.find(query);
-    if (leadsToAssign.length === 0) return { assigned: 0, results: [] };
-
-    // If specific team IDs supplied, restrict to those teams only
-    const teamFilter =
-      teamIds && teamIds.length > 0
-        ? { status: "active", _id: { $in: teamIds } }
-        : { status: "active" };
-
-    const activeTeams = await Team.find(teamFilter);
-    if (activeTeams.length === 0) {
-      // When caller specified specific teams but none matched / inactive, skip silently
-      if (teamIds && teamIds.length > 0) return { assigned: 0, results: [] };
-      throw Object.assign(new Error("No active teams found for assignment"), {
-        statusCode: 404,
-      });
-    }
-
-    // Count THIS MONTH's leads per team — fair monthly balancing (resets each month)
-    const assignNow = new Date();
-    const assignMonthStart = new Date(
-      Date.UTC(assignNow.getUTCFullYear(), assignNow.getUTCMonth(), 1),
-    );
-
-    const teamLeadCounts = await Promise.all(
-      activeTeams.map(async (team) => {
-        const count = await Lead.countDocuments({
-          team: team._id,
-          createdAt: { $gte: assignMonthStart },
-        });
-        return { team, count };
-      }),
-    );
-    teamLeadCounts.sort((a, b) => a.count - b.count);
-
-    // Build assignment list: one team entry per lead using fill-to-equal logic
-    // Phase 1 — fill each team below the ceiling (max) up to the ceiling
-    // Phase 2 — round-robin any remaining leads
-    const n = teamLeadCounts.length;
-    const maxLoad = teamLeadCounts[n - 1].count;
-    const assignedTeams: (typeof teamLeadCounts)[0][] = [];
-
-    // Phase 1
-    for (
-      let i = 0;
-      i < n - 1 && assignedTeams.length < leadsToAssign.length;
-      i++
-    ) {
-      const gap = maxLoad - teamLeadCounts[i].count;
-      const give = Math.min(gap, leadsToAssign.length - assignedTeams.length);
-      for (let g = 0; g < give; g++) {
-        assignedTeams.push(teamLeadCounts[i]);
-        teamLeadCounts[i].count++;
+    // Everyone's new leads in one notice each, not one per lead (2026-10-19).
+    return collectAssignments(async () => {
+      // Empty array means "no teams selected → skip auto-assign entirely"
+      if (Array.isArray(teamIds) && teamIds.length === 0) {
+        return { assigned: 0, results: [] };
       }
-    }
-
-    // Phase 2 — round-robin remainder
-    let rr = 0;
-    while (assignedTeams.length < leadsToAssign.length) {
-      assignedTeams.push(teamLeadCounts[rr % n]);
-      teamLeadCounts[rr % n].count++;
-      rr++;
-    }
-
-    const results: { leadId: string; assignedTo: string }[] = [];
-    const updates: Promise<unknown>[] = [];
-
-    for (let i = 0; i < leadsToAssign.length; i++) {
-      const { team } = assignedTeams[i];
-      const lead = leadsToAssign[i];
-
-      updates.push(
-        Lead.findByIdAndUpdate(lead._id, {
-          $set: { team: team._id, status: "new" },
-          $push: {
-            activityLogs: {
-              action: "team_assigned",
-              description: `Auto-assigned to team "${team.name}"`,
-              performedBy: lead.reporter,
-              createdAt: new Date(),
-            },
-          },
+  
+      const query =
+        leadIds && leadIds.length > 0
+          ? { _id: { $in: leadIds } }
+          : { status: "new", team: null };
+  
+      const leadsToAssign = await Lead.find(query);
+      if (leadsToAssign.length === 0) return { assigned: 0, results: [] };
+  
+      // If specific team IDs supplied, restrict to those teams only
+      const teamFilter =
+        teamIds && teamIds.length > 0
+          ? { status: "active", _id: { $in: teamIds } }
+          : { status: "active" };
+  
+      const activeTeams = await Team.find(teamFilter);
+      if (activeTeams.length === 0) {
+        // When caller specified specific teams but none matched / inactive, skip silently
+        if (teamIds && teamIds.length > 0) return { assigned: 0, results: [] };
+        throw Object.assign(new Error("No active teams found for assignment"), {
+          statusCode: 404,
+        });
+      }
+  
+      // Count THIS MONTH's leads per team — fair monthly balancing (resets each month)
+      const assignNow = new Date();
+      const assignMonthStart = new Date(
+        Date.UTC(assignNow.getUTCFullYear(), assignNow.getUTCMonth(), 1),
+      );
+  
+      const teamLeadCounts = await Promise.all(
+        activeTeams.map(async (team) => {
+          const count = await Lead.countDocuments({
+            team: team._id,
+            createdAt: { $gte: assignMonthStart },
+          });
+          return { team, count };
         }),
       );
-
-      results.push({
-        leadId: lead._id.toString(),
-        assignedTo: team._id.toString(),
-      });
-    }
-
-    await Promise.all(updates);
-
-    // ── Trigger intra-team auto-split for every lead that was just assigned a team.
-    // One lead at a time: each split reads the team's round-robin turn (or its
-    // members' lead counts) and moves it on. Started all at once they all read
-    // the same turn, and a whole upload went to one person (2026-10-12: 838).
-    for (let i = 0; i < leadsToAssign.length; i++) {
-      await autoSplitLead(
-        assignedTeams[i].team._id.toString(),
-        leadsToAssign[i]._id.toString(),
-        leadsToAssign[i].reporter?.toString() ?? "",
-        memberOverrides?.[assignedTeams[i].team._id.toString()],
-      );
-    }
-
-    return { assigned: results.length, results };
+      teamLeadCounts.sort((a, b) => a.count - b.count);
+  
+      // Build assignment list: one team entry per lead using fill-to-equal logic
+      // Phase 1 — fill each team below the ceiling (max) up to the ceiling
+      // Phase 2 — round-robin any remaining leads
+      const n = teamLeadCounts.length;
+      const maxLoad = teamLeadCounts[n - 1].count;
+      const assignedTeams: (typeof teamLeadCounts)[0][] = [];
+  
+      // Phase 1
+      for (
+        let i = 0;
+        i < n - 1 && assignedTeams.length < leadsToAssign.length;
+        i++
+      ) {
+        const gap = maxLoad - teamLeadCounts[i].count;
+        const give = Math.min(gap, leadsToAssign.length - assignedTeams.length);
+        for (let g = 0; g < give; g++) {
+          assignedTeams.push(teamLeadCounts[i]);
+          teamLeadCounts[i].count++;
+        }
+      }
+  
+      // Phase 2 — round-robin remainder
+      let rr = 0;
+      while (assignedTeams.length < leadsToAssign.length) {
+        assignedTeams.push(teamLeadCounts[rr % n]);
+        teamLeadCounts[rr % n].count++;
+        rr++;
+      }
+  
+      const results: { leadId: string; assignedTo: string }[] = [];
+      const updates: Promise<unknown>[] = [];
+  
+      for (let i = 0; i < leadsToAssign.length; i++) {
+        const { team } = assignedTeams[i];
+        const lead = leadsToAssign[i];
+  
+        updates.push(
+          Lead.findByIdAndUpdate(lead._id, {
+            $set: { team: team._id, status: "new" },
+            $push: {
+              activityLogs: {
+                action: "team_assigned",
+                description: `Auto-assigned to team "${team.name}"`,
+                performedBy: lead.reporter,
+                createdAt: new Date(),
+              },
+            },
+          }),
+        );
+  
+        results.push({
+          leadId: lead._id.toString(),
+          assignedTo: team._id.toString(),
+        });
+      }
+  
+      await Promise.all(updates);
+  
+      // ── Trigger intra-team auto-split for every lead that was just assigned a team.
+      // One lead at a time: each split reads the team's round-robin turn (or its
+      // members' lead counts) and moves it on. Started all at once they all read
+      // the same turn, and a whole upload went to one person (2026-10-12: 838).
+      for (let i = 0; i < leadsToAssign.length; i++) {
+        await autoSplitLead(
+          assignedTeams[i].team._id.toString(),
+          leadsToAssign[i]._id.toString(),
+          leadsToAssign[i].reporter?.toString() ?? "",
+          memberOverrides?.[assignedTeams[i].team._id.toString()],
+        );
+      }
+  
+      return { assigned: results.length, results };
+    });
   }
 
   // ── Assign Lead to Team ───────────────────────────────────────────────────────
@@ -1177,35 +1184,38 @@ export class LeadService {
     teamId: string,
     performedById: string,
   ) {
-    const team = await Team.findById(teamId);
-    if (!team)
-      throw Object.assign(new Error("Team not found"), { statusCode: 404 });
-
-    const leads = await Lead.find({ _id: { $in: leadIds } });
-    await Promise.all(
-      leads.map(async (lead) => {
-        const prevTeam = lead.team?.toString() ?? null;
-        lead.team = team._id;
-        (lead as unknown as Record<string, unknown>).assignedTo = null;
-        lead.status = "new";
-        addLog(
-          lead as never,
-          "team_assigned",
-          `Bulk-assigned to team "${team.name}"`,
-          performedById,
-          { team: { from: prevTeam, to: team._id.toString() } },
-        );
-        return lead.save();
-      }),
-    );
-
-    // ── Trigger intra-team auto-split for each lead moved to this team — one at
-    // a time, so the round-robin turn moves on (see autoAssignLeads).
-    for (const lead of leads) {
-      await autoSplitLead(teamId, lead._id.toString(), performedById);
-    }
-
-    return { updated: leads.length };
+    // Everyone's new leads in one notice each, not one per lead (2026-10-19).
+    return collectAssignments(async () => {
+      const team = await Team.findById(teamId);
+      if (!team)
+        throw Object.assign(new Error("Team not found"), { statusCode: 404 });
+  
+      const leads = await Lead.find({ _id: { $in: leadIds } });
+      await Promise.all(
+        leads.map(async (lead) => {
+          const prevTeam = lead.team?.toString() ?? null;
+          lead.team = team._id;
+          (lead as unknown as Record<string, unknown>).assignedTo = null;
+          lead.status = "new";
+          addLog(
+            lead as never,
+            "team_assigned",
+            `Bulk-assigned to team "${team.name}"`,
+            performedById,
+            { team: { from: prevTeam, to: team._id.toString() } },
+          );
+          return lead.save();
+        }),
+      );
+  
+      // ── Trigger intra-team auto-split for each lead moved to this team — one at
+      // a time, so the round-robin turn moves on (see autoAssignLeads).
+      for (const lead of leads) {
+        await autoSplitLead(teamId, lead._id.toString(), performedById);
+      }
+  
+      return { updated: leads.length };
+    });
   }
 
   // get leads by phonenumber
