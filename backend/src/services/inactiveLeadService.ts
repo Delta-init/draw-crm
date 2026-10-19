@@ -263,7 +263,18 @@ async function leadsCalled(leads: Candidate[]): Promise<Set<string>> {
 }
 
 /** Inactive leads matching `f`, longest-waiting first. */
+/**
+ * Everyone leading an active team (the user, 2026-10-19: "the team leader's leads never move — they don't count in
+ * the inactive leads"): their leads are left out of the page, the mover and the Workflow's "inactive now". Asked
+ * afresh on every search, so it follows the teams as they stand.
+ */
+export async function teamLeaderIds(): Promise<Types.ObjectId[]> {
+  const ids = await Team.distinct("leaders", { status: "active" });
+  return ids.filter((id): id is Types.ObjectId => id instanceof Types.ObjectId);
+}
+
 async function findInactiveLeads(f: CandidateFilter): Promise<{ leads: Candidate[]; capped: boolean }> {
+  const leaders = await teamLeaderIds();
   const until = f.dateTo && f.dateTo < f.cutoff ? f.dateTo : f.cutoff;
   const assignedAt: Record<string, unknown> = { $ne: null, $lte: until };
   const since = [f.assignedFrom, f.dateFrom].filter((d): d is Date => !!d);
@@ -271,7 +282,8 @@ async function findInactiveLeads(f: CandidateFilter): Promise<{ leads: Candidate
 
   const match: Record<string, unknown> = {
     status: { $in: UNTOUCHED_STATUSES },
-    assignedTo: f.ownerId ? new Types.ObjectId(f.ownerId) : { $ne: null },
+    // A team leader's leads are never inactive and never move (the user, 2026-10-19).
+    assignedTo: f.ownerId ? { $eq: new Types.ObjectId(f.ownerId), $nin: leaders } : { $ne: null, $nin: leaders },
     assignedAt,
   };
   if (f.teamId) match.team = new Types.ObjectId(f.teamId);

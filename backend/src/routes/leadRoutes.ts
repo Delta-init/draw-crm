@@ -33,6 +33,7 @@ import {
   updateCallCount,
   getLeadSources,
 } from "../controllers/leadController.js";
+import { getTeamReminders, getTeamReminderOptions } from "../controllers/teamReminderController.js";
 import { authenticate } from "../middleware/auth.js";
 import { checkPermission } from "../middleware/permissions.js";
 
@@ -73,6 +74,8 @@ router.patch("/bulk/team",      checkPermission("leads", "edit"),   bulkAssignLe
 // ─── Reminder listing (static, before /:id) ───────────────────────────────────
 router.get("/reminders/mine",  checkPermission("reminders", "view"), getMyReminders);
 router.get("/reminders/count", checkPermission("reminders", "view"), getMyReminderCount);
+router.get("/reminders/team/options", checkPermission("reminders", "view"), getTeamReminderOptions);
+router.get("/reminders/team",  checkPermission("reminders", "view"), getTeamReminders);
 
 // ─── Lead CRUD ────────────────────────────────────────────────────────────────
 router.post("/", checkPermission("leads", "create"), createLead);
