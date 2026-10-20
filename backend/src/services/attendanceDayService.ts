@@ -3,14 +3,14 @@ import { User } from "../models/User.js";
 import { Team } from "../models/Team.js";
 import { env } from "../config/env.js";
 import { hrmsConfigured, hrmsGet } from "../lib/hrms.js";
+import { onBreak } from "./breakClock.js";
 
 /*
  * The HRMS's shift and a day's clock-ins and clock-outs, for the Activity page's Attendance tab and a team's page
  * (the user, 2026-10-15: "show the HRMS shift and the clock-in and clock-out times"). By email, from the HRMS's
  * GET /integrations/directory/attendance-day, kept a minute per person and day. For today it also says where each
- * person is now — on leave, clocked in or out (this CRM has no "Take break" of its own; the shape keeps `break` and
- * `breakSince` so the page is the Sales CRM's). An HRMS that is not linked, or does not answer, leaves the rows with
- * who they are and says why.
+ * person is now — this CRM's "Take break" (2026-10-20, as in the Sales CRM) before the HRMS's in / out. An HRMS that is
+ * not linked, or does not answer, leaves the rows with who they are and says why.
  */
 
 const CACHE_MS = 60_000;
@@ -58,7 +58,7 @@ interface HrmsDayRow {
   now: "in" | "out" | "leave" | null;
 }
 
-/** Where someone is now (today only): the HRMS's clock-in, approved leave, or neither. ("break" is the Sales CRM's.) */
+/** Where someone is now (today only): this CRM's break, the HRMS's clock-in, approved leave, or none of those. */
 export type AttendanceNow = "in" | "break" | "out" | "leave";
 
 export interface AttendanceShiftDTO {
@@ -98,6 +98,8 @@ export interface AttendancePersonDTO {
   /** Today only; null for another day, or when the HRMS can't say. */
   now: AttendanceNow | null;
   breakSince: string | null;
+  /** What the break going on now is for (null when not on one, or not said). */
+  breakKind: string | null;
 }
 
 export interface AttendanceDayResponse {
@@ -235,8 +237,7 @@ export async function leadsTeam(userId: string, teamId: string): Promise<boolean
   return Boolean(await Team.exists({ _id: teamId, leaders: userId }));
 }
 
-// The order the tab lists people in: here now, not in yet, out again, on leave, a day off, unknown ("break" is the
-// Sales CRM's, never given here).
+// The order the tab lists people in: here now, on a break, not in yet, out again, on leave, a day off, unknown.
 const ORDER: Record<string, number> = { in: 0, break: 1, notIn: 2, out: 3, leave: 4, off: 5, unknown: 6 };
 
 /**
@@ -257,8 +258,8 @@ export async function attendanceForDay(q: { day: string; teamId?: string; search
     filter.$or = [{ name: rx }, { email: rx }];
   }
   const users = await User.find(filter)
-    .select("name email designation")
-    .lean<Array<{ _id: Types.ObjectId; name: string; email: string; designation?: string }>>();
+    .select("name email designation breakSince breakKind")
+    .lean<Array<{ _id: Types.ObjectId; name: string; email: string; designation?: string; breakSince?: Date | null; breakKind?: string | null }>>();
   const ids = users.map((u) => u._id);
   const teams = ids.length
     ? await Team.find({ $or: [{ members: { $in: ids } }, { leaders: { $in: ids } }] }).select("name members leaders")
@@ -288,14 +289,17 @@ export async function attendanceForDay(q: { day: string; teamId?: string; search
   const rows: Array<AttendancePersonDTO & { order: number }> = users.map((u) => {
     const id = String(u._id);
     const h = available ? byEmail.get(String(u.email ?? "").toLowerCase()) ?? null : null;
+    const breaking = today && onBreak(u.breakSince);
     const now: AttendanceNow | null = !today
       ? null
       : h?.now === "leave" ? "leave"
-        : h?.now === "in" ? "in"
-          : h?.now === "out" ? "out" : null; // a row the HRMS couldn't read says nothing
+        : breaking ? "break"
+          : h?.now === "in" ? "in"
+            : h?.now === "out" ? "out" : null; // a row the HRMS couldn't read says nothing
     const a = h?.attendance ?? null;
-    const order = !h || (today && now === null) ? ORDER.unknown
-      : now === "in" ? ORDER.in
+    const order = now === "break" ? ORDER.break
+      : !h || (today && now === null) ? ORDER.unknown
+        : now === "in" ? ORDER.in
           : (now === "leave" || h.leave) ? ORDER.leave
             : a?.firstIn ? ORDER.out
               : h.workDay ? ORDER.notIn : ORDER.off;
@@ -322,7 +326,8 @@ export async function attendanceForDay(q: { day: string; teamId?: string; search
       leave: h?.leave ?? null,
       wfh: h?.wfh ?? false,
       now,
-      breakSince: null,
+      breakSince: breaking && u.breakSince ? new Date(u.breakSince).toISOString() : null,
+      breakKind: breaking ? u.breakKind ?? null : null,
       order,
     };
   });

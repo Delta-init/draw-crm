@@ -6,12 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/shared/ListStates";
 import { cn } from "@/lib/utils";
 import { listContainerVariants, listItemVariants } from "@/lib/animations";
+import { breakLabel } from "@/lib/breaks";
 import type { AttendanceDay, AttendancePerson, AttendanceShift } from "@/types/activity";
 
 /*
  * A day's attendance from the HRMS (the user, 2026-10-15): each person's shift, when they clocked in and out —
- * every session — worked time, how late, the day's status, and where they are now (today). The Activity page's
- * Attendance tab and a team's page both show it — as in the Sales CRM, less its "Take break", which this CRM hasn't.
+ * every session — worked time, how late, the day's status, and where they are now (today: this CRM's break first —
+ * "Take break", 2026-10-20). The Activity page's Attendance tab and a team's page both show it, as in the Sales CRM.
  */
 
 type BadgeVariant = "default" | "secondary" | "warning" | "success" | "destructive" | "outline";
@@ -67,7 +68,10 @@ export function dayBadge(p: AttendancePerson, today: boolean): { label: string; 
 export function nowBadge(p: AttendancePerson, timeZone: string): { label: string; variant: BadgeVariant } | null {
   switch (p.now) {
     case "in": return { label: "Clocked in", variant: "success" };
-    case "break": return { label: p.breakSince ? `On a break · since ${clockAt(p.breakSince, timeZone)}` : "On a break", variant: "warning" };
+    case "break": {
+      const what = p.breakKind ? breakLabel(p.breakKind) : "On a break";
+      return { label: p.breakSince ? `${what} · since ${clockAt(p.breakSince, timeZone)}` : what, variant: "warning" };
+    }
     case "out": return { label: p.firstIn ? "Clocked out" : p.workDay === false ? "Day off" : "Not clocked in", variant: "outline" };
     case "leave": return { label: "On leave", variant: "secondary" };
     default: return null;
@@ -107,6 +111,7 @@ function SummaryChips({ data }: { data: AttendanceDay }) {
   const s = data.summary;
   const chips: Array<{ label: string; value: number; tone: string; show: boolean }> = [
     { label: "Clocked in", value: s.clockedIn, tone: "text-emerald-600 dark:text-emerald-400", show: data.today },
+    { label: "On a break", value: s.onBreak, tone: "text-amber-600 dark:text-amber-400", show: data.today },
     { label: data.today ? "Not in yet" : "No record", value: s.notIn, tone: "text-red-600 dark:text-red-400", show: true },
     { label: "On leave", value: s.onLeave, tone: "text-muted-foreground", show: true },
     { label: "Late", value: s.late, tone: "text-amber-600 dark:text-amber-400", show: true },

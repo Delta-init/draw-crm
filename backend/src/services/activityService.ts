@@ -35,13 +35,14 @@ import type { LoginEventKind, LoginFailReason, PaginationMeta } from "../types/i
  *    their team leaders, if switched on). Super admins are not tracked.
  *
  * Brought over from the Sales CRM (2026-10-15). The HRMS has its say: an idle
- * alert is only for someone clocked in — never for anyone on leave or clocked
- * out (attendanceDayService, by email) — and the quiet time counts from their
- * last clock-in when that came later, so a lunch clock-out is not idle time.
- * While the HRMS is linked but can't say, alerts wait (it can't tell who is on
- * leave); not linked at all, activity goes alone (this CRM has no "Take break"
- * of its own). A quiet stretch ends when they are back, sign out, clock out or
- * go on leave, or the day ends — whether or not alerts are on. People are told
+ * alert is only for someone clocked in and not on a break ("Take break",
+ * 2026-10-20) — never for anyone on leave or clocked out (attendanceDayService,
+ * by email) — and the quiet time counts from their last clock-in when that came
+ * later, so a lunch clock-out is not idle time. While the HRMS is linked but
+ * can't say, alerts wait (it can't tell who is on leave); not linked at all,
+ * activity and this CRM's own breaks go alone. A quiet stretch ends when they
+ * are back, sign out, clock out, go on a break or leave, or the day ends —
+ * whether or not alerts are on. People are told
  * in the bell while the CRM is open and by push — this CRM keeps no stored
  * notices — and no email.
  */
@@ -79,7 +80,7 @@ export interface PersonActivityDTO {
   firstActiveToday: string | null;
   lastLogin: { at: string; ip: string; device: string } | null;
   lastLogoutAt: string | null;
-  /** Where the HRMS has them; "unknown" when it doesn't know them; null when it isn't linked or can't say. */
+  /** Where the HRMS has them, this CRM's break first; "unknown" when it doesn't know them; null when it can't say (a break still shows). */
   attendance: AttendanceNow | "unknown" | null;
   /** Today is one of their shift's working days (null when the HRMS can't say). */
   workDay: boolean | null;
@@ -98,7 +99,7 @@ export interface PeopleResponse {
     notifyTeamLeaders: boolean;
     inWorkingHours: boolean;
     timezone: string;
-    /** The HRMS is linked: idle alerts go only to those clocked in. */
+    /** The HRMS is linked: idle alerts go only to those clocked in and not on a break. */
     byAttendance: boolean;
     /** Switched on, but waiting: the HRMS is linked and isn't answering, so nobody can be told apart from leave. */
     paused: boolean;
@@ -577,7 +578,7 @@ function stoppedWorkingAt(row: AttendancePersonDTO | undefined, since: Date, now
  * today, has not signed out since and has done nothing in it for the limit (working time) — counted from their last
  * use of the app, or from their last clock-in when that came later — once per quiet stretch. While the HRMS is linked
  * but can't say, nobody is alerted (it can't tell who is on leave). Whether or not alerts are on, a stretch ends when
- * they are back, sign out, stop working (a clock-out, leave) or the day ends.
+ * they are back, sign out, stop working (a break, a clock-out, leave) or the day ends.
  */
 export async function sweepIdleUsers(now: Date = new Date()): Promise<{ alerted: number; ended: number; idle?: "off" | "outside working hours" | "hrms unavailable" }> {
   const settings = await getAppSettings();
@@ -613,17 +614,17 @@ export async function sweepIdleUsers(now: Date = new Date()): Promise<{ alerted:
   const nameOf = new Map(users.map((u) => [String(u._id), u.name]));
   const tracked = new Set(ids.filter((id) => nameOf.has(id) && !admins.includes(id)));
 
-  // Where each of them is (one ask of the HRMS, kept a minute). At work: clocked in; never on leave or clocked out. Not
-  // linked: activity goes alone.
+  // Where each of them is (one ask of the HRMS, kept a minute), this CRM's breaks first. At work: clocked in and not
+  // on a break; never on leave or clocked out. Not linked: this CRM's breaks are all there is to go by.
   const day = tracked.size ? await attendanceForDay({ day: dubaiToday(now), userIds: [...tracked] }) : null;
   const rowOf = new Map((day?.rows ?? []).map((r) => [r.id, r]));
   const available = Boolean(day?.available);
   const state = (id: string) => rowOf.get(id)?.now ?? null;
   const atWork = (id: string): boolean => (available ? state(id) === "in" : state(id) !== "break");
-  // Known to have stopped: by the HRMS when it answers ("break" is the Sales CRM's, never here).
+  // Known to have stopped: by the HRMS when it answers; a break whatever it says.
   const stopped = (id: string): boolean => state(id) === "break" || (available && (state(id) === "out" || state(id) === "leave"));
 
-  // Stopped working — a clock-out, leave — ends the stretch, so it doesn't run on while they're away.
+  // Stopped working — a break, a clock-out, leave — ends the stretch, so it doesn't run on while they're away.
   for (const o of open) {
     const id = String(o.user);
     if (tracked.has(id) && !stopped(id)) continue;

@@ -5,13 +5,16 @@
  *
  *   - Case 1: sign-ins (and refused ones, by reason) and sign-outs on record; the heartbeat — one active minute per
  *     minute, quiet heartbeats don't count; the People list's statuses, shift and clock-in from the HRMS;
- *   - Case 2: idle alerts — only someone clocked in on the HRMS; never on leave, clocked out, unknown to the HRMS,
+ *   - Case 2: idle alerts — only someone clocked in on the HRMS and not on a break ("Take break", 2026-10-20); never
+ *     on leave, clocked out, unknown to the HRMS,
  *     signed out, a Super Admin or a deactivated account; once per quiet stretch, again after they are back; a lunch
  *     clock-out isn't idle time; a clock-out or sign-out ends a stretch (alerts on or off), one open stretch at a time;
  *     the person, the Super Admins and their team leader told (no email); the HRMS linked but not answering → alerts
- *     wait; not linked → activity alone; switched off / outside working hours → nothing;
+ *     wait; not linked → activity and this CRM's breaks alone; a break ends a stretch at the break; switched off /
+ *     outside working hours → nothing;
  *   - Case 3: the Attendance tab — the HRMS shift, first in, last out, every session, worked and late minutes,
- *     where each is now, a team, a search, another day, the HRMS not answering, answering junk, or failing one day;
+ *     where each is now (this CRM's break first), a team, a search, another day, the HRMS not answering (a break still
+ *     known), answering junk, or failing one day;
  *   - Case 4: who sees what — the Activity box, a team's leaders for its own team, everyone's own heartbeat.
  *
  * Run by activity-check.sh. Scratch database only.
@@ -257,7 +260,7 @@ section("Case 1 — sign-ins, sign-outs, the heartbeat, the People list");
 
 /* ═══ Case 2 ═══════════════════════════════════════════════════════════════ */
 
-section("Case 2 — idle alerts: only those clocked in");
+section("Case 2 — idle alerts: only those clocked in and not on a break");
 {
   const T = at(TODAY, "12:00");
   await updateAppSettings({ idleAlerts: { enabled: true, limitMinutes: 30, notifyTeamLeaders: true }, workingHours: { timezone: "Asia/Dubai", days: [0, 1, 2, 3, 4, 5, 6], start: "00:00", end: "23:59" } }, String(ids.Admin));
@@ -317,6 +320,19 @@ section("Case 2 — idle alerts: only those clocked in");
   check("two sweeps at the same moment → one alert", (await IdleStretch.countDocuments({ user: ids.Ann })) === annBefore + 1, (await IdleStretch.countDocuments({ user: ids.Ann })) - annBefore);
   await IdleStretch.updateMany({ endedAt: null }, { $set: { endedAt: at(TODAY, "15:01") } });
 
+  // A break (this CRM's) ends an open stretch at the break, while the HRMS is answering.
+  await UserPresence.updateOne({ user: ids.Ann }, { $set: { lastActiveAt: at(TODAY, "15:20"), lastSeenAt: at(TODAY, "15:54"), lastLogoutAt: null } });
+  await activity.sweepIdleUsers(at(TODAY, "15:55"));
+  const annOpen = await IdleStretch.findOne({ user: ids.Ann, endedAt: null }).lean();
+  await db.collection("users").updateOne({ _id: ids.Ann }, { $set: { breakSince: at(TODAY, "15:58") } });
+  forgetHrms();
+  await activity.sweepIdleUsers(at(TODAY, "16:00"));
+  const annAfterBreak = annOpen ? await IdleStretch.findById(annOpen._id).lean() : null;
+  check("a break ends the stretch at the break (15:58), the HRMS answering", !!annOpen && annAfterBreak?.endedAt?.getTime() === at(TODAY, "15:58").getTime(), [annOpen?.since, annAfterBreak?.endedAt]);
+  await db.collection("users").updateOne({ _id: ids.Ann }, { $set: { breakSince: null } });
+
+  // Dan takes a break.
+  await db.collection("users").updateOne({ _id: ids.Dan }, { $set: { breakSince: new Date() } });
   hrmsDown = true;
   forgetHrms();
   await quiet("Cat", 40);
@@ -330,7 +346,7 @@ section("Case 2 — idle alerts: only those clocked in");
   forgetHrms();
   const r4b = await activity.sweepIdleUsers(T);
   const latest = await IdleStretch.find({ alertedAt: T }).lean();
-  check("the HRMS not linked at all → activity alone: Cat and Dan alerted (no breaks in this CRM)", latest.some((s) => String(s.user) === String(ids.Cat)) && latest.some((s) => String(s.user) === String(ids.Dan)), [r4b, latest.map((s) => String(s.user))]);
+  check("the HRMS not linked at all → activity alone, breaks known: Cat alerted, Dan (on a break) not", latest.some((s) => String(s.user) === String(ids.Cat)) && !latest.some((s) => String(s.user) === String(ids.Dan)), [r4b, latest.map((s) => String(s.user))]);
   env.HRMS_API_URL = linkedTo;
   forgetHrms();
 
@@ -377,6 +393,7 @@ section("Case 2 — idle alerts: only those clocked in");
 
   const list = await api<IdleStretchDTO[]>("GET", "/activity/idle", "Admin");
   check("the Idle alerts tab lists them, newest first", list.status === 200 && list.body.data.length === (await IdleStretch.countDocuments()), list.body.data.length);
+  await db.collection("users").updateOne({ _id: ids.Dan }, { $set: { breakSince: null } });
 }
 
 /* ═══ Case 3 ═══════════════════════════════════════════════════════════════ */
@@ -395,6 +412,7 @@ section("Case 3 — the Attendance tab: the HRMS's shift and the day's clock-ins
     [emailOf("Lead2")]: { workDay: true, attendance: null, leave: null, wfh: false, now: null },
   };
   hrmsNow = {}; // only those above are known to the HRMS here
+  await db.collection("users").updateOne({ _id: ids.Dan }, { $set: { breakSince: new Date(), breakKind: "lunch" } });
   forgetHrms();
   const r = await api<AttendanceDayResponse>("GET", "/activity/attendance", "Admin");
   const d = r.body.data;
@@ -403,13 +421,14 @@ section("Case 3 — the Attendance tab: the HRMS's shift and the day's clock-ins
   const ann = row("Ann");
   check("Ann: shift 10:00–19:00, in at 09:57, two sessions, 183 min worked, in now", ann?.shift?.from === "10:00" && ann.shift.to === "19:00" && ann.firstIn === s("09:57", null).in && ann.sessions.length === 2 && ann.lastOut === null && ann.workedMinutes === 183 && ann.now === "in", ann);
   check("Lead1: in at 10:25, late by 25", row("Lead1")?.lateMinutes === 25 && row("Lead1")?.status === "late", row("Lead1"));
-  check("Dan: in at 09:59, in now (no break here)", row("Dan")?.now === "in" && row("Dan")?.breakSince === null, row("Dan"));
+  check("Dan: clocked in but on this CRM's break → 'break', since when, what for", row("Dan")?.now === "break" && !!row("Dan")?.breakSince && row("Dan")?.breakKind === "lunch", row("Dan"));
+  check("…nobody else has a break", d.rows.filter((x) => x.name !== "Dan").every((x) => x.breakSince === null && x.breakKind === null));
   check("Ben: on leave", row("Ben")?.now === "leave" && row("Ben")?.leave?.type === "Annual", row("Ben"));
   check("Cat: in 10:00, out 12:30 — out now", row("Cat")?.lastOut === s("10:00", "12:30").out && row("Cat")?.now === "out", row("Cat"));
   check("Fay: not in the HRMS", row("Fay")?.inHrms === false && row("Fay")?.shift === null, row("Fay"));
   const order = d.rows.map((x) => x.name);
-  check("whoever is here first (by clock-in), then not in yet, out again, on leave, not in the HRMS", order.indexOf("Ann") < order.indexOf("Dan") && order.indexOf("Dan") < order.indexOf("Lead1") && order.indexOf("Lead1") < order.indexOf("Eve") && order.indexOf("Eve") < order.indexOf("Cat") && order.indexOf("Cat") < order.indexOf("Ben") && order.indexOf("Ben") < order.indexOf("Fay"), order);
-  check("the summary: 3 in, none on a break, 1 on leave, 1 not in yet, 1 late", d.summary.clockedIn === 3 && d.summary.onBreak === 0 && d.summary.onLeave === 1 && d.summary.notIn === 1 && d.summary.late === 1, d.summary);
+  check("whoever is here first (by clock-in), then the break, not in yet, out again, on leave, not in the HRMS", order.indexOf("Ann") < order.indexOf("Lead1") && order.indexOf("Lead1") < order.indexOf("Dan") && order.indexOf("Dan") < order.indexOf("Eve") && order.indexOf("Eve") < order.indexOf("Cat") && order.indexOf("Cat") < order.indexOf("Ben") && order.indexOf("Ben") < order.indexOf("Fay"), order);
+  check("the summary: 2 in, 1 on a break, 1 on leave, 1 not in yet, 1 late", d.summary.clockedIn === 2 && d.summary.onBreak === 1 && d.summary.onLeave === 1 && d.summary.notIn === 1 && d.summary.late === 1, d.summary);
 
   check("a row the HRMS couldn't read (Lead2): no 'now', listed with the unknown, not counted as not in yet", row("Lead2")?.now === null && row("Lead2")?.inHrms === true && order.indexOf("Lead2") > order.indexOf("Ben") && d.summary.notIn === 1, [row("Lead2")?.now, order, d.summary.notIn]);
 
@@ -426,9 +445,12 @@ section("Case 3 — the Attendance tab: the HRMS's shift and the day's clock-ins
   forgetHrms();
   const down = await api<AttendanceDayResponse>("GET", "/activity/attendance", "Admin");
   check("the HRMS not answering → said so, everyone still listed", down.status === 200 && down.body.data.available === false && down.body.data.linked === true && !!down.body.data.message && down.body.data.rows.length > 5 && down.body.data.rows.every((x) => !x.inHrms), down.body.data.message);
-  check("…nobody's 'now' is guessed", down.body.data.rows.every((x) => x.now === null), down.body.data.rows.map((x) => [x.name, x.now]));
+  check("…Dan's break (this CRM's own) still known, and listed first; nobody else's 'now' guessed", down.body.data.rows[0]?.name === "Dan" && down.body.data.rows[0]?.now === "break"
+    && down.body.data.rows.slice(1).every((x) => x.now === null), down.body.data.rows.map((x) => [x.name, x.now]));
   const downPeople = await api<PeopleResponse>("GET", "/activity/people", "Admin");
-  check("…People too: no badges; alerts still go by the HRMS once it's back", downPeople.body.data.items.every((x) => x.attendance === null) && downPeople.body.data.idleRule.byAttendance === true, downPeople.body.data.items.map((x) => x.attendance));
+  const dp = (name: string) => downPeople.body.data.items.find((x) => x.name === name);
+  check("…People too: Dan on a break, the rest no badge; alerts still go by the HRMS once it's back", dp("Dan")?.attendance === "break" && downPeople.body.data.items.filter((x) => x.name !== "Dan").every((x) => x.attendance === null)
+    && downPeople.body.data.idleRule.byAttendance === true, downPeople.body.data.items.map((x) => [x.name, x.attendance]));
   await updateAppSettings({ idleAlerts: { enabled: true } }, String(ids.Admin));
   const nobodyDown = await api<PeopleResponse>("GET", "/activity/people?search=zzzz-nobody", "Admin");
   const everyoneDown = await api<PeopleResponse>("GET", "/activity/people", "Admin");
@@ -469,6 +491,7 @@ section("Case 3 — the Attendance tab: the HRMS's shift and the day's clock-ins
   check("…and it isn't asked again for a minute", again.body.data.available === false && asked.any === askedBefore, asked.any - askedBefore);
   hrmsGarbage = false;
   forgetHrms();
+  await db.collection("users").updateOne({ _id: ids.Dan }, { $set: { breakSince: null, breakKind: null } });
 }
 
 /* ═══ Case 4 ═══════════════════════════════════════════════════════════════ */

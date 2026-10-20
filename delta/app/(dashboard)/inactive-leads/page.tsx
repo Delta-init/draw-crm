@@ -91,6 +91,11 @@ const AUTO_MOVE: Record<AutoMoveState, { label: string; hint: string; variant: B
     hint: "Its owner is on a 3CX call right now: it waits until they're off it, and time on calls doesn't count towards the limit. Move it by hand if needed.",
     variant: "secondary",
   },
+  on_break: {
+    label: "Owner on a break",
+    hint: "Its owner is on a break: it waits until they're back, and the break doesn't count towards the limit. Move it by hand if needed.",
+    variant: "secondary",
+  },
   excluded_source: {
     label: "Not moved · source",
     hint: "Its source is set never to move automatically (Settings → Automation) — move it by hand if needed.",
@@ -923,7 +928,7 @@ function LeadRow({ lead, rule, canMove, ticked, onTick, onOwner, onMove, onCalls
 function LeadCard({ lead, rule, canMove, ticked, onTick, onOwner, onMove, onCalls }: LeadRowProps) {
   const { auto, label, late } = autoMoveOf(lead, rule);
   // Why it won't move on its own, written out — a touch screen has no hover for the tooltip.
-  const explain = lead.autoMove === "before_switch" || lead.autoMove === "stuck" || lead.autoMove === "no_team" || lead.autoMove === "excluded_source" || lead.autoMove === "on_call";
+  const explain = lead.autoMove === "before_switch" || lead.autoMove === "stuck" || lead.autoMove === "no_team" || lead.autoMove === "excluded_source" || lead.autoMove === "on_break" || lead.autoMove === "on_call";
 
   return (
     <motion.li variants={listItemVariants} className={cn("flex gap-3 px-4 py-3", ticked && "bg-primary/5")}>

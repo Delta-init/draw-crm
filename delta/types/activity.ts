@@ -25,7 +25,7 @@ export interface PersonActivity {
   firstActiveToday: string | null;
   lastLogin: { at: string; ip: string; device: string } | null;
   lastLogoutAt: string | null;
-  /** Where the HRMS has them; null when it isn't linked or can't say. */
+  /** Where the HRMS has them, this CRM's break first; null when the HRMS can't say (a break still shows). */
   attendance: AttendanceState | null;
   /** Today is one of their shift's working days — optional for an older server. */
   workDay?: boolean | null;
@@ -35,7 +35,7 @@ export interface PersonActivity {
   clockedOutAt?: string | null;
 }
 
-/** The HRMS's word (by email). "break" is the Sales CRM's "Take break" — this CRM has none, so never sends it. */
+/** The HRMS's word (by email), with this CRM's own "Take break" (2026-10-20). */
 export type AttendanceState = "in" | "break" | "out" | "leave" | "unknown";
 
 export interface PeopleResponse {
@@ -47,7 +47,7 @@ export interface PeopleResponse {
     notifyTeamLeaders: boolean;
     inWorkingHours: boolean;
     timezone: string;
-    /** The HRMS is linked: idle alerts go only to those clocked in. */
+    /** The HRMS is linked: idle alerts go only to those clocked in and not on a break. */
     byAttendance: boolean;
     /** Switched on but waiting: the HRMS is linked and isn't answering — optional for an older server. */
     paused?: boolean;
@@ -114,7 +114,7 @@ export interface AttendanceShift {
   requiredHours: number | null;
 }
 
-/** Where someone is now (today only): the HRMS's clock-in, approved leave, or neither ("break" is the Sales CRM's). */
+/** Where someone is now (today only): this CRM's break, the HRMS's clock-in, approved leave, or none of those. */
 export type AttendanceNow = "in" | "break" | "out" | "leave";
 
 /** One person's day: their shift and their clock-ins and clock-outs (GET /activity/attendance, /teams/:id/attendance). */
@@ -139,6 +139,8 @@ export interface AttendancePerson {
   wfh: boolean;
   now: AttendanceNow | null;
   breakSince: string | null;
+  /** What the break going on now is for: meeting, lunch, tea, washroom (null when not said). */
+  breakKind?: string | null;
 }
 
 export interface AttendanceDay {

@@ -21,6 +21,7 @@ import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { navItems } from "@/components/layout/Sidebar";
 import { CommandPalette } from "@/components/shared/CommandPalette";
 import { ImpersonationBanner } from "@/components/shared/ImpersonationBanner";
+import { BreakButton } from "@/components/shared/BreakButton";
 
 export function Header() {
   const { user } = useAuthStore();
@@ -97,6 +98,8 @@ export function Header() {
             ⌘K
           </kbd>
         </button>
+
+        <BreakButton />
 
         <NotificationBell />
 

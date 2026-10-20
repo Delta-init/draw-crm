@@ -1,5 +1,6 @@
 import { Router } from "express";
 import authRoutes from "./authRoutes.js";
+import breakRoutes from "./breakRoutes.js";
 import myTrackerRoutes from "./myTrackerRoutes.js";
 import userRoutes from "./userRoutes.js";
 import roleRoutes from "./roleRoutes.js";
@@ -60,6 +61,8 @@ router.use("/notifications", notificationRoutes);
 router.use("/inactive-leads", inactiveLeadRoutes);
 // The office's meeting rooms, booked through the HRMS — see meetingRoomRoutes.
 router.use("/meeting-rooms", meetingRoomRoutes);
+// "Take break" — everyone's own (2026-10-20, as in the Sales CRM): the inactive-lead clock stops while it lasts.
+router.use("/break", breakRoutes);
 
 // Health check
 router.get("/health", (_req, res) => {

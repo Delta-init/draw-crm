@@ -112,6 +112,8 @@ export interface IUser extends Document {
   extension?: string;        // 3CX phone extension number e.g. "101"
   /** Where the extension came from: typed on the Users screen ("manual", never overwritten) or 3CX's users by email. */
   extensionSource?: "manual" | "3cx" | null;
+  breakSince?: Date | null;     // on a break since ("Take break", 2026-10-20, as in the Sales CRM)
+  breakKind?: BreakKind | null; // what the break is for
   status: "active" | "inactive";
   createdAt: Date;
   updatedAt: Date;
@@ -800,3 +802,7 @@ export interface NotificationDTO {
   read: boolean;
   createdAt: string;
 }
+
+/** What a break is for — picked when "Take break" is pressed (2026-10-20, as in the Sales CRM). Every kind is a break the same. */
+export const BREAK_KINDS = ["meeting", "lunch", "tea", "washroom"] as const;
+export type BreakKind = (typeof BREAK_KINDS)[number];

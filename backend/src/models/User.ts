@@ -1,6 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import bcrypt from "bcryptjs";
-import type { IUser } from "../types/index.js";
+import { BREAK_KINDS, type IUser } from "../types/index.js";
 import { DISPLAY_CURRENCIES } from "../utils/currencies.js";
 
 const userSchema = new Schema<IUser>(
@@ -48,6 +48,13 @@ const userSchema = new Schema<IUser>(
       enum: ["manual", "3cx", null],
       default: null,
     },
+    /**
+     * On a break since ("Take break" in the header, 2026-10-20, as in the Sales CRM): the inactive-lead clock stops
+     * for their leads, and none of theirs moves, until it ends — or the Dubai day does.
+     */
+    breakSince: { type: Date, default: null },
+    // What the break going on now is for (meeting, lunch, tea, washroom); null when not on one or not said
+    breakKind: { type: String, enum: [...BREAK_KINDS, null], default: null },
     /**
      * The currency they see amounts in (Settings → Currency, 2026-10-15) — kept on their account, so it follows them
      * to every device they sign in on. null: never picked (the app's default, USD).

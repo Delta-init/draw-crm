@@ -19,7 +19,7 @@ import { drawDate } from "@/lib/drawDates";
 import type { FilterTeam, LeadWorkflow, WorkflowCounts } from "@/types/inactiveLeads";
 
 /*
- * Inactive Leads → Workflow, as the Sales CRM's (brought here 2026-10-17; this CRM keeps no breaks) (the user, 2026-10-17: "a map of the workflow — how
+ * Inactive Leads → Workflow, as the Sales CRM's (brought here 2026-10-17; breaks since 2026-10-20) (the user, 2026-10-17: "a map of the workflow — how
  * many leads came today, how many moved, how many with which status, by team
  * and by each employee"): the leads that came in over some days and where each
  * went, as a map, then when they came, their statuses now, each team and each
@@ -113,7 +113,7 @@ export function LeadWorkflowView({ teams }: { teams: FilterTeam[] }) {
 /** The map and the charts for one answer — also what Root shows for this CRM. */
 export function LeadWorkflowBody({ data, personName, onPerson, onBox }: { data: LeadWorkflow; personName?: string; onPerson?: (id: string) => void; onBox?: (pick: BoxPick) => void }) {
   const t = data.totals;
-  // A CRM that keeps no breaks (Draw, Remote) says so: no break box or columns for it.
+  // A CRM that keeps no breaks says so (rule.breaks false): no break box or columns for it. This one keeps them.
   const breaks = data.rule.breaks !== false;
   const days = data.period.from === data.period.to ? dayLabel(data.period.from) : `${dayLabel(data.period.from)} – ${dayLabel(data.period.to)}`;
   return (

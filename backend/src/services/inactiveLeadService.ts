@@ -10,8 +10,9 @@ import { emitTeamUpdate } from "../socket.js";
 import { getAppSettings, isWithinWorkingHours, type AppSettingsDTO } from "./settingsService.js";
 import { notify, superAdminIds } from "./notificationService.js";
 import { pickSplitAssignee, runInTeamQueue, type SplitTeam } from "./leadService.js";
-import { formatMinutes, startOfLocalDay, workingCutoff, workingMinutesBetween } from "../utils/workingHours.js";
+import { formatMinutes, startOfLocalDay, workingCutoff } from "../utils/workingHours.js";
 import { callSpansOf, mergeSpans, onCallNow } from "./callClock.js";
+import { breaksOf, minutesOffBreak, type Breaks } from "./breakClock.js";
 import { buildPagination } from "../utils/response.js";
 import type { PaginationMeta } from "../types/index.js";
 import { drawDayRange } from "../utils/drawTime.js";
@@ -39,6 +40,10 @@ import { drawDayRange } from "../utils/drawTime.js";
  * Calls (the user, 2026-10-19): the owner's time on 3CX calls — any call on
  * their extension, ringing to hang-up — doesn't count, and nothing of theirs
  * moves while they are on a call (see callClock.ts).
+ *
+ * Breaks (2026-10-20, as in the Sales CRM): the same for the owner's breaks —
+ * "Take break" in the header (see breakClock.ts). Breaks and calls are joined
+ * first, so a call taken during a break comes off once.
  */
 
 /** Statuses a lead nobody has worked is still in. */
@@ -107,7 +112,7 @@ interface MoveRecord {
   inactiveMinutes: number;
 }
 
-export type AutoMoveState = "due" | "off" | "before_switch" | "stuck" | "no_team" | "excluded_source" | "on_call";
+export type AutoMoveState = "due" | "off" | "before_switch" | "stuck" | "no_team" | "excluded_source" | "on_break" | "on_call";
 
 export interface InactiveLeadDTO {
   id: string;
@@ -342,31 +347,33 @@ async function findInactiveLeads(f: CandidateFilter): Promise<{ leads: Candidate
 const isStuck = (l: Candidate): boolean => Boolean(l.inactivity?.stuckAt && l.inactivity.stuckAt >= l.assignedAt);
 
 /**
- * The leads past the limit once their owners' time on calls is taken off (the user, 2026-10-19: any call on the
- * owner's 3CX extension, ringing to hang-up — see callClock.ts), each with its minutes; and who of their owners is on a
- * call right now (asked of 3CX). `leads` were found past the limit without the calls (the cutoff), so only fewer can be.
+ * The leads past the limit once their owners' breaks and time on calls are taken off (the user, 2026-10-19: any call on
+ * the owner's 3CX extension, ringing to hang-up — see callClock.ts; 2026-10-20: their breaks — see breakClock.ts), each
+ * with its minutes; who of their owners is on a break now, and who is on a call right now (asked of 3CX). `leads` were
+ * found past the limit without either (the cutoff), so only fewer can be.
  */
-async function pastLimitOffCalls(leads: Candidate[], s: AppSettingsDTO, now: Date) {
+async function pastLimitOffBreak(leads: Candidate[], s: AppSettingsDTO, now: Date) {
   const earliest = leads.reduce((m, l) => (l.assignedAt < m ? l.assignedAt : m), now);
-  const calls = await callSpansOf([...new Set(leads.map((l) => String(l.assignedTo)))], earliest, now);
+  const owners = [...new Set(leads.map((l) => String(l.assignedTo)))];
+  const [breaks, calls]: [Breaks, Awaited<ReturnType<typeof callSpansOf>>] = await Promise.all([breaksOf(owners, earliest, now), callSpansOf(owners, earliest, now)]);
   const minutes = new Map<string, number>();
   const past: Candidate[] = [];
   for (const l of leads) {
-    let m = workingMinutesBetween(s.workingHours, l.assignedAt, now);
-    for (const [a, b] of mergeSpans(calls.spans.get(String(l.assignedTo)) ?? [])) {
-      const x = Math.max(a, l.assignedAt.getTime()), y = Math.min(b, now.getTime());
-      if (y > x) m -= workingMinutesBetween(s.workingHours, new Date(x), new Date(y));
-    }
-    m = Math.max(0, m);
+    const owner = String(l.assignedTo);
+    // Breaks and calls together, overlaps once: a call taken during a break isn't taken off twice.
+    const off = mergeSpans([...(breaks.spans.get(owner) ?? []), ...(calls.spans.get(owner) ?? [])]);
+    const m = minutesOffBreak(s.workingHours, off, l.assignedAt, now);
     minutes.set(String(l._id), m);
     if (m >= s.inactiveLeads.limitMinutes) past.push(l);
   }
+  // Who is on a call right now — asked of 3CX only for the owners of leads still past the limit.
   const askAbout = new Map([...calls.extensionOf].filter(([id]) => past.some((l) => String(l.assignedTo) === id)));
-  return { leads: past, minutes, onCallNow: await onCallNow(askAbout) };
+  return { leads: past, minutes, onBreakNow: breaks.onBreakNow, onCallNow: await onCallNow(askAbout) };
 }
 
-function autoMoveState(l: Candidate, s: AppSettingsDTO, onCall: Set<string> = new Set()): AutoMoveState {
+function autoMoveState(l: Candidate, s: AppSettingsDTO, onBreakNow: Set<string>, onCall: Set<string> = new Set()): AutoMoveState {
   if (!s.inactiveLeads.autoReassign) return "off";
+  if (onBreakNow.has(String(l.assignedTo))) return "on_break";
   if (onCall.has(String(l.assignedTo))) return "on_call";
   if (l.source && (s.inactiveLeads.excludedSources ?? []).some((x) => x.trim().toLowerCase() === String(l.source).trim().toLowerCase())) {
     return "excluded_source";
@@ -395,8 +402,8 @@ export async function inactiveNow(now: Date = new Date(), leadIds?: Types.Object
   const settings = await getAppSettings();
   const cutoff = workingCutoff(settings.workingHours, now, settings.inactiveLeads.limitMinutes);
   const found = await findInactiveLeads({ cutoff, ...(leadIds ? { leadIds } : {}) });
-  const clock = await pastLimitOffCalls(found.leads, settings, now);
-  return new Map(clock.leads.map((l) => [String(l._id), { owner: String(l.assignedTo), state: autoMoveState(l, settings, clock.onCallNow), minutes: clock.minutes.get(String(l._id)) ?? 0 }]));
+  const clock = await pastLimitOffBreak(found.leads, settings, now);
+  return new Map(clock.leads.map((l) => [String(l._id), { owner: String(l.assignedTo), state: autoMoveState(l, settings, clock.onBreakNow, clock.onCallNow), minutes: clock.minutes.get(String(l._id)) ?? 0 }]));
 }
 
 /** Of these leads, the ones their owner acted on since they became theirs, or anyone has called — the page's rules. */
@@ -439,8 +446,8 @@ export async function listInactiveLeads(
     cutoff, teamId: q.teamId, ownerId: q.ownerId, search: q.search, dateFrom: range.$gte, dateTo: range.$lte, cameInFrom: PAGE_FROM,
   });
   const { capped } = found;
-  // Past the limit once the owners' call time is taken off — as the mover counts.
-  const clock = await pastLimitOffCalls(found.leads, settings, now);
+  // Past the limit once the owners' breaks and call time are taken off — as the mover counts.
+  const clock = await pastLimitOffBreak(found.leads, settings, now);
   let leads = clock.leads;
 
   // Found longest-waiting first; other orders sort the whole list before paging
@@ -506,7 +513,7 @@ export async function listInactiveLeads(
       waitingMinutes: Math.floor(clock.minutes.get(String(l._id)) ?? 0),
       moves: l.inactivity?.moves ?? 0,
       lostBy: (l.inactivity?.lostBy ?? []).map((u) => ({ id: String(u), name: userById.get(String(u))?.name ?? "Unknown" })),
-      autoMove: autoMoveState(l, settings, clock.onCallNow),
+      autoMove: autoMoveState(l, settings, clock.onBreakNow, clock.onCallNow),
       calls: (() => {
         const c = callsByLead.get(String(l._id));
         return c
@@ -881,8 +888,8 @@ export async function reassignInactiveLeads(
 
   const cutoff = workingCutoff(settings.workingHours, now, limitMinutes);
   const { leads } = await findInactiveLeads({ cutoff, leadIds: ids });
-  // How long each waited, as the page shows it (call time taken off). A super admin's move is theirs to make.
-  const { minutes } = await pastLimitOffCalls(leads, settings, now);
+  // How long each waited, as the page shows it (breaks and call time taken off). A super admin's move is theirs to make.
+  const { minutes } = await pastLimitOffBreak(leads, settings, now);
   const inactive = new Map(leads.map((l) => [String(l._id), l]));
 
   const result: ReassignResult = { moved: [], skipped: [] };
@@ -988,9 +995,9 @@ export async function sweepInactiveLeads(now: Date = new Date()): Promise<SweepR
   const { leads } = await findInactiveLeads({
     cutoff, assignedFrom: enabledAt, skipStuck: true, excludeSources: settings.inactiveLeads.excludedSources,
   });
-  // Past the limit with the owner's call time taken off, and never while the owner is on a call.
-  const clock = await pastLimitOffCalls(leads, settings, now);
-  const batch = clock.leads.filter((l) => !clock.onCallNow.has(String(l.assignedTo))).slice(0, SWEEP_CAP);
+  // Past the limit with the owner's breaks and call time taken off, and never while the owner is on a break or a call.
+  const clock = await pastLimitOffBreak(leads, settings, now);
+  const batch = clock.leads.filter((l) => !clock.onBreakNow.has(String(l.assignedTo)) && !clock.onCallNow.has(String(l.assignedTo))).slice(0, SWEEP_CAP);
   if (!batch.length) return { moved: 0, stuck: 0 };
 
   const ownerNames = await names([...new Set(batch.map((l) => String(l.assignedTo)))]);
