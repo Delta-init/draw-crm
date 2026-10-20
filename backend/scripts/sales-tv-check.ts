@@ -64,12 +64,13 @@ const u = (name: string, role = staffRole, x: Record<string, unknown> = {}) =>
 const anna = u("Anna Ace", staffRole, { extension: "101" });
 const ben = u("Ben Bee", staffRole, { extension: "102", breakSince: ago(15), breakKind: "lunch" });
 const lena = u("Lena Lead", staffRole, { breakSince: dayAt(-1, 14), breakKind: "tea" }); // yesterday's break: not now
-const boss = u("Boss Super", superRole);                                                 // in the team, but a Super Admin
+const boss = u("Boss Super", superRole);                                                 // a Super Admin in the team: on the TV
+const sid = u("Sid Outside", superRole);                                                 // a Super Admin in no team: not
 const loner = u("Loner Nobody");                                                         // in no team
 const xena = u("Xena Excluded");                                                         // excluded from commission
 const ina = u("Ina Inactive", staffRole, { status: "inactive", breakSince: ago(5), breakKind: "tea" }); // deactivated
 const olly = u("Olly Oldteam");                                                          // only in an inactive team
-await db.collection("users").insertMany([anna, ben, lena, boss, loner, xena, ina, olly]);
+await db.collection("users").insertMany([anna, ben, lena, boss, loner, xena, ina, olly, sid]);
 await db.collection("teams").insertMany([
   { _id: new Types.ObjectId(), name: "TEAM TITAN", leaders: [lena._id], members: [anna._id, ben._id, boss._id, xena._id, ina._id], status: "active", settings: {} },
   { _id: new Types.ObjectId(), name: "TEAM GONE", leaders: [], members: [olly._id, anna._id], status: "inactive", settings: {} },
@@ -150,8 +151,13 @@ check("a close: id, closer, closerEmail, courses, amount, academy, currency, at 
 
 section("People — the sales staff only");
 const names = (d.people ?? []).map((p: Any) => p.name);
-check("Anna, Ben, Lena — not the Super Admin, not someone in no team, not the excluded one, not the deactivated one, not one only in an inactive team",
-  [...names].sort().join() === "Anna Ace,Ben Bee,Lena Lead", j(names));
+check("Anna, Ben, Boss (a Super Admin in the team), Lena — not the Super Admin in no team, not someone in no team, not the excluded one, not the deactivated one, not one only in an inactive team",
+  [...names].sort().join() === "Anna Ace,Ben Bee,Boss Super,Lena Lead", j(names));
+{
+  const { LeaderboardService } = await import("../src/services/leaderboardService.js");
+  const own = (await new LeaderboardService().getLeaderboard()).rows.map((r) => r.name);
+  check("the CRM's own leaderboard still leaves every Super Admin out", !own.includes("Boss Super") && !own.includes("Sid Outside"), j(own));
+}
 const P = (n: string) => (d.people ?? []).find((p: Any) => p.name === n);
 const A = P("Anna Ace"), B = P("Ben Bee"), L = P("Lena Lead");
 check(`Anna: closings today ${closingsOf(anna, isToday)}, this month ${closingsOf(anna, thisMonth)} — not the dropped one`,
