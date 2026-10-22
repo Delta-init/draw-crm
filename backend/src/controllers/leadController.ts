@@ -1317,7 +1317,14 @@ export const updateReminder = async (
 
     if (parsed.data.title    !== undefined) reminder.title    = parsed.data.title;
     if (parsed.data.note     !== undefined) reminder.note     = parsed.data.note;
-    if (parsed.data.remindAt !== undefined) reminder.remindAt = new Date(parsed.data.remindAt);
+    if (parsed.data.remindAt !== undefined) {
+      const to = new Date(parsed.data.remindAt);
+      if (!reminder.remindAt || reminder.remindAt.getTime() !== to.getTime()) {
+        reminder.remindAt = to;
+        // A new time is a new alert: the scheduler sends one only while these are empty (2026-10-22).
+        Object.assign(reminder, { notifiedAt: null, warnedAt: null });
+      }
+    }
     if (parsed.data.isDone   !== undefined) reminder.isDone   = parsed.data.isDone;
 
     await lead.save();
