@@ -1299,8 +1299,9 @@ export class StudentService {
      * or lose any.
      */
     const own = await this.ownOnLead(student.leadId);
+    // One row per payment on the lead that carries its method and receipt (2026-10-23), so there may be several —
+    // together, what the lead holds.
     const ownRows = payments.filter((p) => p.collectedBefore);
-    if (ownRows.length > 1) throw createError("Only one payment can be the money already on the lead.", 422);
     if (own > 0 && !ownRows.length) {
       throw createError(
         `This lead already holds ${money(own / 100)} of its own — it stays as a payment of its own, with its method and receipt.`,
@@ -1309,9 +1310,10 @@ export class StudentService {
     }
     // The lead's own money is what it was recorded as — in a Bangalore close,
     // the AED handed over when the payment says so, its INR worked out at a rate.
-    if (ownRows.length && minor(ownFigure(ownRows[0]!)) !== own) {
+    const ownGiven = ownRows.reduce((sum, p) => sum + ownFigure(p), 0);
+    if (ownRows.length && minor(ownGiven) !== own) {
       throw createError(
-        `The lead's own payments come to ${money(own / 100)} now, not ${money(ownFigure(ownRows[0]!))} — they changed while this was open. Close the correction and open it again.`,
+        `The lead's own payments come to ${money(own / 100)} now, not ${money(ownGiven)} — they changed while this was open. Close the correction and open it again.`,
         409,
       );
     }

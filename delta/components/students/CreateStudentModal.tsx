@@ -19,9 +19,9 @@ import {
 } from "@/types/student";
 import { useCreateStudent, useEmailCheck, useUpdateStudent } from "@/hooks/useStudents";
 import { useAllCourses, useBangaloreOffered } from "@/hooks/useCourses";
-import { useAddPayment } from "@/hooks/usePayments";
+import { useAddPayment, useLeadPaymentFinance } from "@/hooks/usePayments";
 import { CommissionPreview } from "@/components/commission/CommissionPreview";
-import { PaymentRowsEditor, missingInRows, newPaymentRow, rowAedFields, rowAmount, rowsForAcademy, type PaymentRow } from "@/components/students/PaymentRowsEditor";
+import { PaymentRowsEditor, leadPaymentRows, missingInRows, newPaymentRow, rowAedFields, rowAmount, rowsForAcademy, type PaymentRow } from "@/components/students/PaymentRowsEditor";
 import { AcademyBadge } from "@/components/students/AcademyBadge";
 import { ACADEMIES, ACADEMY_LABELS, academyOf, bangalorePriceOf, fmtFee, priceFor, type Academy } from "@/lib/academy";
 import type { Lead } from "@/types/lead";
@@ -116,7 +116,13 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
     setAcademy(next);
     const listed = sumOf(pickedCourses, next);
     setFeeInput(next === "bangalore" ? (listed > 0 ? String(listed) : "") : String(lead.sellingAmount || listed || ""));
-    setPaymentRows((rows) => rowsForAcademy(rows, next));
+    // The lead's own money laid out again for the other academy: one row each in Dubai, one with its rate in
+    // Bangalore (2026-10-23).
+    setPaymentRows((rows) => {
+      const own = alreadyPaid > 0 ? leadPaymentRows(lead.payments ?? [], next) : [];
+      const all = rowsForAcademy([...own, ...rows.filter((r) => !r.collectedBefore)], next);
+      return all.length ? all : [newPaymentRow()];
+    });
   }
 
   function pickCourse(id: string) {
@@ -143,12 +149,18 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
    * opened: the payments this close then adds to the lead must not count
    * twice. Editing an enrolment keeps the one "collected now" figure.
    */
-  const [paymentRows, setPaymentRows] = useState<PaymentRow[]>(() =>
-    alreadyPaid > 0 ? [newPaymentRow({ collectedBefore: true, amountInput: String(alreadyPaid) })] : [newPaymentRow()],
-  );
+  // Each payment on the lead that has its method and receipt is a row of its own, filled in (2026-10-23).
+  const [paymentRows, setPaymentRows] = useState<PaymentRow[]>(() => {
+    const own = alreadyPaid > 0 ? rowsForAcademy(leadPaymentRows(lead.payments ?? [], academy), academy) : [];
+    return own.length ? own : [newPaymentRow()];
+  });
   const [paidNowInput, setPaidNowInput] = useState("");
+  // An enrolment already in finance takes no "collected now" here (2026-10-23): it would stay on the lead and never
+  // reach the invoice. It is sent from the lead's Payments panel, with its receipt.
+  const { data: financeLink } = useLeadPaymentFinance(lead._id, open && editing);
+  const inFinance = editing && Boolean(financeLink?.inFinance);
   const paidNow = editing
-    ? Math.max(0, Number(paidNowInput) || 0)
+    ? inFinance ? 0 : Math.max(0, Number(paidNowInput) || 0)
     : paymentRows.filter((r) => !r.collectedBefore).reduce((s, r) => s + rowAmount(r), 0);
   /*
    * A Bangalore enrolment's money is INR and never on the lead's (AED) list,
@@ -313,6 +325,9 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
           amount: rowAmount(row),
           note: `Collected at enrolment${soldAs} · ${PAYMENT_METHOD_LABELS[row.method as EnrolmentPaymentMethod] ?? row.method}`,
           paidAt: new Date(enrollmentDate).toISOString(),
+          // Kept on the lead with it, as every lead payment is now (2026-10-23).
+          ...(row.method ? { method: row.method } : {}),
+          ...(row.receipt ? { receipt: row.receipt } : {}),
         });
         setPaymentRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, addedToLead: true } : r)));
       }
@@ -602,7 +617,12 @@ export function CreateStudentModal({ open, lead, existingStudent, progress, onCl
                       />
                     </div>
                     {/* A new close takes its payments one by one, below. */}
-                    {editing && (
+                    {editing && inFinance && (
+                      <p className="self-end text-[11px] text-muted-foreground">
+                        In finance{paidBefore > 0 ? ` · ${fee(paidBefore)} paid` : ""} — a further payment is added in the lead&apos;s Payments panel, with its receipt, and goes to finance.
+                      </p>
+                    )}
+                    {editing && !inFinance && (
                       <div className="space-y-1">
                         <p className="text-[11px] text-muted-foreground">
                           Collected now{paidBefore > 0 ? ` · ${fee(paidBefore)} already` : ""}

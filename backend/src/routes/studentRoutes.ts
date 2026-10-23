@@ -53,7 +53,8 @@ router.get("/email-check", authenticate, checkAnyPermission(["students", "create
 router.post(
   "/receipts/:leadId",
   authenticate,
-  checkAnyPermission(["students", "create"], ["students", "edit"]),
+  // …and with every payment added on a lead (2026-10-23), so whoever may edit the lead.
+  checkAnyPermission(["students", "create"], ["students", "edit"], ["leads", "edit"]),
   takeReceipt,
   uploadPaymentReceipt,
 );

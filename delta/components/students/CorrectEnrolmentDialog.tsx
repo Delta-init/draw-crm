@@ -57,7 +57,13 @@ function startingRows(s: Student, ownOnLead: number, academy: Academy): PaymentR
   const listed = s.payments ?? [];
   const ownWas = listed.find((p) => p.collectedBefore);
   const rows: PaymentRow[] = [];
-  if (ownOnLead > 0) {
+  // The lead's own money as the close sent it — one row per payment that had its method and receipt (2026-10-23) —
+  // while it still comes to what the lead holds (Dubai; a Bangalore one keeps one row with its rate).
+  const ownWere = listed.filter((p) => p.collectedBefore);
+  const ownWereSum = Math.round(ownWere.reduce((sum, p) => sum + Number(p.amount), 0) * 100);
+  if (ownOnLead > 0 && academy !== "bangalore" && ownWere.length > 1 && ownWereSum === Math.round(ownOnLead * 100)) {
+    rows.push(...ownWere.map((p) => newPaymentRow({ collectedBefore: true, amountInput: String(p.amount), method: p.method, receipt: p.receipt ?? null })));
+  } else if (ownOnLead > 0) {
     const rate = academy === "bangalore" && ownWas?.exchangeRate ? ownWas.exchangeRate : 0;
     rows.push(newPaymentRow({
       collectedBefore: true, amountInput: String(ownOnLead), method: ownWas?.method ?? "", receipt: ownWas?.receipt ?? null,
