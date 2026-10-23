@@ -438,7 +438,9 @@ export type ActivityAction =
   | "note_added"
   | "note_updated"
   | "note_deleted"
-  | "inactive_reassigned";
+  | "inactive_reassigned"
+  | "repeat_enquiry"
+  | "repeat_verified";
 
 export interface ILeadNote {
   _id: Types.ObjectId;
@@ -528,6 +530,28 @@ export interface ILead extends Document {
   updatedAt: Date;
   /** Moves for inactivity — absent until the first one. */
   inactivity?: ILeadInactivity;
+  /** How many times the same number came in again from the ads (services/repeatLeadService.ts). */
+  repeatCount?: number;
+  /** The last time it came again, and the team leader's verification of it. */
+  repeat?: ILeadRepeat | null;
+}
+
+/** A lead whose number came in again (2026-10-23): with its team leader until they verify it and give it out. */
+export interface ILeadRepeat {
+  waiting: boolean;
+  at: Date;
+  team?: Types.ObjectId | null;
+  previousOwner?: Types.ObjectId | null;
+  previousStatus?: string | null;
+  /** Already a client (closed) — it stays with its owner; the leader only verifies. */
+  alreadyClient?: boolean;
+  /** Who holds it while it waits (a leader of its team, else a Super Admin). */
+  holder?: Types.ObjectId | null;
+  source?: string | null;
+  campaign?: string | null;
+  decidedBy?: Types.ObjectId | null;
+  decidedAt?: Date | null;
+  givenTo?: Types.ObjectId | null;
 }
 
 export interface LeadFilters {

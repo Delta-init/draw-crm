@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell, BellOff, X, CheckCircle2, UserCheck, UserPlus,
   MessageCircle, StickyNote, ExternalLink, Loader2, Coffee,
-  ArrowRightLeft, AlertTriangle,
+  ArrowRightLeft, AlertTriangle, Repeat2,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,7 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   idle_alert:     { icon: Coffee,        color: "text-amber-400",  bg: "bg-amber-500/15"  },
   // Inactive leads (2026-10-16): one of yours moved on, moves made automatically, and leads nobody is left to take.
   inactive_lead_moved:  { icon: ArrowRightLeft, color: "text-amber-400", bg: "bg-amber-500/15" },
+  repeat_lead:          { icon: Repeat2,        color: "text-violet-400", bg: "bg-violet-500/15" },
   inactive_leads_moved: { icon: ArrowRightLeft, color: "text-amber-400", bg: "bg-amber-500/15" },
   inactive_leads_stuck: { icon: AlertTriangle,  color: "text-red-400",   bg: "bg-red-500/15"   },
 };

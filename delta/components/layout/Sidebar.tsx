@@ -30,7 +30,7 @@ import {
   HandCoins,
   Activity,
   DoorOpen,
-  Hourglass,
+  Hourglass, Repeat2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/lib/store/uiStore";
@@ -49,6 +49,7 @@ import { toast } from "@/lib/toast";
 import { useUserLeadStats } from "@/hooks/useLeads";
 import { useMyReminderCount } from "@/hooks/useReminders";
 import { useBalanceDueCount } from "@/hooks/useBalancePayments";
+import { useRepeatLeadCount } from "@/hooks/useRepeatLeads";
 import { useQueryClient } from "@tanstack/react-query";
 import { getSocket } from "@/lib/socket";
 
@@ -56,6 +57,8 @@ export const navItems: { href: string; label: string; icon: React.ElementType; p
   { href: "/dashboard", label: "Dashboard",          icon: LayoutDashboard, permModule: "dashboard" },
   { href: "/my-tracker",label: "My Tracker",         icon: ClipboardCheck,  permModule: "tracker" },
   { href: "/leads",     label: "Leads",              icon: FileText,        permModule: "leads"     },
+  // Team leaders, Super Admins and the Sales Manager only (hidden for everyone else below) — 2026-10-23
+  { href: "/repeat-leads", label: "Repeat leads",    icon: Repeat2,         permModule: "leads"     },
   { href: "/calls",     label: "Calls",              icon: PhoneCall,       permModule: "calls"     },
   { href: "/mentors",   label: "Mentors",            icon: CalendarDays,    permModule: "mentors" },
   /* The office's meeting rooms, booked through the HRMS (2026-10-19) — open to everyone signed in. */
@@ -99,6 +102,7 @@ function NavLinks({ collapsed = false, onNavigate }: NavLinksProps) {
   const newLeadsCount = myStats?.assigned ?? 0;
   const { data: reminderCount = 0 } = useMyReminderCount();
   const { data: balanceDue = 0 } = useBalanceDueCount(useAuthStore((st) => st.hasPermission)("balancePayments", "view"));
+  const { data: repeatsWaiting = null } = useRepeatLeadCount();
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -114,6 +118,7 @@ function NavLinks({ collapsed = false, onNavigate }: NavLinksProps) {
       if (type === "lead_assigned" || type === "inactive_lead_moved" || type === "new_lead") {
         queryClient.invalidateQueries({ queryKey: ["leads", "stats", userId] });
       }
+      if (type === "repeat_lead") queryClient.invalidateQueries({ queryKey: ["repeat-leads"] });
     }
 
     socket.on("notification", handleNotification);
@@ -127,9 +132,11 @@ function NavLinks({ collapsed = false, onNavigate }: NavLinksProps) {
   return (
     <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1">
       {navItems.map(({ href, label, icon: Icon, permModule }) => {
+        // Repeat leads: only for whoever verifies them (the count is null for everyone else).
+        if (href === "/repeat-leads" && repeatsWaiting === null) return null;
         const isActive = pathname === href || pathname.startsWith(href + "/");
         const allowed = permModule === null ? true : hasPermission(permModule ?? href.split("/")[1], "view");
-        const badgeCount = href === "/leads" ? newLeadsCount : href === "/reminders" ? reminderCount : href === "/balance-payments" ? balanceDue : 0;
+        const badgeCount = href === "/leads" ? newLeadsCount : href === "/reminders" ? reminderCount : href === "/balance-payments" ? balanceDue : href === "/repeat-leads" ? (repeatsWaiting ?? 0) : 0;
         const showBadge = badgeCount > 0;
 
         const linkEl = (

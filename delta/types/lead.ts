@@ -17,7 +17,9 @@ export type ActivityAction =
   | "note_added"
   | "note_updated"
   | "note_deleted"
-  | "inactive_reassigned";
+  | "inactive_reassigned"
+  | "repeat_enquiry"
+  | "repeat_verified";
 
 export interface LeadNote {
   _id: string;

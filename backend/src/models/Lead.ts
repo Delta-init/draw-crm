@@ -39,6 +39,8 @@ const activityLogSchema = new Schema<IActivityLog>(
         "note_updated",
         "note_deleted",
         "inactive_reassigned",
+        "repeat_enquiry",
+        "repeat_verified",
       ],
     },
     description: {
@@ -269,6 +271,29 @@ const leadSchema = new Schema<ILead>(
       default: 0,
       min: [0, "Connected call count cannot be negative"],
     },
+    // The same number coming in again from the ads (2026-10-23, services/repeatLeadService.ts): counted, and held by
+    // its team leader until they verify it and give it to the same person or another in the team.
+    repeatCount: { type: Number, default: 0, min: 0 },
+    repeat: {
+      type: new Schema(
+        {
+          waiting: { type: Boolean, default: false },
+          at: { type: Date, required: true },
+          team: { type: Schema.Types.ObjectId, ref: "Team", default: null },
+          previousOwner: { type: Schema.Types.ObjectId, ref: "User", default: null },
+          previousStatus: { type: String, default: null },
+          alreadyClient: { type: Boolean, default: false },
+          holder: { type: Schema.Types.ObjectId, ref: "User", default: null },
+          source: { type: String, default: null },
+          campaign: { type: String, default: null },
+          decidedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+          decidedAt: { type: Date, default: null },
+          givenTo: { type: Schema.Types.ObjectId, ref: "User", default: null },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
     firstContactTime: {
       type: Date,
       default: null,
@@ -353,6 +378,7 @@ leadSchema.index({ email: 1 });
 leadSchema.index({ status: 1 });
 leadSchema.index({ assignedTo: 1 });
 leadSchema.index({ team: 1 });
+leadSchema.index({ "repeat.waiting": 1, "repeat.team": 1 }, { partialFilterExpression: { "repeat.waiting": true } });
 leadSchema.index({ reporter: 1 });
 leadSchema.index({ createdAt: -1 });
 // The Inactive leads page and its automatic mover: untouched leads by when they were handed over.
