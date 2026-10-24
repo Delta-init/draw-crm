@@ -168,6 +168,9 @@ export interface UploadLeadsResult {
   assigned: number;
   invalid: number;
   invalidDetails: InvalidRow[];
+  /** Rows whose number was already a lead: held for its team leader to verify, not created again (2026-10-23). */
+  cameAgain?: number;
+  repeatDetails?: { row: number; phone: string; leadId: string; outcome: string; message: string }[];
 }
 
 export interface AutoAssignResult {
