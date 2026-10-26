@@ -74,7 +74,7 @@ export function CommissionPreview({ courseIds, teamId, closerId }: CommissionPre
               </p>
             )}
             <p className="mt-0.5 text-[10px] text-muted-foreground">
-              Counted once every step is done: finance, LMS account, CS, onboarding and the MT5 bonus approval.
+              Counted once finance approves the sale.
             </p>
           </div>
         </div>
