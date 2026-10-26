@@ -15,6 +15,7 @@ import { startBackupScheduler } from "./services/backupService.js";
 import { startFinanceHandoverWorker } from "./services/financeHandoverWorker.js";
 import { startCallSyncWorker } from "./services/callSyncService.js";
 import { startIdleAlertScheduler } from "./services/idleAlertScheduler.js";
+import { startLeadPaymentDecisionScheduler } from "./services/leadPaymentDecisions.js";
 import { startInactiveLeadScheduler } from "./services/inactiveLeadScheduler.js";
 
 const app = express();
@@ -61,6 +62,8 @@ const start = async () => {
     startCallSyncWorker();
     // Idle alerts, every minute (off until switched on in Settings; not with RUN_SCHEDULERS=false).
     startIdleAlertScheduler();
+    // Finance's decision on each balance payment sent from a lead — only an approved one counts (2026-10-26).
+    startLeadPaymentDecisionScheduler();
     // Leads nobody acted on in time, every minute (does nothing until switched on in Settings; not with RUN_SCHEDULERS=false).
     startInactiveLeadScheduler();
   });

@@ -7,6 +7,7 @@ import { Lead } from "../models/Lead.js";
 import { Team } from "../models/Team.js";
 import { User } from "../models/User.js";
 import mongoose from "mongoose";
+import { COUNTED_TOTAL } from "../utils/countedPayments.js";
 
 const reportService = new ReportService();
 
@@ -450,7 +451,7 @@ export const exportTeamPdf = async (
           { $match: { ...match, assignedTo: new mongoose.Types.ObjectId(uid) } },
           { $group: { _id: null,
             total:          { $sum: 1 },
-            totalPayments:  { $sum: { $sum: "$payments.amount" } },
+            totalPayments:  { $sum: COUNTED_TOTAL },
             closed:         { $sum: { $cond: [{ $eq: ["$status","closed"] },         1, 0] } },
             followup:       { $sum: { $cond: [{ $eq: ["$status","followup"] },       1, 0] } },
             cnc:            { $sum: { $cond: [{ $eq: ["$status","cnc"] },            1, 0] } },
