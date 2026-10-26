@@ -133,8 +133,16 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
   const s = start.student;
   const { data: courses = [], isLoading: coursesLoading } = useAllCourses();
   const correct = useCorrectEnrolment();
-  // Fixed at the close (the user, 2026-10-10): shown here, never changed. Its money is in its currency.
-  const academy = academyOf(start.academy ?? s.academy);
+  /*
+   * The academy: the one it was closed for, or — since 2026-10-26 ("when it is sent back we can change the location") —
+   * the other, where this server offers it. Moved, it goes to that academy's finance books when sent. Its money is in
+   * its currency.
+   */
+  const closedFor = academyOf(start.academy ?? s.academy);
+  const [academy, setAcademyState] = useState<Academy>(closedFor);
+  const offered = (start.academies ?? [closedFor]).map(academyOf);
+  const mayChangeAcademy = offered.includes("dubai") && offered.includes("bangalore");
+  const moving = academy !== closedFor;
   const bangalore = academy === "bangalore";
   const fee = (n: number) => fmtFee(n, academy);
 
@@ -181,6 +189,14 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
 
   // Each payment, with its receipt; the lead's own money first, its amount fixed.
   const [paymentRows, setPaymentRows] = useState<PaymentRow[]>(() => startingRows(s, start.ownOnLead, academy));
+  /** Another academy: its prices for the courses chosen, and the payments read in its currency — to be checked. */
+  function setAcademy(next: Academy) {
+    if (next === academy) return;
+    setAcademyState(next);
+    const listed = sumOf(courseOptions.filter((c) => courseIds.includes(c._id)), next);
+    setFeeInput(listed > 0 ? String(listed) : "");
+    setPaymentRows(startingRows(s, start.ownOnLead, next));
+  }
   const paidAmount = paymentRows.reduce((t, r) => t + rowAmount(r), 0);
   const pending = Math.max(0, totalFee - paidAmount);
   /** Collected more than the fee: taken (the owner, 2026-10-06) and said so in amber, not refused. */
@@ -255,7 +271,7 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
           })),
           hasBonus: bonusChoice === "yes",
           bonusAmount: bonusChoice === "yes" ? bonusAmount : 0,
-          // The one it was closed for — said so the server can check nothing moved it.
+          // The one it is for now: the close's, or the other one it is moving to (2026-10-26).
           academy,
         },
       },
@@ -326,10 +342,32 @@ function CorrectionForm({ studentId, start, onClose }: { studentId: string; star
         {/* The course and the money */}
         <section className="space-y-2">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Courses &amp; fee</p>
-          <p className="text-[11px] text-muted-foreground">
-            Academy: <span className="font-medium text-foreground">{ACADEMY_LABELS[academy]}</span>
-            {bangalore ? " — in rupees" : ""}. <span className="text-[10px]">Fixed at the close; a correction can&apos;t change it.</span>
-          </p>
+          {mayChangeAcademy ? (
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] text-muted-foreground">Academy</span>
+                <div className="inline-flex rounded-md border border-border p-0.5" role="radiogroup" aria-label="Academy">
+                  {(["dubai", "bangalore"] as Academy[]).map((a) => (
+                    <button key={a} type="button" role="radio" aria-checked={academy === a} onClick={() => setAcademy(a)}
+                      className={cn("rounded px-2.5 py-1 text-xs font-medium", academy === a ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>
+                      {ACADEMY_LABELS[a]}
+                    </button>
+                  ))}
+                </div>
+                {bangalore && <span className="text-[11px] text-muted-foreground">in rupees</span>}
+              </div>
+              {moving && (
+                <p className="text-[11px] text-amber-400">
+                  Moves to the {ACADEMY_LABELS[academy]} academy&apos;s books when sent — a new invoice there; the one sent back is voided. Check the fee and each payment: they are now in {bangalore ? "rupees" : "dirhams"}.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              Academy: <span className="font-medium text-foreground">{ACADEMY_LABELS[academy]}</span>
+              {bangalore ? " — in rupees" : ""}.
+            </p>
+          )}
           <div className="space-y-1.5">
             <p className={label}><BookOpen className="h-3 w-3" /> Course * <span className="text-[10px]">— one or more</span></p>
             {coursesLoading && !courseOptions.length ? (

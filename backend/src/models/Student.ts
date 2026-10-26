@@ -116,9 +116,10 @@ const studentSchema = new Schema<IStudent>(
     /**
      * Which academy it was closed for (the user, 2026-10-10): Dubai, in AED,
      * or Bangalore, in INR — the fee, what was paid and the balance are in that
-     * academy's currency. Picked at the close and never changed after: every
-     * call to finance about it goes to the organization it was closed into.
-     * Unset on closes from before, which are Dubai.
+     * academy's currency. Picked at the close; changed after only by correcting
+     * an enrolment finance sent back (2026-10-26), which moves it to the other
+     * academy's finance organization. Every call to finance about it goes to
+     * this academy's organization. Unset on closes from before, which are Dubai.
      */
     academy: { type: String, enum: ACADEMIES },
     /**

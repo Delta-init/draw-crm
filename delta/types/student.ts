@@ -180,8 +180,10 @@ export interface EnrolmentCorrectionStart {
   resentAt?: string | null;
   resends?: number;
   mayMove: boolean;
-  /** The academy it was closed for — shown, never changed, by a correction. Absent from a server from before: Dubai. */
+  /** The academy it was closed for. Absent from a server from before: Dubai. */
   academy?: "dubai" | "bangalore";
+  /** The academies a correction may put it in (2026-10-26) — both where Bangalore is on. Absent from a server from before: only its own. */
+  academies?: ("dubai" | "bangalore")[];
   ownOnLead: number;
   counsellors?: { _id: string; name: string }[];
   teams?: { _id: string; name: string }[];

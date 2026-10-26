@@ -488,10 +488,9 @@ const blrCorrection = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const blrSends = sendsFor(blrId).length;
-let x = await call("PUT", `/students/${blrId}/correction`, "Maya", blrCorrection({ academy: "dubai" }));
-check("a correction that moves it to Dubai: 422, nothing sent", x.status === 422 && /closed for Bangalore — a correction can't move it/.test(x.body.message ?? "") && sendsFor(blrId).length === blrSends, `${x.status} ${x.body.message}`);
-x = await call("PUT", `/students/${blrId}/correction`, "Maya", blrCorrection({ courses: [String(course1000._id)], totalFee: 1000, paidAmount: 1000, payments: [pay("bank_transfer", 4600, "o", { collectedBefore: true, currency: "AED", amountInCurrency: 200, exchangeRate: 23 })] }));
-check("…onto a course with no Bangalore price: 422", x.status === 422 && /COURSE 1000 has no Bangalore price/.test(x.body.message ?? ""), `${x.status} ${x.body.message}`);
+check("…and the academies it may move to: both, Bangalore being on (2026-10-26)", JSON.stringify(blrForm.body.data?.academies) === JSON.stringify(["dubai", "bangalore"]), JSON.stringify(blrForm.body.data?.academies));
+let x = await call("PUT", `/students/${blrId}/correction`, "Maya", blrCorrection({ courses: [String(course1000._id)], totalFee: 1000, paidAmount: 1000, payments: [pay("bank_transfer", 4600, "o", { collectedBefore: true, currency: "AED", amountInCurrency: 200, exchangeRate: 23 })] }));
+check("…onto a course with no Bangalore price: 422, nothing sent", x.status === 422 && /COURSE 1000 has no Bangalore price/.test(x.body.message ?? "") && sendsFor(blrId).length === blrSends, `${x.status} ${x.body.message}`);
 x = await call("PUT", `/students/${blrId}/correction`, "Maya", blrCorrection({ payments: [pay("bank_transfer", 4600, "o", { collectedBefore: true, currency: "AED", amountInCurrency: 150, exchangeRate: 30.6667 }), pay("card", 25400)] }));
 check("…the lead's own money at another AED figure: 409", x.status === 409 && /come to 200 now, not 150/.test(x.body.message ?? ""), `${x.status} ${x.body.message}`);
 const blrLeadBefore = JSON.stringify((await Lead.findById(blrLead).lean())?.payments);
@@ -606,6 +605,58 @@ section("Case 9 — one email, one client (2026-10-10): a correction can't take 
   await db.collection("students").updateOne({ _id: new Types.ObjectId(other.id) }, { $set: { email: String(ownLead?.email) } });
   again = await call("POST", `/students/${other.id}/invoice`, "Maya");
   check("…with the client's own: sent again (200)", again.status === 200 && (await waitFor(() => sendsFor(other.id).length === sendsNow + 1)), `${again.status} ${again.body.message}`);
+}
+
+section("Case 10 — sent back, then corrected for the other academy (2026-10-26): to that academy's finance organization, and back");
+{
+  n++;
+  const lead = new Types.ObjectId();
+  // With the close's payment on it, as the close dialog puts it there.
+  await db.collection("leads").insertOne({ _id: lead, name: `Client ${n}`, phone: "+971500000777", status: "closed", assignedTo: people.Theertha!.id,
+    payments: [{ _id: new Types.ObjectId(), amount: 1000, note: "Collected at enrolment — COURSE 1000 · Cash", paidAt: new Date("2026-10-05"), addedBy: people.Theertha!.id }] });
+  const closed = await call("POST", "/students", "Theertha", {
+    leadId: String(lead), name: "imran pasha", phone: "+971500000777", email: "imran.move@test.local",
+    courses: [String(course1000._id)], team: String(teamA), assignedTo: String(people.Theertha!.id),
+    enrollmentDate: "2026-10-05T00:00:00.000Z", totalFee: 1000, paidAmount: 1000, language: "English", hasBonus: false,
+    payments: [pay("cash", 1000, "move-cash")],
+  });
+  const id = String((closed.body.data as any)?._id ?? "");
+  await waitFor(() => sendsFor(id).length === 1);
+  check("closed for Dubai: delivered to Dubai's organization", closed.status === 201 && sendsFor(id)[0]?._org === "org-correction-check", `${closed.status} ${closed.body.message}`);
+  approvalOf.set(id, "returned");
+  const toBangalore = {
+    name: "imran pasha", phone: "+971500000777", email: "imran.move@test.local", courses: [String(courseBlr._id)],
+    enrollmentDate: "2026-10-05T00:00:00.000Z", totalFee: 45000, paidAmount: 45000, language: "English", hasBonus: false, academy: "bangalore",
+    payments: [pay("cash", 45000, "move-inr")],
+  };
+  env.FINANCE_ORG_ID_BANGALORE = "";
+  let m = await call("PUT", `/students/${id}/correction`, "Maya", toBangalore);
+  check("Bangalore not switched on here: moving it is refused (422), nothing sent", m.status === 422 && /Bangalore enrolments aren't switched on here — it stays Dubai/.test(m.body.message ?? "") && sendsFor(id).length === 1, `${m.status} ${m.body.message}`);
+  env.FINANCE_ORG_ID_BANGALORE = "org-bangalore-check";
+  m = await call("PUT", `/students/${id}/correction`, "Maya", toBangalore);
+  await waitFor(() => sendsFor(id).length === 2);
+  const moved = sendsFor(id).at(-1);
+  let st = await Student.findById(id).lean();
+  const ho = await FinanceHandover.findOne({ studentId: id }).lean();
+  check("corrected for Bangalore: sent to Bangalore's organization, saying Bangalore, in paise", m.status === 200 && moved?._org === "org-bangalore-check" && moved?.academy === "bangalore"
+    && moved?.declaredPaidMinor === 4500000 && /to the Bangalore academy's books/.test(m.body.message ?? ""), `${m.status} ${m.body.message} → ${moved?._org}`);
+  check("…the same enrolment (its id) for finance to move", moved?.externalId === id);
+  check("…the student and its outbox row now Bangalore's", st?.academy === "bangalore" && ho?.academy === "bangalore", `${st?.academy} ${ho?.academy}`);
+  check("…and the close's AED payment off the lead (Bangalore's are rupees)", !(await Lead.findById(lead).lean())?.payments?.some((p) => /Collected at enrolment/.test(p.note ?? "")),
+    JSON.stringify((await Lead.findById(lead).lean())?.payments));
+  // Sent back again — now by Bangalore's organization — and moved back to Dubai.
+  approvalOf.set(id, "returned");
+  await FinanceHandover.updateOne({ studentId: id }, { $set: { approvalState: "pending" } });
+  statusAsks.length = 0;
+  const form = await call("GET", `/students/${id}/correction`, "Maya");
+  check("sent back by Bangalore's organization: the form asks Bangalore's, and offers both", form.body.data?.sentBack === true && form.body.data?.academy === "bangalore"
+    && statusAsks.every((a) => a.org === "org-bangalore-check"), JSON.stringify({ s: form.body.data?.sentBack, a: form.body.data?.academy, asks: statusAsks }));
+  m = await call("PUT", `/students/${id}/correction`, "Maya", { ...toBangalore, courses: [String(course1000._id)], totalFee: 1000, paidAmount: 1000, academy: "dubai", payments: [pay("cash", 1000, "move-back")] });
+  await waitFor(() => sendsFor(id).length === 3);
+  st = await Student.findById(id).lean();
+  check("and back to Dubai: sent to Dubai's organization, the student Dubai's, its AED payment on the lead again",
+    m.status === 200 && sendsFor(id).at(-1)?._org === "org-correction-check" && sendsFor(id).at(-1)?.academy === "dubai" && st?.academy === "dubai"
+      && (await Lead.findById(lead).lean())?.payments?.some((p) => /Collected at enrolment/.test(p.note ?? "") && p.amount === 1000) === true, `${m.status} ${m.body.message}`);
 }
 
 server.close();

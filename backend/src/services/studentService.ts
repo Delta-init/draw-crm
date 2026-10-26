@@ -216,7 +216,10 @@ export interface EnrolmentCorrection {
   payments?: unknown;
   hasBonus?: boolean;
   bonusAmount?: number | string;
-  /** Never changes in a correction: sent only to be checked against the one it was closed for. */
+  /**
+   * The academy it is for. Since 2026-10-26 a correction may move it to the other one ("when it is sent back we can
+   * change the location") — it then goes to that academy's finance organization, which voids the sent-back one.
+   */
   academy?: string;
 }
 
@@ -1125,7 +1128,8 @@ export class StudentService {
       {
         $set: {
           payload,
-          // Unchanged — the academy is the close's — but said on rows from before it was kept.
+          // The academy as it is now — the close's, or the other one a correction moved it to (2026-10-26) — and so the
+          // finance organization the worker sends it to.
           academy: academyOf(payload.academy),
           status: "pending",
           nextAttemptAt: new Date(),
@@ -1201,8 +1205,10 @@ export class StudentService {
       resentAt: h?.resentAt ?? null,
       resends: h?.resends ?? 0,
       mayMove,
-      // Fixed at the close: the form shows it, and can't change it.
+      // The academy it was closed for, and the ones a correction may move it to (2026-10-26) — Bangalore only where its
+      // finance organization is set, as at the close.
       academy,
+      academies: (await import("./financeClient.js")).academiesOffered(),
       ownOnLead: (await this.ownOnLead(student.leadId)) / 100,
       ...options,
       student: await this.populateStudent(id),
@@ -1230,10 +1236,11 @@ export class StudentService {
     const { User } = await import("../models/User.js");
 
     const { student, mayMove } = await this.correctable(id, viewer);
-    const academy = academyOf(student.academy);
+    // Where it was closed: finance's sent-back invoice is in that academy's organization.
+    const closedFor = academyOf(student.academy);
 
     const h = await FinanceHandover.findOne({ studentId: student._id }).lean();
-    if (!(await this.sendBackOf(id, h, academy)).sentBack) {
+    if (!(await this.sendBackOf(id, h, closedFor)).sentBack) {
       throw createError(
         "Finance hasn't sent this enrolment back, so there is nothing to correct. A change once it is approved goes through finance.",
         409,
@@ -1260,12 +1267,18 @@ export class StudentService {
     if (typeof data.hasBonus !== "boolean") missing.push("whether a bonus was given");
     else if (data.hasBonus && !isBonusAmount(data.bonusAmount)) missing.push("the bonus amount");
     if (missing.length) throw createError(`A correction needs ${missing.join(", ")}.`, 422);
-    // The academy is the close's, for good (the user, 2026-10-10): a correction shows it and never moves it.
-    if (data.academy !== undefined && data.academy !== null && data.academy !== "" && data.academy !== academy) {
-      throw createError(
-        `This enrolment was closed for ${ACADEMY_LABELS[academy]} — a correction can't move it to another academy.`,
-        422,
-      );
+    /*
+     * The academy (2026-10-26: "when it is sent back we can change the location when correcting it"): the one it was
+     * closed for unless the correction names the other. Moved, it is sent to the other academy's finance organization,
+     * which makes it there and voids the one it sent back — so it must be one this server offers, as at the close.
+     */
+    const academy = data.academy === undefined || data.academy === null || data.academy === "" ? closedFor : askedAcademy(data.academy);
+    const moving = academy !== closedFor;
+    if (moving) {
+      const { academiesOffered } = await import("./financeClient.js");
+      if (!academiesOffered().includes(academy)) {
+        throw createError(`${ACADEMY_LABELS[academy]} enrolments aren't switched on here — it stays ${ACADEMY_LABELS[closedFor]}.`, 422);
+      }
     }
 
     const courses = await Course.find({ _id: { $in: courseIds } }).select("name").lean();
@@ -1342,6 +1355,8 @@ export class StudentService {
       payments,
       hasBonus: data.hasBonus,
       bonusAmount: data.hasBonus ? Number(data.bonusAmount) : 0,
+      // Moved to the other academy: everything from here on — the handover, its statuses, balance payments — is that one's.
+      academy,
     });
     await student.save();
 
@@ -1360,12 +1375,13 @@ export class StudentService {
      * leaves the list as it is.
      */
     let leadNote = "";
-    if (academy !== "bangalore") {
+    if (academy !== "bangalore" || closedFor !== "bangalore") {
       try {
         const lead = await Lead.findById(student.leadId).select("payments").lean();
         if (lead) {
           const kept = (lead.payments ?? []).filter((p) => !fromTheClose(p.note));
-          const taken = payments.filter((p) => !p.collectedBefore).map((p) => ({
+          // Moved to Bangalore: its payments are INR, so the close's AED ones come off the lead and none go on.
+          const taken = academy === "bangalore" ? [] : payments.filter((p) => !p.collectedBefore).map((p) => ({
             amount: p.amount,
             note: `Collected at enrolment${soldAs ? ` — ${soldAs}` : ""} · ${PAYMENT_METHOD_LABELS[p.method] ?? p.method}`,
             paidAt: p.paidAt,
@@ -1382,7 +1398,12 @@ export class StudentService {
     if (!(await this.resendCorrected(id))) {
       throw createError("This enrolment has no course, so there is nothing to invoice — add its course first", 409);
     }
-    return { student: await this.populateStudent(id), message: `Corrected and sent to finance.${leadNote}` };
+    return {
+      student: await this.populateStudent(id),
+      message: moving
+        ? `Corrected and sent to finance — to the ${ACADEMY_LABELS[academy]} academy's books, where it gets a new invoice; the one sent back is voided.${leadNote}`
+        : `Corrected and sent to finance.${leadNote}`,
+    };
   }
 
   // ── Delete ───────────────────────────────────────────────────────────────────
