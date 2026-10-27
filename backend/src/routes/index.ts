@@ -25,6 +25,7 @@ import meetingRoomRoutes from "./meetingRoomRoutes.js";
 import settingsRoutes from "./settingsRoutes.js";
 import notificationRoutes from "./notificationRoutes.js";
 import inactiveLeadRoutes from "./inactiveLeadRoutes.js";
+import whatsappRoutes from "./whatsappRoutes.js";
 
 const router = Router();
 
@@ -63,6 +64,8 @@ router.use("/inactive-leads", inactiveLeadRoutes);
 router.use("/meeting-rooms", meetingRoomRoutes);
 // "Take break" — everyone's own (2026-10-20, as in the Sales CRM): the inactive-lead clock stops while it lasts.
 router.use("/break", breakRoutes);
+// WhatsApp (2026-10-27): each person's own linked WhatsApp, its chats and the lead page's card. Its media links are signed, not authenticated.
+router.use("/whatsapp", whatsappRoutes);
 
 // Health check
 router.get("/health", (_req, res) => {

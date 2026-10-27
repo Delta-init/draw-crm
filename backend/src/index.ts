@@ -17,6 +17,7 @@ import { startCallSyncWorker } from "./services/callSyncService.js";
 import { startIdleAlertScheduler } from "./services/idleAlertScheduler.js";
 import { startLeadPaymentDecisionScheduler } from "./services/leadPaymentDecisions.js";
 import { startInactiveLeadScheduler } from "./services/inactiveLeadScheduler.js";
+import { startWhatsApp } from "./services/whatsapp/service.js";
 
 const app = express();
 
@@ -66,6 +67,8 @@ const start = async () => {
     startLeadPaymentDecisionScheduler();
     // Leads nobody acted on in time, every minute (does nothing until switched on in Settings; not with RUN_SCHEDULERS=false).
     startInactiveLeadScheduler();
+    // Each person's linked WhatsApp, back after a restart (off with WHATSAPP=off or RUN_SCHEDULERS=false). One process only.
+    startWhatsApp();
   });
 };
 
