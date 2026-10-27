@@ -447,7 +447,8 @@ export type ActivityAction =
   | "note_deleted"
   | "inactive_reassigned"
   | "repeat_enquiry"
-  | "repeat_verified";
+  | "repeat_verified"
+  | "whatsapp_followup";
 
 export interface ILeadNote {
   _id: Types.ObjectId;
@@ -540,6 +541,8 @@ export interface ILead extends Document {
   updatedAt: Date;
   /** Moves for inactivity — absent until the first one. */
   inactivity?: ILeadInactivity;
+  waFollowupStoppedAt?: Date | null;
+  waFollowupStoppedByName?: string;
   /** How many times the same number came in again from the ads (services/repeatLeadService.ts). */
   repeatCount?: number;
   /** The last time it came again, and the team leader's verification of it. */

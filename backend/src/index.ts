@@ -18,6 +18,7 @@ import { startIdleAlertScheduler } from "./services/idleAlertScheduler.js";
 import { startLeadPaymentDecisionScheduler } from "./services/leadPaymentDecisions.js";
 import { startInactiveLeadScheduler } from "./services/inactiveLeadScheduler.js";
 import { startWhatsApp } from "./services/whatsapp/service.js";
+import { startWhatsAppFollowups } from "./services/whatsapp/followups.js";
 
 const app = express();
 
@@ -69,6 +70,8 @@ const start = async () => {
     startInactiveLeadScheduler();
     // Each person's linked WhatsApp, back after a restart (off with WHATSAPP=off or RUN_SCHEDULERS=false). One process only.
     startWhatsApp();
+    // Automatic WhatsApp follow-ups to leads who went quiet, every minute — nothing until a Super Admin switches them on.
+    startWhatsAppFollowups();
   });
 };
 
