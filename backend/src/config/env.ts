@@ -73,7 +73,7 @@ const envSchema = z.object({
    * The HRMS, for the Activity page (2026-10-15): each person's shift and the
    * day's clock-ins and clock-outs (the Attendance tab), and idle alerts only
    * for people clocked in. Its signed integration API, as the Sales CRM, the
-   * Root portal and Tetra Commission call it — HRMS_CLIENT_ID /
+   * Root portal and CS Portal call it — HRMS_CLIENT_ID /
    * HRMS_INTEGRATION_SECRET are the HRMS's INTEGRATION_CLIENT_ID /
    * INTEGRATION_SECRET (the same values the Sales CRM holds). Unset, the
    * Attendance tab says the HRMS isn't linked and idle alerts go by activity
@@ -104,7 +104,7 @@ const envSchema = z.object({
   /** Another S3-compatible endpoint in place of R2's, for a local stand-in in tests. Unset in production. */
   R2_ENDPOINT:          z.string().default(""),
   /*
-   * WhatsApp, as in Tetra Commission and the Sales CRM (2026-10-27): each salesperson links their own WhatsApp by
+   * WhatsApp, as in CS Portal and the Sales CRM (2026-10-27): each salesperson links their own WhatsApp by
    * scanning a QR — the server becomes one of their linked devices (Baileys, the WhatsApp Web protocol; no Meta
    * account). On by default in the process that runs the timed jobs (RUN_SCHEDULERS): a link lives in the process that
    * made it, so only one process may hold them. WHATSAPP=off keeps a server out of it altogether.

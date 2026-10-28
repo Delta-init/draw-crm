@@ -20,7 +20,7 @@ import {
 import { RecentFollowups } from "@/components/whatsapp/RecentFollowups";
 
 /* ────────────────────────────────────────────────────────────────────────────
-   WhatsApp (2026-10-27, as in Tetra Commission): each person links their own
+   WhatsApp (2026-10-27, as in CS Portal): each person links their own
    WhatsApp here (a QR, as WhatsApp Web) and chats with their leads; a team
    leader, the Sales Manager or a Super Admin picks one of their people and
    reads theirs. backend/src/routes/whatsappRoutes.ts.

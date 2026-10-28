@@ -728,10 +728,10 @@ export class StudentService {
       externalId: String(student._id),
       source: "draw-crm",
       // Which sales CRM sold it, shown as a tag in finance, the LMS and
-      // Tetra Commission — the same field Delta's and the Remote CRM send.
+      // CS Portal — the same field Delta's and the Remote CRM send.
       crm: "draw",
       // Which academy, always said: finance keeps it on the invoice and passes
-      // it to the LMS (the student's academy there) and Tetra Commission.
+      // it to the LMS (the student's academy there) and CS Portal.
       academy,
       customer: {
         name: student.name,
