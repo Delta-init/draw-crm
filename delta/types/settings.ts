@@ -10,6 +10,11 @@ export interface AppSettings {
     excludedSources?: string[];
   };
   idleAlerts: { enabled: boolean; limitMinutes: number; notifyTeamLeaders: boolean };
+  /**
+   * The rate a Bangalore enrolment's rupees count in the leaderboard, Sales TV and reports at: 1 AED = this many
+   * rupees. Absent from a server older than 2026-10-28.
+   */
+  bangaloreRevenue?: { inrPerAed: number };
   workingHours: { timezone: string; days: number[]; start: string; end: string };
   updatedBy: string | null;
   updatedAt: string | null;
@@ -24,4 +29,5 @@ export type AppSettingsUpdate = Partial<{
   inactiveLeads: Partial<Omit<AppSettings["inactiveLeads"], "enabledAt">>;
   idleAlerts: Partial<AppSettings["idleAlerts"]>;
   workingHours: Partial<AppSettings["workingHours"]>;
+  bangaloreRevenue: Partial<NonNullable<AppSettings["bangaloreRevenue"]>>;
 }>;

@@ -12,11 +12,12 @@ import type { UpdateAppSettingsInput } from "../validations/settingsValidation.j
  * just saved.
  */
 
-export type AppSettingsDTO = Omit<IAppSettings, "inactiveLeads" | "updatedBy" | "updatedAt"> & {
+export type AppSettingsDTO = Omit<IAppSettings, "inactiveLeads" | "bangaloreRevenue" | "updatedBy" | "updatedAt"> & {
   inactiveLeads: Omit<IAppSettings["inactiveLeads"], "enabledAt" | "excludedSources"> & {
     enabledAt: string | null;
     excludedSources: string[];
   };
+  bangaloreRevenue: NonNullable<IAppSettings["bangaloreRevenue"]>;
   updatedBy: string | null;
   updatedAt: string | null;
 };
@@ -34,6 +35,7 @@ function toDTO(doc: IAppSettings): AppSettingsDTO {
       enabledAt: doc.inactiveLeads?.enabledAt ? new Date(doc.inactiveLeads.enabledAt).toISOString() : null,
       excludedSources: doc.inactiveLeads?.excludedSources ?? [],
     },
+    bangaloreRevenue: { inrPerAed: doc.bangaloreRevenue?.inrPerAed ?? 22.75 },
     idleAlerts: {
       enabled: doc.idleAlerts.enabled,
       limitMinutes: doc.idleAlerts.limitMinutes,

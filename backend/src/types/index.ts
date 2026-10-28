@@ -718,6 +718,11 @@ export interface IAppSettings {
     /** Lead sources the automatic mover never moves (matched without regard to case). */
     excludedSources?: string[];
   };
+  /**
+   * A Bangalore enrolment's rupees in the leaderboard, Sales TV and reports (utils/bangaloreRevenue.ts): 1 AED = this
+   * many rupees. Absent on settings saved before: 22.75.
+   */
+  bangaloreRevenue?: { inrPerAed: number };
   idleAlerts: {
     enabled: boolean;
     /** Minutes without activity in the app, while signed in during working hours. */

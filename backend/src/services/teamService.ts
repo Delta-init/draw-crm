@@ -10,6 +10,7 @@ import { emitToUser } from "../socket.js";
 import { notifyLeadAssignment, notifyBulkLeadAssignment } from "./pushService.js";
 import { announceNewLeads } from "./leadAlertService.js";
 import { COUNTED_TOTAL } from "../utils/countedPayments.js";
+import { withBangaloreMoney } from "../utils/bangaloreRevenue.js";
 
 // ─── Populated query helper ───────────────────────────────────────────────────
 
@@ -229,6 +230,7 @@ export class TeamService {
           ...dateMatch,
         },
       },
+      ...(await withBangaloreMoney()),
       {
         $group: {
           _id:     "$assignedTo",
@@ -597,6 +599,7 @@ export class TeamService {
         const matchStage = { team: new mongoose.Types.ObjectId(teamId), assignedTo: uid, ...dateFilter };
         const [agg] = await Lead.aggregate([
           { $match: matchStage },
+          ...(await withBangaloreMoney()),
           {
             $group: {
               _id: null,
@@ -1008,6 +1011,7 @@ export class TeamService {
     // ── Lead stats aggregation for this member inside this team ──────────────
     const [agg] = await Lead.aggregate([
       { $match: { team: new mongoose.Types.ObjectId(teamId), assignedTo: uid } },
+      ...(await withBangaloreMoney()),
       {
         $group: {
           _id: null,

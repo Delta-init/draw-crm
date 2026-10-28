@@ -4,6 +4,7 @@ import { DRAW_TZ, drawDayRange } from "../utils/drawTime.js";
 import { Team } from "../models/Team.js";
 import { User } from "../models/User.js";
 import { COUNTED_PAYMENT, COUNTED_TOTAL } from "../utils/countedPayments.js";
+import { bangaloreLeadsUnion, withBangaloreMoney } from "../utils/bangaloreRevenue.js";
 
 const ALL_STATUSES = [
   "new", "assigned", "pending_response", "followup", "closed", "lost",
@@ -174,6 +175,8 @@ export class ReportService {
     const paymentMatch = this.buildPaymentDateFilter(dateFrom, dateTo);
     const take         = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 20;
     const assigned     = { assignedTo: { $exists: true, $ne: null } };
+    // A Bangalore enrolment's rupees too, in AED (utils/bangaloreRevenue.ts)
+    const blr          = await bangaloreLeadsUnion();
 
     const agg = await Lead.aggregate([
       // Leads that came in during the period
@@ -185,6 +188,7 @@ export class ReportService {
         $unionWith: {
           coll: Lead.collection.name,
           pipeline: [
+            ...blr,
             { $match: assigned },
             { $unwind: "$payments" },
             { $match: COUNTED_PAYMENT },
@@ -293,6 +297,8 @@ export class ReportService {
     const leadMatch    = this.buildDateFilter(dateFrom, dateTo);
     const paymentMatch = this.buildPaymentDateFilter(dateFrom, dateTo);
     const inTeam       = { team: { $exists: true, $ne: null } };
+    // A Bangalore enrolment's rupees too, in AED (utils/bangaloreRevenue.ts)
+    const blr          = await bangaloreLeadsUnion();
 
     // This-month window for the thisMonth field (always current month, regardless of date filter)
     const rankNow = new Date();
@@ -307,6 +313,7 @@ export class ReportService {
         $unionWith: {
           coll: Lead.collection.name,
           pipeline: [
+            ...blr,
             { $match: inTeam },
             { $unwind: "$payments" },
             { $match: COUNTED_PAYMENT },
@@ -505,12 +512,15 @@ export class ReportService {
   // ── 6. Revenue overview ───────────────────────────────────────────────────────
 
   async getRevenueOverview(dateFrom?: string, dateTo?: string) {
+    // A Bangalore enrolment's rupees too, in AED (utils/bangaloreRevenue.ts)
+    const blr          = await bangaloreLeadsUnion();
     const paymentMatch = this.buildPaymentDateFilter(dateFrom, dateTo);
     const leadMatch    = this.buildDateFilter(dateFrom, dateTo);
 
     const [summaryAgg, teamAgg, agentAgg, pendingAgg, overpaidAgg] = await Promise.all([
       // ── total revenue / payment count / paying leads
       Lead.aggregate([
+        ...blr,
         { $unwind: "$payments" },
         { $match: COUNTED_PAYMENT },
         { $match: paymentMatch },
@@ -526,6 +536,7 @@ export class ReportService {
 
       // ── top teams by revenue
       Lead.aggregate([
+        ...blr,
         { $unwind: "$payments" },
         { $match: COUNTED_PAYMENT },
         { $match: paymentMatch },
@@ -556,6 +567,7 @@ export class ReportService {
 
       // ── top agents by revenue (attributed to lead's assignedTo)
       Lead.aggregate([
+        ...blr,
         { $unwind: "$payments" },
         { $match: COUNTED_PAYMENT },
         { $match: paymentMatch },
@@ -686,7 +698,10 @@ export class ReportService {
       bucketId = { year: { $year: { date: "$payments.paidAt", timezone: DRAW_TZ } } };
     }
 
+    // A Bangalore enrolment's rupees too, in AED (utils/bangaloreRevenue.ts)
+    const blr = await bangaloreLeadsUnion();
     const agg = await Lead.aggregate([
+      ...blr,
       { $unwind: "$payments" },
       { $match: COUNTED_PAYMENT },
       { $match: paymentMatch },
@@ -749,11 +764,14 @@ export class ReportService {
   // ── 8. Revenue teams with member breakdown ───────────────────────────────────
 
   async getRevenueTeams(dateFrom?: string, dateTo?: string) {
+    // A Bangalore enrolment's rupees too, in AED (utils/bangaloreRevenue.ts)
+    const blr          = await bangaloreLeadsUnion();
     const paymentMatch = this.buildPaymentDateFilter(dateFrom, dateTo);
 
     const [agg, pendingTeamAgg, pendingMemberAgg] = await Promise.all([
       // ── existing: revenue by team × member (payment-filtered)
       Lead.aggregate([
+        ...blr,
         { $unwind: "$payments" },
         { $match: COUNTED_PAYMENT },
         { $match: paymentMatch },
@@ -912,12 +930,15 @@ export class ReportService {
   // ── 9. Team-scoped revenue overview (KPIs + member breakdown) ────────────────
 
   async getTeamRevenue(teamId: string, dateFrom?: string, dateTo?: string) {
+    // A Bangalore enrolment's rupees too, in AED (utils/bangaloreRevenue.ts)
+    const blr          = await bangaloreLeadsUnion();
     const teamOid      = new mongoose.Types.ObjectId(teamId);
     const paymentMatch = this.buildPaymentDateFilter(dateFrom, dateTo);
     const teamFilter   = { team: teamOid };
 
     const [summaryAgg, memberAgg, pendingAgg, pendingMemberAgg] = await Promise.all([
       Lead.aggregate([
+        ...blr,
         { $match: teamFilter },
         { $unwind: "$payments" },
         { $match: COUNTED_PAYMENT },
@@ -933,6 +954,7 @@ export class ReportService {
       ]),
 
       Lead.aggregate([
+        ...blr,
         { $match: teamFilter },
         { $unwind: "$payments" },
         { $match: COUNTED_PAYMENT },
@@ -1093,7 +1115,10 @@ export class ReportService {
       bucketId = { year: { $year: { date: "$payments.paidAt", timezone: DRAW_TZ } } };
     }
 
+    // A Bangalore enrolment's rupees too, in AED (utils/bangaloreRevenue.ts)
+    const blr = await bangaloreLeadsUnion();
     const agg = await Lead.aggregate([
+      ...blr,
       { $match: { team: teamOid } },
       { $unwind: "$payments" },
       { $match: COUNTED_PAYMENT },
@@ -1166,6 +1191,7 @@ export class ReportService {
 
     const agg = await Lead.aggregate([
       { $match: match },
+      ...(await withBangaloreMoney()),
       {
         $group: {
           _id:            { $ifNull: ["$source", "other"] },
@@ -1203,6 +1229,7 @@ export class ReportService {
 
     const agg = await Lead.aggregate([
       { $match: match },
+      ...(await withBangaloreMoney()),
       {
         $group: {
           _id:            { $ifNull: ["$campaign", "(no campaign)"] },

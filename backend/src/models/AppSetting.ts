@@ -26,6 +26,11 @@ const appSettingSchema = new Schema<IAppSettings>(
       excludedSources: { type: [String], default: [] },
     },
 
+    // The rate a Bangalore enrolment's rupees count in the revenue figures at: 1 AED = this many (the user, 2026-10-28)
+    bangaloreRevenue: {
+      inrPerAed: { type: Number, default: 22.75, min: 1, max: 1000 },
+    },
+
     idleAlerts: {
       enabled:           { type: Boolean, default: false },
       limitMinutes:      { type: Number, default: 30, min: 5, max: 24 * 60 },
