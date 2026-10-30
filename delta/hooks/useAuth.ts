@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
 import api from "@/lib/axios";
+import { API_URL } from "@/lib/apiUrl";
 import { useAuthStore } from "@/lib/store/authStore";
 import { getViewAs, leaveViewAsForSignOut } from "@/lib/impersonation";
 import type { LoginFormValues } from "@/lib/validations/authSchema";
@@ -51,7 +52,7 @@ export const useLogout = () => {
     // call, and the request has to outlive the page going to /login.
     const token = viewing ? adminToken : typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
     if (token) {
-      fetch("/api/v1/auth/logout", {
+      fetch(`${API_URL}/auth/logout`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: "{}",
