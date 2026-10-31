@@ -61,7 +61,7 @@ export interface SalesTv {
   people?: SalesTvPerson[];
 }
 
-export async function salesTv(q: { after?: string; parts?: string }): Promise<SalesTv> {
+export async function salesTv(q: { after?: string; parts?: string; month?: string }): Promise<SalesTv> {
   const now = Date.now();
   const teamOf = await teamPeople();
   const since = q.after && Number.isFinite(Date.parse(q.after)) ? new Date(Math.max(Date.parse(q.after), now - DAY_MS)) : new Date(now - 2 * 3_600_000);
@@ -94,7 +94,7 @@ export async function salesTv(q: { after?: string; parts?: string }): Promise<Sa
   if (q.parts === "live") return base;
 
   // Super Admins too, but only those in an active team (filtered below) — dilshad leads Remote's team (2026-10-20).
-  const board = await new LeaderboardService().getLeaderboard(undefined, "revenue", { withSuperAdmins: true });
+  const board = await new LeaderboardService().getLeaderboard(q.month, "revenue", { withSuperAdmins: true });
   const todayClosings = await Student.aggregate<{ _id: Types.ObjectId | null; n: number }>([
     { $match: { enrollmentDate: { $gte: midnight, $lt: new Date(midnight.getTime() + DAY_MS) }, status: { $ne: "dropped" } } },
     { $group: { _id: "$assignedTo", n: { $sum: 1 } } },
@@ -111,5 +111,13 @@ export async function salesTv(q: { after?: string; parts?: string }): Promise<Sa
     callsToday: r.callsToday, connectedToday: r.connectedToday, talkSecondsToday: r.talkSecondsToday,
   })).sort((a, b) => b.closingsMonth - a.closingsMonth || b.closingsToday - a.closingsToday || b.callsToday - a.callsToday
     || b.talkSecondsToday - a.talkSecondsToday || a.name.localeCompare(b.name));
+  // A past month (the Manager TV's month switch, 2026-11-01): its standings as they ended — no breaks, closes or today.
+  const thisMonth = new Date(now + 4 * 3_600_000).toISOString().slice(0, 7);
+  if (q.month && q.month !== thisMonth) {
+    return {
+      ...base, onBreak: [], closes: [], month: board.month,
+      people: people.map((p) => ({ ...p, closingsToday: 0, callsToday: 0, connectedToday: 0, talkSecondsToday: 0 })),
+    };
+  }
   return { ...base, month: board.month, people };
 }

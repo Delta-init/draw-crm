@@ -215,6 +215,27 @@ const burst = await get("/sales-tv?parts=live");
 check("25 closes in the last two hours: the newest 20, newest first", burst.body.data?.closes?.length === 20 && burst.body.data.closes[0].closer === "Ben Bee"
   && burst.body.data.closes.every((c: Any, i: number, a: Any[]) => i === 0 || Date.parse(a[i - 1].at) >= Date.parse(c.at)), j(burst.body.data?.closes?.length));
 
+section("A past month (the Manager TV's month switch)");
+{
+  // One of the closes copied to the middle of last month: last month's board counts it, and nothing of today.
+  const nowDubai = new Date(Date.now() + 4 * 3_600_000);
+  const prevStart = new Date(Date.UTC(nowDubai.getUTCFullYear(), nowDubai.getUTCMonth() - 1, 1));
+  const prev = prevStart.toISOString().slice(0, 7);
+  const mid = new Date(Date.UTC(prevStart.getUTCFullYear(), prevStart.getUTCMonth(), 15, 8));
+  const src: any = await db.collection("students").findOne({ status: { $ne: "dropped" }, assignedTo: { $ne: null } });
+  await db.collection("students").insertOne({ ...src, _id: new Types.ObjectId(), name: "Past Student", email: "past@s.local", enrollmentDate: mid, createdAt: mid, updatedAt: mid });
+  const past: any = await get(`/sales-tv?month=${prev}`);
+  const pd: any = past.body.data ?? {};
+  const closer = (pd.people ?? []).find((p: any) => p.id === String(src.assignedTo));
+  check("?month=<last month>: that month named, its standings", past.status === 200 && pd.month === prev && Array.isArray(pd.people), j(past.body));
+  check("…the close copied there counted for its closer", !closer || closer.closingsMonth >= 1, j(closer));
+  check("…nothing of today: no breaks, no closes, every today figure 0", (pd.onBreak ?? []).length === 0 && (pd.closes ?? []).length === 0
+    && (pd.people ?? []).every((p: any) => !p.closingsToday && !p.callsToday && !p.connectedToday && !p.talkSecondsToday), j({ b: pd.onBreak, c: pd.closes?.length }));
+  const bad: any = await get(`/sales-tv?month=2026-13`);
+  check("a month that isn't one: this month, as before", bad.status === 200 && bad.body.data?.month === nowDubai.toISOString().slice(0, 7), j(bad.body.data?.month));
+  await db.collection("students").deleteOne({ name: "Past Student" });
+}
+
 server.close();
 await mongoose.connection.dropDatabase();
 await mongoose.disconnect();
