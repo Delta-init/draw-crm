@@ -757,3 +757,13 @@ This file documents every service in `backend/src/services/`. Read this before w
 - `settingsService` — `getAppSettings()`, `updateAppSettings(input, userId)`, `isWithinWorkingHours(settings, at?)`.
 - `lib/hrms.ts` — `hrmsConfigured()`, `hrmsGet(path, query)` (signed, 8 s, throws a sentence fit to show).
 - `utils/workingHours.ts` — working-time arithmetic in the working hours' own zone.
+
+## Commission from Root (added 2026-11-01)
+
+- `rootCommission` — `fromRoot()` (COMMISSION_FROM_ROOT on/true/1/yes), `rootPlan(month)` (30 s cache),
+  `rootSlabs(month)` (no TL slab where the plan has none; `from` null for the built-in ones), `rootResolve({ closer,
+  team, course? | courses? | amounts? })`, `rootPayRows(month)`, `mirrorRootPlan(month)` (Root's course amounts, Sales
+  Manager and excluded logins written here, only what differs). Root at ROOT_ERP_API_URL with ROOT_ORG_SECRET; a
+  failure throws a sentence with statusCode 502 (503: not set up, or the plan not in Root yet).
+- While on: `resolveSale` (and so `trackSales`, `settlePendingSales`, `preview`) asks Root; `slabsFor` and `payRows`
+  are Root's; `sweepCommission` copies Root's plan in every five minutes.
