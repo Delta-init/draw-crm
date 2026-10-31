@@ -1131,7 +1131,7 @@ export class StudentService {
     const commission = { earned: 0, balance: 0 };
     if (viewer) {
       const { CommissionSale } = await import("../models/CommissionSale.js");
-      const { commissionScope, canSeeLine, shareBetween, owedShareOf, partOf } = await import("./commissionService.js");
+      const { commissionScope, canSeeLine, earnedShareBetween, waitingShareOf, partOf } = await import("./commissionService.js");
       const sales = await CommissionSale.find({ student: { $in: all.map((e) => e.id) } }).select("student saleDate state lines paidShare owedShare collections").lean();
       const saleOf = new Map(sales.map((s) => [String(s.student), s]));
       const scope = await commissionScope(viewer as Parameters<typeof commissionScope>[0]);
@@ -1141,8 +1141,9 @@ export class StudentService {
         delete e.closerId;
         if (!sale) { e.commission = null; continue; }
         const lines = sale.state === "counted" ? sale.lines.filter((l) => canSeeLine(scope, viewer.userId, l, closer)) : [];
-        const share = shareBetween(sale, periodFrom, periodTo);
-        const owed = owedShareOf(sale);
+        // Paid in full first (2026-10-31): earned whole in the period the last payment came in; waiting until then.
+        const share = earnedShareBetween(sale, periodFrom, periodTo);
+        const owed = waitingShareOf(sale);
         const sum = lines.reduce(
           (acc, l) => ({ earned: acc.earned + partOf(l.amount, share), balance: acc.balance + partOf(l.amount, owed) }),
           { earned: 0, balance: 0 },
@@ -1208,7 +1209,7 @@ export class StudentService {
     const { CommissionSale } = await import("../models/CommissionSale.js");
     const { fetchEnrolmentStatuses } = await import("./financeClient.js");
     const { stepsOf } = await import("./enrolmentSteps.js");
-    const { isSuperAdmin, commissionScope, canSeeLine, shareOf, owedShareOf, partOf } = await import("./commissionService.js");
+    const { isSuperAdmin, commissionScope, canSeeLine, shareOf, earnedShareOf, waitingShareOf, partOf } = await import("./commissionService.js");
 
     if (!Types.ObjectId.isValid(id)) throw createError("Enrolment not found", 404);
     const student = await Student.findById(id)
@@ -1251,12 +1252,12 @@ export class StudentService {
             month: sale.month,
             countedAt: sale.countedAt ?? null,
             paidShare: shareOf(sale),
-            // Earned on what has come in since commission began; the balance on what the client still owes.
+            // Paid in full first (2026-10-31): all of it earned once the client paid in full, all of it waiting until then.
             lines: (sale.lines ?? [])
               .filter((l) => !!scope && canSeeLine(scope, viewer.userId, l, closer))
               .map((l) => ({
                 role: l.role, userName: l.userName, amount: l.amount,
-                earned: partOf(l.amount, shareOf(sale)), balance: partOf(l.amount, owedShareOf(sale)), note: l.note ?? "",
+                earned: partOf(l.amount, earnedShareOf(sale)), balance: partOf(l.amount, waitingShareOf(sale)), note: l.note ?? "",
               })),
           }
         : null,
