@@ -6,7 +6,7 @@ import {
   createStudent, getStudents, getStudentById,
   getStudentByLeadId, updateStudent, deleteStudent,
   getMyEnrolments,
-  getEnrolment, requestInvoice, getCorrection, correctEnrolment, uploadPaymentReceipt, checkEmail,
+  getEnrolment, requestInvoice, getCorrection, correctEnrolment, uploadPaymentReceipt, checkEmail, getDailyClosings,
 } from "../controllers/studentController.js";
 
 const router = Router();
@@ -40,6 +40,8 @@ const takeReceipt: RequestHandler = (req, res, next) => {
 };
 
 // Static before parameterized
+// Daily Closings (2026-10-31, as in the Sales CRM). Before "/:id", or Express reads "closings" as a student id.
+router.get("/closings/daily", authenticate, checkPermission("closings", "view"), getDailyClosings);
 router.get("/by-lead/:leadId", authenticate, checkPermission("students", "view"), getStudentByLeadId);
 
 // Whether an email is another client's (one email, one client — 2026-10-10): asked

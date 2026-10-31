@@ -31,6 +31,8 @@ export const CRM_MODULES = [
   "commission",
   "leaderboard",
   "pay",
+  /* Daily Closings (2026-10-31, as in the Sales CRM): each sees their own closings, a team leader their teams', a Super Admin and the Sales Manager everyone's. Open by default. */
+  "closings",
   // The 3CX calls with leads (2026-10-12): view the Calls page, export its CSV.
   "calls",
   /* Balance payments (2026-10-13): part-paid closes and the next payment, for finance to approve. Open by default. */
@@ -61,6 +63,7 @@ export const MODULE_LABELS: Record<CrmModule, string> = {
   commission: "Commission",
   leaderboard: "Leaderboard",
   pay: "My Pay",
+  closings: "Daily Closings",
   calls: "Calls (3CX)",
   balancePayments: "Balance payments",
   activity: "Activity",
@@ -83,6 +86,7 @@ export const OPEN_BY_DEFAULT: Partial<Record<CrmModule, Partial<ModulePermission
   commission: { view: true },
   leaderboard: { view: true },
   pay: { view: true },
+  closings: { view: true },
   tracker: { view: true, edit: true },
   // Open to everyone; the server shows each person their own calls, their team's, or everyone's.
   calls: { view: true, export: true },

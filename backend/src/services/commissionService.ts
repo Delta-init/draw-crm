@@ -10,6 +10,7 @@ import { fetchEnrolmentStatusesFor } from "./financeClient.js";
 import { stepsOf, allDone, waitingOn } from "./enrolmentSteps.js";
 import { slabsFor } from "./salarySlabs.js";
 import { env } from "../config/env.js";
+import { collectionsOf } from "../utils/enrolmentCollections.js";
 import type {
   CommissionRole,
   CommissionSaleState,
@@ -103,6 +104,52 @@ export function feeOf(st: { totalMinor?: number; currency?: string } | null | un
   if (st && inAed && typeof st.totalMinor === "number" && st.totalMinor > 0) return st.totalMinor / 100;
   return typeof studentFee === "number" && Number.isFinite(studentFee) && studentFee > 0 ? studentFee : 0;
 }
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+const round4 = (n: number) => Math.round(n * 10000) / 10000;
+
+/*
+ * Commission on what is collected, in the month it is collected (the user, 2026-10-31: "that month collected payment
+ * only count for the commission — if it was another month it will never count"). Each payment received on a sale
+ * from COUNT_FROM on earns its share of the fee (`collections`) in the month it came in: an October sale whose
+ * balance is paid in November earns that part in November. Money received before COUNT_FROM never earns. What the
+ * client still owes is the balance (`owedShare`). A line's `amount` stays the full plan amount.
+ */
+type ShareSale = {
+  saleDate?: Date;
+  paidShare?: number | null;
+  owedShare?: number | null;
+  collections?: { paidAt: Date; share: number }[] | null;
+};
+
+/** A UAE month as two instants, inclusive. */
+export function monthRange(month: string): { from: Date; to: Date } {
+  const from = new Date(`${month}-01T00:00:00+04:00`);
+  const [y, m] = month.split("-").map(Number);
+  const next = new Date(`${m === 12 ? y! + 1 : y}-${String(m === 12 ? 1 : m! + 1).padStart(2, "0")}-01T00:00:00+04:00`);
+  return { from, to: new Date(next.getTime() - 1) };
+}
+
+/** The share of the fee received between two instants. A sale not followed yet earns all of it on its sale day. */
+export function shareBetween(sale: ShareSale, from: Date, to: Date): number {
+  if (!Array.isArray(sale.collections)) {
+    return sale.saleDate && sale.saleDate >= from && sale.saleDate <= to ? 1 : 0;
+  }
+  return round4(sale.collections.filter((c) => c.paidAt >= from && c.paidAt <= to).reduce((s, c) => s + c.share, 0));
+}
+
+/** The share collected from COUNT_FROM until now; a sale not followed yet counts in full. */
+export const shareOf = (sale: ShareSale): number =>
+  typeof sale.paidShare === "number" && sale.paidShare >= 0 ? Math.min(1, sale.paidShare) : 1;
+
+/** The share the client still owes — what the balance payments can still earn. */
+export const owedShareOf = (sale: ShareSale): number =>
+  typeof sale.owedShare === "number" && sale.owedShare > 0 ? Math.min(1, sale.owedShare) : 0;
+
+/** A line's amount at a share. */
+export const partOf = (amount: number, share: number): number => round2(amount * share);
+
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
@@ -540,6 +587,53 @@ export async function reverseVoidedSales(): Promise<number> {
   return reversed;
 }
 
+/**
+ * Every sale's payments received, as shares of its fee by the day they came in, and what is still owed — a balance
+ * payment approved, or the fee corrected, moves them. Only payments from COUNT_FROM on (earlier money never earns),
+ * and never past the whole fee. A sale with no fee earns all of it on its sale day. Local only (no finance call), so
+ * every pass; sales from COUNT_FROM on, voided ones left as they are.
+ */
+export async function refreshPaidShares(): Promise<number> {
+  const sales = await CommissionSale.find({ saleDate: { $gte: COUNT_FROM }, state: { $ne: "reversed" } })
+    .select("student saleDate paidShare owedShare collections").lean();
+  if (!sales.length) return 0;
+  const students = await Student.find({ _id: { $in: sales.map((s) => s.student) } })
+    .select("leadId academy enrollmentDate payments totalFee pendingAmount")
+    .lean<{ _id: unknown; leadId?: unknown; academy?: string; enrollmentDate?: Date; payments?: { amount?: number; paidAt?: Date; collectedBefore?: boolean }[]; totalFee?: number; pendingAmount?: number }[]>();
+  const studentOf = new Map(students.map((s) => [String(s._id), s]));
+  const received = await collectionsOf(students);
+  let changed = 0;
+  for (const sale of sales) {
+    const st = studentOf.get(String(sale.student));
+    if (!st) continue;                                    // a deleted enrolment keeps what it had
+    const fee = st.totalFee ?? 0;
+    let collections: { paidAt: Date; share: number }[] = [];
+    let owedShare = 0;
+    if (!(fee > 0)) {
+      collections = [{ paidAt: new Date(st.enrollmentDate ?? sale.saleDate), share: 1 }];
+    } else {
+      let left = 1;
+      for (const c of received.get(String(st._id)) ?? []) {
+        if (c.paidAt < COUNT_FROM || left <= 0) continue;
+        const share = round4(Math.min(left, c.amount / fee));
+        if (share > 0) collections.push({ paidAt: c.paidAt, share });
+        left = round4(left - share);
+      }
+      owedShare = round4(Math.min(1, Math.max(0, (st.pendingAmount ?? 0) / fee)));
+    }
+    const paidShare = round4(Math.min(1, collections.reduce((s, c) => s + c.share, 0)));
+    const same =
+      sale.paidShare === paidShare &&
+      sale.owedShare === owedShare &&
+      JSON.stringify((sale.collections ?? []).map((c) => [new Date(c.paidAt).getTime(), c.share])) ===
+        JSON.stringify(collections.map((c) => [c.paidAt.getTime(), c.share]));
+    if (same && Array.isArray(sale.collections)) continue;
+    await CommissionSale.updateOne({ _id: sale._id }, { $set: { paidShare, owedShare, collections } });
+    changed++;
+  }
+  return changed;
+}
+
 let sweeping = false;
 let lastTrack = 0;
 let lastVoidCheck = 0;
@@ -561,6 +655,7 @@ export async function sweepCommission(): Promise<void> {
       await trackSales(config, names);
     }
     await settlePendingSales(config, names);
+    await refreshPaidShares();
     if (Date.now() - lastVoidCheck >= VOID_CHECK_MS) {
       lastVoidCheck = Date.now();
       await reverseVoidedSales();
@@ -708,12 +803,15 @@ export class CommissionService {
     const myTeams = new Set(who.ledTeamIds);
     const scope: "all" | "team" | "own" = who.all ? "all" : myTeams.size ? "team" : "own";
 
-    const filter: Record<string, unknown> = { month };
+    // The month's sales, and older ones with money received in it (2026-10-31: commission in the month collected).
+    const { from, to } = monthRange(month);
+    const and: Record<string, unknown>[] = [{ $or: [{ month }, { collections: { $elemMatch: { paidAt: { $gte: from, $lte: to } } } }] }];
     if (scope === "team") {
-      filter.$or = [{ team: { $in: ledTeams.map((t) => t._id) } }, { "lines.user": meId }, { closer: meId }];
+      and.push({ $or: [{ team: { $in: ledTeams.map((t) => t._id) } }, { "lines.user": meId }, { closer: meId }] });
     } else if (scope === "own") {
-      filter.$or = [{ "lines.user": meId }, { closer: meId }];
+      and.push({ $or: [{ "lines.user": meId }, { closer: meId }] });
     }
+    const filter: Record<string, unknown> = { $and: and };
     const sales = await CommissionSale.find(filter).sort({ saleDate: -1, approvedAt: -1 }).lean();
 
     const visible = (sale: (typeof sales)[number]) =>
@@ -725,23 +823,32 @@ export class CommissionService {
               (scope === "team" && myTeams.has(String(sale.team)) && l.role !== "sm"),
           );
 
-    type Tally = { count: number; amount: number };
-    const people = new Map<string, { _id: string; name: string; sales: Tally; tl: Tally; sm: Tally; total: number }>();
+    // Earned: each line's share of what came in this month. Balance: its share of what the client still owes.
+    type Tally = { count: number; amount: number; balance: number };
+    const people = new Map<string, { _id: string; name: string; sales: Tally; tl: Tally; sm: Tally; total: number; balance: number }>();
     for (const sale of sales) {
       if (sale.state !== "counted") continue;
+      const share = shareBetween(sale, from, to);
+      const owed = owedShareOf(sale);
       for (const l of visible(sale)) {
+        const earned = partOf(l.amount, share);
+        const balance = partOf(l.amount, owed);
+        if (earned <= 0 && balance <= 0) continue;
         const key = String(l.user);
         const p = people.get(key) ?? {
           _id: key,
           name: l.userName,
-          sales: { count: 0, amount: 0 },
-          tl: { count: 0, amount: 0 },
-          sm: { count: 0, amount: 0 },
+          sales: { count: 0, amount: 0, balance: 0 },
+          tl: { count: 0, amount: 0, balance: 0 },
+          sm: { count: 0, amount: 0, balance: 0 },
           total: 0,
+          balance: 0,
         };
-        p[l.role].count++;
-        p[l.role].amount += l.amount;
-        p.total += l.amount;
+        if (earned > 0) p[l.role].count++;
+        p[l.role].amount = round2(p[l.role].amount + earned);
+        p[l.role].balance = round2(p[l.role].balance + balance);
+        p.total = round2(p.total + earned);
+        p.balance = round2(p.balance + balance);
         people.set(key, p);
       }
     }
@@ -759,7 +866,14 @@ export class CommissionService {
       approvedAt: s.approvedAt,
       state: s.state,
       reason: s.reason,
-      lines: visible(s).map((l) => ({ role: l.role, user: String(l.user), userName: l.userName, amount: l.amount, note: l.note ?? "" })),
+      fee: s.fee ?? null,
+      paidShare: shareOf(s),
+      /** The share of the fee received in this month — what the lines earn here. */
+      monthShare: shareBetween(s, from, to),
+      lines: visible(s).map((l) => ({
+        role: l.role, user: String(l.user), userName: l.userName, amount: l.amount,
+        earned: partOf(l.amount, shareBetween(s, from, to)), balance: partOf(l.amount, owedShareOf(s)), note: l.note ?? "",
+      })),
     }));
 
     return {
@@ -769,7 +883,8 @@ export class CommissionService {
       people: [...people.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name)),
       sales: list,
       totals: {
-        amount: [...people.values()].reduce((s, p) => s + p.total, 0),
+        amount: round2([...people.values()].reduce((s, p) => s + p.total, 0)),
+        balance: round2([...people.values()].reduce((s, p) => s + p.balance, 0)),
         counted: count("counted"),
         waiting: count("waiting"),
         excluded: count("excluded"),

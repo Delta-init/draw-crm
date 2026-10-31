@@ -142,6 +142,31 @@ export const getMyEnrolments = async (req: AuthenticatedRequest, res: Response, 
 };
 
 /**
+ * The closing book, a day at a time.
+ *
+ * GET /api/students/closings/daily?dateFrom=&dateTo=&team=&user=&mine=true
+ *
+ * `mine=true` narrows it to the caller, which is what a counsellor wants and
+ * what a manager does not — so it is asked for rather than assumed, unlike the
+ * enrolments list, whose screen is called "My Enrolments" and means it.
+ */
+export const getDailyClosings = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const q = req.query as Record<string, string>;
+    const userId = req.user?.userId;
+    if (!userId) return sendError(res, "Not authenticated", 401);
+
+    const data = await svc.listDailyClosings({
+      dateFrom: q.dateFrom?.trim() || undefined,
+      dateTo: q.dateTo?.trim() || undefined,
+      team: q.team?.trim() || undefined,
+      user: q.mine === "true" ? userId : q.user?.trim() || undefined,
+    }, { userId, role: req.user?.role });
+    sendSuccess(res, "Daily closings fetched successfully", data);
+  } catch (err) { next(err); }
+};
+
+/**
  * One enrolment, for its own page: its five steps with who did each and when,
  * and its commission as the viewer may see it. The closer, or anyone who may
  * view students.

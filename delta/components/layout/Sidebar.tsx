@@ -30,7 +30,7 @@ import {
   HandCoins,
   Activity,
   DoorOpen,
-  Hourglass, Repeat2, MessageCircle,
+  Hourglass, Repeat2, MessageCircle, CalendarCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/lib/store/uiStore";
@@ -76,6 +76,8 @@ export const navItems: { href: string; label: string; icon: React.ElementType; p
   { href: "/activity",  label: "Activity",           icon: Activity,        permModule: "activity" },
   { href: "/students",  label: "Students",           icon: GraduationCap,   permModule: "students"  },
   { href: "/enrolments",label: "My Enrolments",      icon: Receipt,         permModule: null        },
+  /* Each person's closings by day, collected in the period, commission and balance (2026-10-31, as in the Sales CRM). */
+  { href: "/closings",  label: "Daily Closings",     icon: CalendarCheck,   permModule: "closings"  },
   /* Part-paid closes and their next payments, for finance to approve (2026-10-13); the number is what is overdue or due in 3 days. */
   { href: "/balance-payments", label: "Balance payments", icon: HandCoins, permModule: "balancePayments" },
   /* Commission, Leaderboard, Mentors and My Tracker were open to everyone and stay open to

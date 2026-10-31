@@ -358,7 +358,8 @@ let e = await service.getEarnings(view("Theertha"), month);
 check("a BDE sees only her own lines", e.scope === "own" && e.sales.every((x) => x.lines.every((l) => l.userName === "Theertha")) && e.sales.length > 0);
 const theertha = e.people.find((p) => p.name === "Theertha");
 // Counted October sales of hers: shared (reassigned) 230, oldCourse 0, noCourse 0, lateNight 230 = 460; staff reversed.
-check("her total is her counted Sales Staff amounts, without the reversed sale", theertha?.total === 460 && theertha.sales.count === 4, JSON.stringify(theertha));
+// Since 2026-10-31 a sale is counted for her only when it earns something: the two at 0 don't.
+check("her total is her counted Sales Staff amounts, without the reversed sale", theertha?.total === 460 && theertha.sales.count === 2, JSON.stringify(theertha));
 const riaView = { userId: String(people.Ria), role: { roleName: "BDE", isSystemRole: false } as never };
 e = await service.getEarnings(riaView, month);
 check("a team leader sees her team's sales, without the SM's line", e.scope === "team" && e.sales.some((x) => x.closerName === "Theertha") && e.sales.every((x) => x.lines.every((l) => l.role !== "sm")));

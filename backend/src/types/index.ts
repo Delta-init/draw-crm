@@ -34,6 +34,11 @@ export const CRM_MODULES = [
    */
   "mentors",
   "commission",
+  /*
+   * Daily Closings (2026-10-31, as in the Sales CRM): the closings by day, collected, commission and balance. Open to
+   * everyone — each sees only their own; a team leader their teams'; a Super Admin and the Sales Manager everyone's.
+   */
+  "closings",
   "leaderboard",
   // My Pay: the salary slabs (salaryService) — open to everyone, as in the Sales CRM.
   "pay",
@@ -80,6 +85,7 @@ export const OPEN_BY_DEFAULT: Partial<Record<CrmModule, Partial<ModulePermission
   mentors: { view: true, create: true, edit: true, delete: true },
   commission: { view: true },
   leaderboard: { view: true },
+  closings: { view: true },
   pay: { view: true },
   // My Tracker was open to everyone here; its row was never on the Roles screen.
   tracker: { view: true, edit: true },
@@ -309,6 +315,12 @@ export interface ICommissionSale extends Document {
    * salary-slab target (salaryService).
    */
   fee?: number;
+  /** How much of the fee is collected, 0–1: each line earns this share now, the rest is its balance. Absent: all. */
+  paidShare?: number;
+  /** What the client still owes, as a share of the fee. */
+  owedShare?: number;
+  /** Payments received from COUNT_FROM on, as shares of the fee by day: each earns in its own month. */
+  collections?: { paidAt: Date; share: number }[];
   /** The plan row as it was when decided — what the lines are paid from. */
   plan: { sales: number; tl: number; sm: number; creditUsd: number };
   state: CommissionSaleState;
@@ -645,6 +657,8 @@ export interface IStudent extends Document {
   totalFee: number;
   paidAmount: number;
   pendingAmount: number;
+  /** Balance payments (finance ids) already added to paidAmount — leadPaymentDecisions.applyApprovedBalances. */
+  balanceApplied?: string[];
   status: "active" | "inactive" | "graduated" | "dropped";
   /** What the courses are taught in, taken at the close. */
   language?: EnrolmentLanguage;
