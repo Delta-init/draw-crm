@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ClipboardCheck,
   LayoutDashboard,
   Users,
   Shield,
@@ -56,7 +55,8 @@ import { getSocket } from "@/lib/socket";
 
 export const navItems: { href: string; label: string; icon: React.ElementType; permModule: string | null }[] = [
   { href: "/dashboard", label: "Dashboard",          icon: LayoutDashboard, permModule: "dashboard" },
-  { href: "/my-tracker",label: "My Tracker",         icon: ClipboardCheck,  permModule: "tracker" },
+  // My Tracker hidden for everyone (the user, 2026-11-01); its page sends anyone who opens it to the dashboard.
+  // { href: "/my-tracker",label: "My Tracker",         icon: ClipboardCheck,  permModule: "tracker" },
   { href: "/leads",     label: "Leads",              icon: FileText,        permModule: "leads"     },
   // Team leaders, Super Admins and the Sales Manager only (hidden for everyone else below) — 2026-10-23
   { href: "/repeat-leads", label: "Repeat leads",    icon: Repeat2,         permModule: "leads"     },
