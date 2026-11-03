@@ -30,6 +30,7 @@ import {
   Activity,
   DoorOpen,
   Hourglass, Repeat2, MessageCircle, CalendarCheck,
+  Headphones,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/lib/store/uiStore";
@@ -61,6 +62,8 @@ export const navItems: { href: string; label: string; icon: React.ElementType; p
   // Team leaders, Super Admins and the Sales Manager only (hidden for everyone else below) — 2026-10-23
   { href: "/repeat-leads", label: "Repeat leads",    icon: Repeat2,         permModule: "leads"     },
   { href: "/calls",     label: "Calls",              icon: PhoneCall,       permModule: "calls"     },
+  /* Calls marked for training, to listen and learn (2026-11-03); open to every role until unticked. */
+  { href: "/training-calls", label: "Training calls", icon: Headphones, permModule: "trainingCalls" },
   { href: "/whatsapp",  label: "WhatsApp",           icon: MessageCircle,   permModule: "whatsapp"  },
   { href: "/mentors",   label: "Mentors",            icon: CalendarDays,    permModule: "mentors" },
   /* The office's meeting rooms, booked through the HRMS (2026-10-19) — open to everyone signed in. */

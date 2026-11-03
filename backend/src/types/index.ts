@@ -71,6 +71,12 @@ export const CRM_MODULES = [
    * sends, links a chat to a lead or makes a lead of it. Open to every role by default.
    */
   "whatsapp",
+  /*
+   * Training calls (2026-11-03): calls marked for training, to listen to and learn from. View sees the page (open
+   * by default); marking a call is the Super Admin's, the Sales Manager's and team leaders' (decided in
+   * services/trainingCalls.ts).
+   */
+  "trainingCalls",
 ] as const;
 
 export type CrmModule = (typeof CRM_MODULES)[number];
@@ -93,6 +99,7 @@ export const OPEN_BY_DEFAULT: Partial<Record<CrmModule, Partial<ModulePermission
   calls: { view: true, export: true },
   balancePayments: { view: true, create: true },
   whatsapp: { view: true, create: true },
+  trainingCalls: { view: true },
 };
 
 export type PermissionsMap = {
