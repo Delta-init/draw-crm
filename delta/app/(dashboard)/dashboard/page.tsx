@@ -15,6 +15,7 @@ import { useCurrencyStore } from "@/lib/store/currencyStore";
 import { fmtFull } from "@/lib/currency";
 import { DashboardLeaderboardCard } from "@/components/dashboard/DashboardLeaderboardCard";
 import { DashboardPayCard } from "@/components/pay/DashboardPayCard";
+import { WalletCard } from "@/components/wallet/WalletCard";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -110,6 +111,9 @@ export default function DashboardPage() {
           Here&apos;s an overview of your CRM system.
         </p>
       </motion.div>
+
+      {/* First in the row: this month's pay from the HRMS — earned, deducted, paid (2026-11-04) */}
+      <WalletCard />
 
       {/* This month's leaderboard */}
       {/* This month on the salary slab */}

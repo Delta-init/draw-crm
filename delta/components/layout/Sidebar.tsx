@@ -26,6 +26,7 @@ import {
   Coins,
   Trophy,
   Wallet,
+  WalletCards,
   HandCoins,
   Activity,
   DoorOpen,
@@ -92,6 +93,8 @@ export const navItems: { href: string; label: string; icon: React.ElementType; p
   /* Open to every role by default; the server narrows it to their own month
      (everyone's for a Super Admin and the Sales Manager). */
   { href: "/my-pay",    label: "My Pay",             icon: Wallet,          permModule: "pay"       },
+  /* My Wallet, from the HRMS (2026-11-04): salary a day at a time, deductions and why, commission, what finance paid — everyone's own. */
+  { href: "/wallet",    label: "My Wallet",          icon: WalletCards,     permModule: null },
   { href: "/roles",     label: "Roles & Permissions",icon: Shield,          permModule: "roles"     },
   { href: "/settings",  label: "Settings",           icon: Settings,        permModule: null        },
 ];
