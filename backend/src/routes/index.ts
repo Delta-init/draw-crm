@@ -23,6 +23,7 @@ import publicRoutes from "./publicRoutes.js";
 import activityRoutes from "./activityRoutes.js";
 import meetingRoomRoutes from "./meetingRoomRoutes.js";
 import walletRoutes from "./walletRoutes.js";
+import rewardsRoutes from "./rewardsRoutes.js";
 import settingsRoutes from "./settingsRoutes.js";
 import notificationRoutes from "./notificationRoutes.js";
 import inactiveLeadRoutes from "./inactiveLeadRoutes.js";
@@ -65,6 +66,8 @@ router.use("/inactive-leads", inactiveLeadRoutes);
 router.use("/meeting-rooms", meetingRoomRoutes);
 // My Wallet, from the HRMS (2026-11-04) — see walletRoutes.
 router.use("/wallet", walletRoutes);
+// Gift rewards: this month's target, the gift shelf and the gift chosen (2026-11-04).
+router.use("/rewards", rewardsRoutes);
 // "Take break" — everyone's own (2026-10-20, as in the Sales CRM): the inactive-lead clock stops while it lasts.
 router.use("/break", breakRoutes);
 // WhatsApp (2026-10-27): each person's own linked WhatsApp, its chats and the lead page's card. Its media links are signed, not authenticated.
