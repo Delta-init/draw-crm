@@ -12,7 +12,7 @@ import { drawMidnight } from "./breakClock.js";
  * with the amount and the sound, and who is on a break"). What this CRM tells
  * it, over GET /api/v1/service/sales-tv — the same shape as the Sales CRM's:
  *
- *   people    the sales staff — members and leaders of an active team,
+ *   people    the sales staff — members and leaders of a team (an inactive one too, 2026-11-08),
  *             active, a Super Admin too when in one (the CRM's own
  *             Leaderboard leaves them out), not excluded from commission —
  *             with this month's and today's (Draw's day, DRAW_TZ) closings,
@@ -31,11 +31,17 @@ import { drawMidnight } from "./breakClock.js";
 export const SALES_TV_CRM = "draw";
 const DAY_MS = 86_400_000;
 
-/** Each member or leader of an active team → that team's name (the first one found). */
+/**
+ * Each member or leader of a team → that team's name: an active team's first, else an inactive one's (the user,
+ * 2026-11-08: "if the team is inactive but the members are active, still show them" — on the Sales TV and the
+ * Manager TV). Only active people get on the board at all (the Leaderboard's own list).
+ */
 async function teamPeople(): Promise<Map<string, string>> {
-  const teams = await Team.find({ status: "active" }).select("name members leaders").lean<Array<{ name: string; members?: Types.ObjectId[]; leaders?: Types.ObjectId[] }>>();
+  const teams = await Team.find({}).select("name members leaders status")
+    .lean<Array<{ name: string; status?: string; members?: Types.ObjectId[]; leaders?: Types.ObjectId[] }>>();
+  const activeFirst = [...teams.filter((t) => t.status !== "inactive"), ...teams.filter((t) => t.status === "inactive")];
   const teamOf = new Map<string, string>();
-  for (const t of teams) for (const u of [...(t.leaders ?? []), ...(t.members ?? [])]) if (!teamOf.has(String(u))) teamOf.set(String(u), t.name);
+  for (const t of activeFirst) for (const u of [...(t.leaders ?? []), ...(t.members ?? [])]) if (!teamOf.has(String(u))) teamOf.set(String(u), t.name);
   return teamOf;
 }
 
@@ -93,7 +99,7 @@ export async function salesTv(q: { after?: string; parts?: string; month?: strin
   const base: SalesTv = { crm: SALES_TV_CRM, generatedAt: new Date(now).toISOString(), onBreak, closes };
   if (q.parts === "live") return base;
 
-  // Super Admins too, but only those in an active team (filtered below) — dilshad leads Remote's team (2026-10-20).
+  // Super Admins too, but only those in a team (filtered below) — dilshad leads Remote's team (2026-10-20).
   const board = await new LeaderboardService().getLeaderboard(q.month, "revenue", { withSuperAdmins: true });
   const todayClosings = await Student.aggregate<{ _id: Types.ObjectId | null; n: number }>([
     { $match: { enrollmentDate: { $gte: midnight, $lt: new Date(midnight.getTime() + DAY_MS) }, status: { $ne: "dropped" } } },

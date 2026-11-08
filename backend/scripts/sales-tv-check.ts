@@ -3,8 +3,9 @@
  * shape as the Sales CRM's — through the API with the portal secret, on a scratch database:
  *   - the secret: none or a wrong one refused; not configured → off (503);
  *   - the shape, exactly: crm "draw", generatedAt, month, onBreak, closes, people — and parts=live only the first four;
- *   - people: the sales staff only (an active team's members and leaders, active — not a Super Admin, not someone in
- *     no team or only in an inactive team, not someone excluded from commission, not a deactivated account), this
+ *   - people: the sales staff only (a team's members and leaders — an inactive team's too, since 2026-11-08 — active;
+ *     not a Super Admin in no team, not someone in no team, not someone excluded from commission, not a deactivated
+ *     account; labelled with an active team before an inactive one), this
  *     month's and today's (Dubai) closings, this month's revenue, today's 3CX calls, connected and talk time; ordered
  *     by closings;
  *   - on a break now: today's, not yesterday's, not a deactivated account's; a break taken with the button shows;
@@ -69,11 +70,12 @@ const sid = u("Sid Outside", superRole);                                        
 const loner = u("Loner Nobody");                                                         // in no team
 const xena = u("Xena Excluded");                                                         // excluded from commission
 const ina = u("Ina Inactive", staffRole, { status: "inactive", breakSince: ago(5), breakKind: "tea" }); // deactivated
-const olly = u("Olly Oldteam");                                                          // only in an inactive team
+const olly = u("Olly Oldteam");                                                          // only in an inactive team: on the TV (2026-11-08)
 await db.collection("users").insertMany([anna, ben, lena, boss, loner, xena, ina, olly, sid]);
+// The inactive team first: Anna, in both, keeps her active team's name all the same.
 await db.collection("teams").insertMany([
-  { _id: new Types.ObjectId(), name: "TEAM TITAN", leaders: [lena._id], members: [anna._id, ben._id, boss._id, xena._id, ina._id], status: "active", settings: {} },
   { _id: new Types.ObjectId(), name: "TEAM GONE", leaders: [], members: [olly._id, anna._id], status: "inactive", settings: {} },
+  { _id: new Types.ObjectId(), name: "TEAM TITAN", leaders: [lena._id], members: [anna._id, ben._id, boss._id, xena._id, ina._id], status: "active", settings: {} },
 ]);
 await db.collection("commissionsettings").insertOne({ key: "default", excludedUsers: [xena._id], fullViewers: [] });
 const forex = new Types.ObjectId(), pa = new Types.ObjectId();
@@ -151,8 +153,11 @@ check("a close: id, closer, closerEmail, courses, amount, academy, currency, at 
 
 section("People — the sales staff only");
 const names = (d.people ?? []).map((p: Any) => p.name);
-check("Anna, Ben, Boss (a Super Admin in the team), Lena — not the Super Admin in no team, not someone in no team, not the excluded one, not the deactivated one, not one only in an inactive team",
-  [...names].sort().join() === "Anna Ace,Ben Bee,Boss Super,Lena Lead", j(names));
+check("Anna, Ben, Boss (a Super Admin in the team), Lena, and Olly of the inactive team — not the Super Admin in no team, not someone in no team, not the excluded one, not the deactivated one",
+  [...names].sort().join() === "Anna Ace,Ben Bee,Boss Super,Lena Lead,Olly Oldteam", j(names));
+check("…Olly labelled with his inactive team; Anna, in both, with her active one",
+  (d.people ?? []).find((p: Any) => p.name === "Olly Oldteam")?.team === "TEAM GONE" && (d.people ?? []).find((p: Any) => p.name === "Anna Ace")?.team === "TEAM TITAN",
+  j((d.people ?? []).map((p: Any) => [p.name, p.team])));
 {
   const { LeaderboardService } = await import("../src/services/leaderboardService.js");
   const own = (await new LeaderboardService().getLeaderboard()).rows.map((r) => r.name);
