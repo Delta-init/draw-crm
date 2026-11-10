@@ -42,6 +42,8 @@ const activityLogSchema = new Schema<IActivityLog>(
         "repeat_enquiry",
         "repeat_verified",
         "whatsapp_followup",
+        // A person's leads transferred to someone else (Users page, 2026-11-10), and undone.
+        "lead_transferred",
       ],
     },
     description: {
