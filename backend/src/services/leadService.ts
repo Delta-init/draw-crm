@@ -504,7 +504,11 @@ export class LeadService {
     if (filters.team) query.team = filters.team;
     if (filters.reporter) query.reporter = filters.reporter;
     if (filters.course) query.courses = filters.course;
-    if (filters.source) query.source = new RegExp(filters.source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    // One source, or several joined by commas (the Leads page's multi-select, 2026-11-12) — a lead with any of them.
+    if (filters.source) {
+      const sources = String(filters.source).split(",").map((x) => x.trim()).filter(Boolean);
+      if (sources.length) query.source = { $in: sources.map((x) => new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")) };
+    }
 
     // ── Date range filter on createdAt ──────────────────────────────────────────
     if (filters.dateFrom || filters.dateTo) {
