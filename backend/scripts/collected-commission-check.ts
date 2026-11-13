@@ -268,7 +268,7 @@ check("permission: a leader asking for another team, or a BDE for anyone, gets t
 /* ── 6. Paid in rupees, earned in rupees (2026-11-13) ─────────────────── */
 section("6. The part of a sale paid in rupees earns the course's rupee amount");
 // A row the close puts on the lead, as the close dialog writes it: the method on the row and in its note.
-const LABEL: Record<string, string> = { cash: "Cash", card: "Card", inr_bank_account: "INR Transfer" };
+const LABEL: Record<string, string> = { cash: "Cash", card: "Card", pos: "POS", inr_bank_account: "INR Transfer", razorpay: "Razorpay" };
 const atClose = (amount: number, paidAt: string, method: string): Pay => ({ amount, paidAt, method, note: `Collected at enrolment — Course · ${LABEL[method]}` });
 // …and as a correction rewrites it: the note alone, no method on the row.
 const corrected = (amount: number, paidAt: string, method: string): Pay => ({ amount, paidAt, note: `Collected at enrolment — Course · ${LABEL[method]}` });
@@ -307,6 +307,16 @@ const rFixed = await sale("Bea", T1, { date: "2026-12-09T08:00:00Z", fee: 1000,
 const rBlr = await sale("Bea", T1, { date: "2026-12-10T08:00:00Z", fee: 100000, academy: "bangalore", paid: 100000, pending: 0,
   close: [50000, { amount: 22750, method: "cash", currency: "AED", amountInCurrency: 1000, exchangeRate: 22.75 }],
   pays: [{ amount: 27250, paidAt: "2026-12-12T00:00:00Z", currency: "INR", finance: approvedBp("bp-blr") }] });
+// Razorpay pays out in rupees, as INR Transfer does (the owner, 2026-11-13); POS is a card machine — dirhams. In
+// January, so December's figures below stay as they are. At the close: POS and Razorpay of the same amount, then the
+// balance by Razorpay — finance approved it.
+const rRzp = await sale("Oli", T2, { date: "2027-01-05T08:00:00Z", fee: 1000, close: [{ amount: 250, method: "pos" }, { amount: 250, method: "razorpay" }],
+  pays: [atClose(250, "2027-01-05T08:00:00Z", "pos"), atClose(250, "2027-01-05T09:00:00Z", "razorpay"),
+    { amount: 500, paidAt: "2027-01-10T00:00:00Z", finance: { ...approvedBp("bp-razorpay"), method: "razorpay" } }] });
+// Rows that only name their method (the note alone, nothing of the close to match them to), and a balance by POS.
+const rRzpNote = await sale("Oli", T2, { date: "2027-01-06T08:00:00Z", fee: 2000,
+  pays: [corrected(600, "2027-01-06T08:00:00Z", "pos"), corrected(400, "2027-01-06T09:00:00Z", "razorpay"),
+    { amount: 1000, paidAt: "2027-01-11T00:00:00Z", finance: { ...approvedBp("bp-pos"), method: "pos" } }] });
 await refreshPaidShares();
 const marks = async (s: { studentId: string }) => ((await saleOf(s.studentId))?.collections ?? []).map((c) => `${c.share}${c.inr ? "₹" : ""}`).join(" ");
 check("the payments marked as rupees: INR Transfer at the close; a balance payment by INR Transfer; one typed in rupees under another method",
@@ -316,6 +326,9 @@ check("…cash beside an INR Transfer of the same amount stays dirhams; of two c
   (await marks(rSame)) === "0.5 0.5₹" && (await marks(rTyped)) === "0.5₹ 0.5", `${await marks(rSame)} / ${await marks(rTyped)}`);
 check("…rows a correction rewrote are told by their note; a payment on the lead before the close by its own method", (await marks(rFixed)) === "0.4₹ 0.3 0.3₹", await marks(rFixed));
 check("…a Bangalore close: rupees, the approved balance payment too — not the AED cash", (await marks(rBlr)) === "0.5₹ 0.2275 0.2725₹", await marks(rBlr));
+check("…Razorpay is rupees as INR Transfer is: at the close, and a balance payment by Razorpay — POS of the same amount beside it stays dirhams",
+  (await marks(rRzp)) === "0.25 0.25₹ 0.5₹", await marks(rRzp));
+check("…a close row that only names Razorpay is rupees; one naming POS, and a balance payment by POS, are not", (await marks(rRzpNote)) === "0.3 0.2₹ 0.5", await marks(rRzpNote));
 await refreshPaidShares();
 check("…and a second pass changes nothing", (await refreshPaidShares()) === 0);
 const dec = await svc.getEarnings(viewer("Admin"), "2026-12");

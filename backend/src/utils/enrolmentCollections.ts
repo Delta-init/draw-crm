@@ -1,5 +1,5 @@
 import { Lead } from "../models/Lead.js";
-import { PAYMENT_METHOD_LABELS, type EnrolmentPaymentMethod } from "../types/index.js";
+import { PAYMENT_METHOD_LABELS, RUPEE_METHODS, isRupeeMethod, type EnrolmentPaymentMethod } from "../types/index.js";
 
 /*
  * The money actually received on each enrolment, payment by payment, with the day it came in (the user, 2026-10-31:
@@ -20,13 +20,16 @@ import { PAYMENT_METHOD_LABELS, type EnrolmentPaymentMethod } from "../types/ind
  * that share of the sale's commission is earned at the course's rupee amount (commissionService splitByCurrency).
  * Only where that was said: INR Transfer as the method, or a payment typed in INR with its rate at the close; never
  * guessed. A Bangalore close's payments are rupees unless taken in AED cash.
+ *
+ * Razorpay pays out in rupees (the owner, 2026-11-13): wherever INR Transfer is named here, Razorpay is taken the
+ * same — both asked of RUPEE_METHODS (types/index.ts).
  */
 export type Collection = { paidAt: Date; amount: number; inr?: boolean };
 
-/** "INR Transfer" — a payment into the rupee account. */
-const RUPEE_METHOD = "inr_bank_account";
 /** A method as the close writes it in its note on the lead ("… · INR Transfer"). */
 const labelOf = (method?: string) => (method ? PAYMENT_METHOD_LABELS[method as EnrolmentPaymentMethod] ?? method : "");
+/** The rupee methods as such a note names them: "INR Transfer", "Razorpay". */
+const RUPEE_LABELS = RUPEE_METHODS.map((m) => labelOf(m));
 
 type StudentLike = {
   _id: unknown;
@@ -54,15 +57,15 @@ const counts = (p: LeadPayment) => !p.finance?.externalId || p.finance.state ===
  */
 function rupeeMarker(s: StudentLike): (p: LeadPayment) => boolean {
   const left = (s.payments ?? [])
-    .filter((p) => !p.collectedBefore && (p.method === RUPEE_METHOD || p.currency === "INR"))
+    .filter((p) => !p.collectedBefore && (isRupeeMethod(p.method) || p.currency === "INR"))
     .map((p) => ({ amount: p.amount ?? 0, method: labelOf(p.method) }));
   return (p) => {
-    if (p.finance?.method === RUPEE_METHOD) return true;
-    if (!/^Collected at enrolment\b/.test(p.note ?? "")) return p.method === RUPEE_METHOD;
+    if (isRupeeMethod(p.finance?.method)) return true;
+    if (!/^Collected at enrolment\b/.test(p.note ?? "")) return isRupeeMethod(p.method);
     const said = p.method ? labelOf(p.method) : (/·\s*([^·]+?)\s*$/.exec(p.note ?? "")?.[1] ?? "");
     const i = left.findIndex((c) => Math.abs(c.amount - p.amount) < 0.005 && (!said || c.method === said));
     if (i >= 0) { left.splice(i, 1); return true; }
-    return said === labelOf(RUPEE_METHOD);
+    return RUPEE_LABELS.includes(said);
   };
 }
 
