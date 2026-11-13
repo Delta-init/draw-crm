@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { fmtFull } from "@/lib/currency";
 import { fmtAED, fmtINR, type Academy } from "@/lib/academy";
 import { uploadReceipt } from "@/hooks/useStudents";
-import { ENROLMENT_PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentInAed, type StoredReceipt } from "@/types/student";
+import { ENROLMENT_PAYMENT_METHODS, PAYMENT_METHOD_LABELS, isRupeeMethod, type PaymentInAed, type StoredReceipt } from "@/types/student";
 
 /*
  * The payments taken at a close, one row each (the user, 2026-10-05): a client
@@ -29,7 +29,8 @@ import { ENROLMENT_PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentInAed, ty
  * AED by default, INR picked — or "INR Transfer" as the method, which picks it —
  * typed in INR with the same rate, 1 AED = so many INR, and its AED worked out
  * (or typed, and the rate worked out). Finance gets the rupees and 1 INR = so
- * many AED.
+ * many AED. "Razorpay" pays out in rupees too (the owner, 2026-11-13) and picks
+ * INR the same way — both are RUPEE_METHODS.
  */
 
 export interface PaymentRow {
@@ -202,9 +203,10 @@ export function PaymentRowsEditor({ leadId, rows, onChange, academy = "dubai" }:
   // Switching currency starts the rate afresh: no feed is trusted for it, the seller enters it.
   const setPaidInAed = (r: PaymentRow, paidInAed: boolean) => update(r.id, { paidInAed, rateInput: "", convertedInput: "" });
   const setPaidInInr = (r: PaymentRow, paidInInr: boolean) => update(r.id, { paidInInr, rateInput: "", convertedInput: "" });
-  // "INR Transfer" is rupees: on a Dubai close it picks INR for the row; on a Bangalore one, the close's own.
+  // "INR Transfer" is rupees, and so is "Razorpay" (2026-11-13): on a Dubai close it picks INR for the row; on a
+  // Bangalore one, the close's own.
   function setMethod(r: PaymentRow, method: string) {
-    if (method !== "inr_bank_account" || r.collectedBefore) return update(r.id, { method });
+    if (!isRupeeMethod(method) || r.collectedBefore) return update(r.id, { method });
     if (inr) return update(r.id, { method, ...(r.paidInAed ? { paidInAed: false, rateInput: "", convertedInput: "" } : {}) });
     update(r.id, { method, ...(r.paidInInr ? {} : { paidInInr: true, rateInput: "", convertedInput: "" }) });
   }
