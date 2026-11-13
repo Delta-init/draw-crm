@@ -75,27 +75,44 @@ await db.collection("commissionsettings").insertOne({ key: "default", salesManag
 const viewer = (name: string) => ({ userId: String(ids[name]), role: name === "Admin" ? superRole : bdeRole } as never);
 
 // ── Sales: a lead with its payments, the enrolment, and its counted commission ─────────────────────────────────
-type Pay = { amount: number; paidAt: string; finance?: { externalId: string; state: string; sentAt: Date; method: string }; currency?: string };
+type Pay = { amount: number; paidAt: string; finance?: { externalId: string; state: string; sentAt: Date; method: string }; currency?: string; method?: string; note?: string };
+/** A payment the close took: an amount in cash, or with its method and — handed over in the other currency — which, how much and its rate. */
+type ClosePay = number | { amount: number; method?: string; currency?: string; amountInCurrency?: number; exchangeRate?: number; collectedBefore?: boolean };
 let n = 0;
-async function sale(closer: string, team: Types.ObjectId, opts: { date: string; fee: number; pays: Pay[]; pending?: number; paid?: number; close?: number[]; counted?: boolean }) {
+async function sale(closer: string, team: Types.ObjectId, opts: {
+  date: string; fee: number; pays: Pay[]; pending?: number; paid?: number; close?: ClosePay[]; counted?: boolean;
+  /** The lines carry the course's rupee amounts (5,000 / 2,000 / 1,700), as Root's plan gives them. */
+  inr?: boolean;
+  /** Closed for the Bangalore academy: the fee and the payments are rupees. */
+  academy?: string;
+}) {
   n++;
   const leadId = new Types.ObjectId(), studentId = new Types.ObjectId();
   await db.collection("leads").insertOne({
     _id: leadId, name: `Lead ${n}`, phone: `97150000${String(n).padStart(4, "0")}`, status: "closed", assignedTo: ids[closer], activityLogs: [],
-    payments: opts.pays.map((p) => ({ amount: p.amount, paidAt: new Date(p.paidAt), ...(p.finance ? { finance: p.finance } : {}), ...(p.currency ? { currency: p.currency } : {}) })),
+    payments: opts.pays.map((p) => ({
+      amount: p.amount, paidAt: new Date(p.paidAt), ...(p.finance ? { finance: p.finance } : {}), ...(p.currency ? { currency: p.currency } : {}),
+      ...(p.method ? { method: p.method } : {}), ...(p.note ? { note: p.note } : {}),
+    })),
   });
   const paid = opts.paid ?? opts.pays.filter((p) => !p.finance || p.finance.state === "approved").reduce((s, p) => s + p.amount, 0);
   await db.collection("students").insertOne({
     _id: studentId, name: `Student ${n}`, enrollmentNumber: `EN-${n}`, leadId, team, assignedTo: ids[closer], courses: [], course: null,
     enrollmentDate: new Date(opts.date), status: "active", totalFee: opts.fee, paidAmount: paid,
     pendingAmount: opts.pending ?? Math.max(0, opts.fee - paid), feeStatus: paid >= opts.fee ? "paid" : paid > 0 ? "partial" : "pending",
-    ...(opts.close ? { payments: opts.close.map((a) => ({ amount: a, paidAt: new Date(opts.date), method: "cash" })) } : {}),
+    ...(opts.close ? {
+      payments: opts.close.map((a) => (typeof a === "number"
+        ? { amount: a, paidAt: new Date(opts.date), method: "cash" }
+        : { paidAt: new Date(opts.date), method: "cash", ...a })),
+    } : {}),
+    ...(opts.academy ? { academy: opts.academy } : {}),
   });
   const leader = team.equals(T1) ? "Tina" : "Otto";
+  const rupees = (amountInr: number) => (opts.inr ? { amountInr } : {});
   const lines = [
-    { role: "sales", user: ids[closer], userName: closer, amount: 230 },
-    ...(PAYS_TL ? [{ role: "tl", user: ids[leader], userName: leader, amount: 100 }] : []),
-    { role: "sm", user: ids.Manager, userName: "Manager", amount: 85 },
+    { role: "sales", user: ids[closer], userName: closer, amount: 230, ...rupees(5000) },
+    ...(PAYS_TL ? [{ role: "tl", user: ids[leader], userName: leader, amount: 100, ...rupees(2000) }] : []),
+    { role: "sm", user: ids.Manager, userName: "Manager", amount: 85, ...rupees(1700) },
   ];
   if (opts.counted !== false) {
     const d = new Date(opts.date);
@@ -247,6 +264,77 @@ check("invalid: a bad team id — the whole list, no error", names(badTeam) === 
 const tinaOther = await closings.listDailyClosings({ dateFrom: "2026-10-01", dateTo: "2026-10-31", team: String(T2) }, viewer("Tina") as never);
 const beaAsks = await closings.listDailyClosings({ dateFrom: "2026-10-01", dateTo: "2026-10-31", user: String(ids.Oli), team: String(T2) }, viewer("Bea") as never);
 check("permission: a leader asking for another team, or a BDE for anyone, gets their own scope", !names(tinaOther).includes("Oli") && names(beaAsks) === "Bea", `${names(tinaOther)} / ${names(beaAsks)}`);
+
+/* ── 6. Paid in rupees, earned in rupees (2026-11-13) ─────────────────── */
+section("6. The part of a sale paid in rupees earns the course's rupee amount");
+// A row the close puts on the lead, as the close dialog writes it: the method on the row and in its note.
+const LABEL: Record<string, string> = { cash: "Cash", card: "Card", inr_bank_account: "INR Transfer" };
+const atClose = (amount: number, paidAt: string, method: string): Pay => ({ amount, paidAt, method, note: `Collected at enrolment — Course · ${LABEL[method]}` });
+// …and as a correction rewrites it: the note alone, no method on the row.
+const corrected = (amount: number, paidAt: string, method: string): Pay => ({ amount, paidAt, note: `Collected at enrolment — Course · ${LABEL[method]}` });
+// A quarter by INR Transfer at the close (typed in rupees, with its rate), the rest in cash.
+const r25 = await sale("Cal", T1, { date: "2026-12-02T08:00:00Z", fee: 2000, inr: true,
+  close: [{ amount: 500, method: "inr_bank_account", currency: "INR", amountInCurrency: 12800, exchangeRate: 0.0390625 }, 1500],
+  pays: [atClose(500, "2026-12-02T08:00:00Z", "inr_bank_account"), atClose(1500, "2026-12-02T08:00:00Z", "cash")] });
+// Half in cash at the close, the balance later by INR Transfer — finance approved it.
+const rBal = await sale("Cal", T1, { date: "2026-12-03T08:00:00Z", fee: 2000, inr: true, close: [1000],
+  pays: [atClose(1000, "2026-12-03T08:00:00Z", "cash"), { amount: 1000, paidAt: "2026-12-10T00:00:00Z", finance: { ...approvedBp("bp-inr"), method: "inr_bank_account" } }] });
+// All of it typed in rupees at the close under another method: the lead's row says "Cash", the close says rupees.
+const rAll = await sale("Cal", T1, { date: "2026-12-04T08:00:00Z", fee: 800, inr: true,
+  close: [{ amount: 800, method: "cash", currency: "INR", amountInCurrency: 20480, exchangeRate: 0.0390625 }],
+  pays: [atClose(800, "2026-12-04T08:00:00Z", "cash")] });
+// By INR Transfer, but the course has no rupee amount (its lines carry none): all in AED.
+const rNone = await sale("Cal", T1, { date: "2026-12-05T08:00:00Z", fee: 1000, close: [{ amount: 1000, method: "inr_bank_account" }],
+  pays: [atClose(1000, "2026-12-05T08:00:00Z", "inr_bank_account")] });
+// Half paid, by INR Transfer, half still owed: all of it waits, in AED.
+const rOwing = await sale("Cal", T1, { date: "2026-12-06T08:00:00Z", fee: 2000, inr: true, close: [{ amount: 1000, method: "inr_bank_account" }],
+  pays: [atClose(1000, "2026-12-06T08:00:00Z", "inr_bank_account")] });
+// Two cash payments of the same amount as a rupee one elsewhere: neither is rupees.
+const rCash = await sale("Cal", T1, { date: "2026-12-07T08:00:00Z", fee: 1000, inr: true, close: [500, { amount: 500, method: "card" }],
+  pays: [atClose(500, "2026-12-07T08:00:00Z", "cash"), atClose(500, "2026-12-07T09:00:00Z", "card")] });
+// Cash and INR Transfer of the same amount at one close, the cash row first on the lead: only the INR Transfer is rupees.
+const rSame = await sale("Bea", T1, { date: "2026-12-08T08:00:00Z", fee: 1000, close: [500, { amount: 500, method: "inr_bank_account" }],
+  pays: [atClose(500, "2026-12-08T08:00:00Z", "cash"), atClose(500, "2026-12-08T08:00:00Z", "inr_bank_account")] });
+// The same again, one of the two cash payments typed in rupees: one cash row is rupees, the other is not.
+const rTyped = await sale("Bea", T1, { date: "2026-12-08T10:00:00Z", fee: 1000,
+  close: [500, { amount: 500, method: "cash", currency: "INR", amountInCurrency: 12800, exchangeRate: 0.0390625 }],
+  pays: [atClose(500, "2026-12-08T10:00:00Z", "cash"), atClose(500, "2026-12-08T11:00:00Z", "cash")] });
+// Rows a correction rewrote (the note alone), and a payment added on the lead before the close by INR Transfer.
+const rFixed = await sale("Bea", T1, { date: "2026-12-09T08:00:00Z", fee: 1000,
+  close: [{ amount: 400, method: "inr_bank_account", collectedBefore: true }, { amount: 300, method: "inr_bank_account" }, { amount: 300, method: "card" }],
+  pays: [{ amount: 400, paidAt: "2026-12-01T08:00:00Z", method: "inr_bank_account", note: "Booking" }, corrected(300, "2026-12-09T08:00:00Z", "card"), corrected(300, "2026-12-09T09:00:00Z", "inr_bank_account")] });
+// A Bangalore close: its rupees are rupees — the balance payment too — but not the part taken in AED cash.
+const rBlr = await sale("Bea", T1, { date: "2026-12-10T08:00:00Z", fee: 100000, academy: "bangalore", paid: 100000, pending: 0,
+  close: [50000, { amount: 22750, method: "cash", currency: "AED", amountInCurrency: 1000, exchangeRate: 22.75 }],
+  pays: [{ amount: 27250, paidAt: "2026-12-12T00:00:00Z", currency: "INR", finance: approvedBp("bp-blr") }] });
+await refreshPaidShares();
+const marks = async (s: { studentId: string }) => ((await saleOf(s.studentId))?.collections ?? []).map((c) => `${c.share}${c.inr ? "₹" : ""}`).join(" ");
+check("the payments marked as rupees: INR Transfer at the close; a balance payment by INR Transfer; one typed in rupees under another method",
+  (await marks(r25)) === "0.25₹ 0.75" && (await marks(rBal)) === "0.5 0.5₹" && (await marks(rAll)) === "1₹", `${await marks(r25)} / ${await marks(rBal)} / ${await marks(rAll)}`);
+check("…cash and card are never rupees", (await marks(rCash)) === "0.5 0.5", await marks(rCash));
+check("…cash beside an INR Transfer of the same amount stays dirhams; of two cash payments, only the one typed in rupees",
+  (await marks(rSame)) === "0.5 0.5₹" && (await marks(rTyped)) === "0.5₹ 0.5", `${await marks(rSame)} / ${await marks(rTyped)}`);
+check("…rows a correction rewrote are told by their note; a payment on the lead before the close by its own method", (await marks(rFixed)) === "0.4₹ 0.3 0.3₹", await marks(rFixed));
+check("…a Bangalore close: rupees, the approved balance payment too — not the AED cash", (await marks(rBlr)) === "0.5₹ 0.2275 0.2725₹", await marks(rBlr));
+await refreshPaidShares();
+check("…and a second pass changes nothing", (await refreshPaidShares()) === 0);
+const dec = await svc.getEarnings(viewer("Admin"), "2026-12");
+const salesLine = (sold: { name: string }) => saleRow(dec, sold)?.lines?.find((l: any) => l.role === "sales");
+check("a quarter in rupees: AED 172.50 of the 230, and INR 1,250 of the 5,000", salesLine(r25)?.earned === 172.5 && salesLine(r25)?.earnedInr === 1250 && saleRow(dec, r25)?.rupeeShare === 0.25, j(saleRow(dec, r25)));
+check("the balance paid by INR Transfer: half and half — AED 115 and INR 2,500", salesLine(rBal)?.earned === 115 && salesLine(rBal)?.earnedInr === 2500, j(salesLine(rBal)));
+check("all in rupees: nothing in AED, the whole INR 5,000", salesLine(rAll)?.earned === 0 && salesLine(rAll)?.earnedInr === 5000, j(salesLine(rAll)));
+check("no rupee amount on the course: all 230 in AED though it was paid in rupees", salesLine(rNone)?.earned === 230 && salesLine(rNone)?.earnedInr === 0, j(salesLine(rNone)));
+check("still owing: all 230 waits, in AED — nothing in rupees yet", salesLine(rOwing)?.earned === 0 && salesLine(rOwing)?.earnedInr === 0 && salesLine(rOwing)?.balance === 230, j(salesLine(rOwing)));
+check("paid in AED: all 230 in AED", salesLine(rCash)?.earned === 230 && salesLine(rCash)?.earnedInr === 0, j(salesLine(rCash)));
+const calDec = dec.people.find((p: any) => p.name === "Cal") as any;
+check("the people: Cal AED 747.50 and INR 8,750 earned, 230 waiting", calDec?.total === 747.5 && calDec?.totalInr === 8750 && calDec?.balance === 230 && calDec?.sales?.amountInr === 8750, j(calDec));
+check("totals: the rupees apart from the AED", dec.totals.amountInr === 8750 + 1700 * 1.75 + (PAYS_TL ? 2000 * 1.75 : 0), j(dec.totals));
+const calPay = (await payRows("2026-12", slabs)).find((r) => r.name === "Cal");
+check("My Pay: the level's percent on each part — AED 747.50 and INR 8,750 payable", calPay?.commission.earned === 747.5 && calPay?.commission.earnedInr === 8750
+  && calPay?.commission.payable === 747.5 && calPay?.commission.payableInr === 8750 && calPay?.total === 1747.5, j(calPay));
+const decBook = await closings.listDailyClosings({ dateFrom: "2026-12-01", dateTo: "2026-12-31" }, viewer("Cal") as never);
+check("Daily Closings: the closing's rupee part beside its AED, and the period's total", row(decBook, r25.studentId)?.commission?.earned === 172.5 && row(decBook, r25.studentId)?.commission?.earnedInr === 1250
+  && row(decBook, rCash.studentId)?.commission?.earnedInr === undefined && decBook.totals.commissionEarnedInr === 8750, j({ c: row(decBook, r25.studentId)?.commission, t: decBook.totals }));
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
 await mongoose.disconnect();
