@@ -126,6 +126,7 @@ export interface IUser extends Document {
   currency?: DisplayCurrency | null;
   /** When it was picked. */
   currencyAt?: Date | null;
+  whatsappOf?: Types.ObjectId | null; // whose WhatsApp they use (a Super Admin shares it); null: their own
   password: string;
   role: Types.ObjectId | IRole;
   designation?: string;

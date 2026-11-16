@@ -62,6 +62,11 @@ const userSchema = new Schema<IUser>(
     currency: { type: String, enum: [...DISPLAY_CURRENCIES, null], default: null },
     /** When that currency was picked — a pick saved late (the app was offline) never replaces a newer one. */
     currencyAt: { type: Date, default: null },
+    /**
+     * Whose WhatsApp they use (2026-11-16: two people on one WhatsApp) — set by a Super Admin. They send from that
+     * person's linked phone as their own, each seeing only their own leads' chats on it; null: their own.
+     */
+    whatsappOf: { type: Schema.Types.ObjectId, ref: "User", default: null },
     status: {
       type: String,
       enum: ["active", "inactive"],

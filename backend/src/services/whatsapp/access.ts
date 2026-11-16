@@ -2,11 +2,13 @@ import { Types } from "mongoose";
 import { Team } from "../../models/Team.js";
 import { CommissionSettings } from "../../models/CommissionSettings.js";
 import type { IRole } from "../../types/index.js";
+import { phoneOwnerOf } from "./sharing.js";
 
 /*
  * Who reads whose WhatsApp, and which leads a chat may be linked to (2026-10-27, as in the Sales CRM) — the lines the
  * leads follow: a Super Admin and the Sales Manager, everyone's; a team leader, their active teams' people and their own; anyone else, their own.
- * Only the owner sends from their WhatsApp.
+ * Only the owner sends from their WhatsApp — and whoever a Super Admin shared it with (sharing.ts, 2026-11-16), each
+ * seeing only their own leads' chats on it (holders.ts).
  */
 
 export type Viewer = { userId: string; role?: IRole | null };
@@ -30,6 +32,16 @@ async function seesAll(viewer: Viewer): Promise<boolean> {
 
 /** Whose WhatsApp chats the viewer may read — null: everyone's. */
 export async function readableOwners(viewer: Viewer): Promise<Set<string> | null> {
+  if (await seesAll(viewer)) return null;
+  const led = await ledTeams(viewer.userId);
+  return new Set([viewer.userId, await phoneOwnerOf(viewer.userId), ...led.flatMap((t) => [...(t.members ?? []), ...(t.leaders ?? [])].map(idOf))]);
+}
+
+/**
+ * On a WhatsApp more than one person uses, whose chats the viewer sees (holders.ts) — null: all of them (a Super
+ * Admin, the Sales Manager). Anyone else: their own, and a team leader their teams' people's too.
+ */
+export async function visibleHolders(viewer: Viewer): Promise<Set<string> | null> {
   if (await seesAll(viewer)) return null;
   const led = await ledTeams(viewer.userId);
   return new Set([viewer.userId, ...led.flatMap((t) => [...(t.members ?? []), ...(t.leaders ?? [])].map(idOf))]);

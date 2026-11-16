@@ -17,6 +17,7 @@ import { leadsByPhone, phoneKey } from "./leads.js";
 import { sendPushToUser } from "../pushService.js";
 import { emitToUser } from "../../socket.js";
 import { asVoiceNote, VOICE_MIME } from "./voice.js";
+import { holdersOf } from "./holders.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    WhatsApp, as in CS Portal (the user, 2026-10-27: "working of the
@@ -158,7 +159,7 @@ async function store(doc: NewMessage): Promise<Saved | null> {
   }
 }
 
-type Owner = { id: string; name: string };
+export type Owner = { id: string; name: string };
 
 /** A message on someone's WhatsApp — kept, matched to its lead, and the owner told when it is new and not theirs. */
 export async function receive(owner: Owner, sock: WASocket, msg: WAMessage): Promise<void> {
@@ -203,8 +204,10 @@ export async function receive(owner: Owner, sock: WASocket, msg: WAMessage): Pro
     const leadDoc = lead ? await Lead.findById(lead).select("name").lean<{ name?: string } | null>() : null;
     const who = String(leadDoc?.name ?? "").trim() || msg.pushName || (phone ? `+${phone}` : "WhatsApp");
     const text = body || LABEL[media!.type] || "File";
-    emitToUser(owner.id, "whatsapp_message", { chat: kept.chat, name: who, body: text });
-    void sendPushToUser(owner.id, {
+    // Its owner — or, on a WhatsApp more than one person uses, only the one whose chat it is (holders.ts, 2026-11-16).
+    const to = (await holdersOf(owner.id, [{ chat: kept.chat, lead }]).catch(() => null))?.get(kept.chat) ?? owner.id;
+    emitToUser(to, "whatsapp_message", { chat: kept.chat, name: who, body: text });
+    void sendPushToUser(to, {
       title: `WhatsApp · ${who}`,
       body: text.length > 140 ? `${text.slice(0, 137)}…` : text,
       tag: `wa-${kept.chat}`,
@@ -334,7 +337,11 @@ function connected(userId: string): WASocket {
 }
 
 /** How a send was made: by a person (the default), or by the CRM on its own — an automatic follow-up. */
-export type SendOpts = { auto?: { kind: "followup"; step: number; of: number } };
+export type SendOpts = {
+  auto?: { kind: "followup"; step: number; of: number };
+  /** Who sent it, when not the WhatsApp's owner: someone it is shared with (sharing.ts) — named on the message. */
+  by?: Owner;
+};
 
 async function keepSent(owner: Owner, to: { jid: string; phone: string }, chat: string, sentId: string, body: string,
   media: { type: string; mime: string; fileName: string; file: string; size: number } | null, opts: SendOpts = {}) {
@@ -344,7 +351,7 @@ async function keepSent(owner: Owner, to: { jid: string; phone: string }, chat: 
     owner: new Types.ObjectId(owner.id), ownerName: owner.name,
     chat: phone || chat, phone, key, jid: to.jid,
     direction: "out", body, messageId: sentId,
-    senderName: owner.name, sentBy: new Types.ObjectId(owner.id), sentByName: opts.auto ? "Auto follow-up" : owner.name,
+    senderName: (opts.by ?? owner).name, sentBy: new Types.ObjectId((opts.by ?? owner).id), sentByName: opts.auto ? "Auto follow-up" : (opts.by ?? owner).name,
     lead: (await leadsByKey()).get(key || chat) ?? null,
     read: true, media, at: new Date(), auto: opts.auto ?? null,
   });
@@ -377,7 +384,7 @@ export async function sendFile(userId: string, chat: string, buffer: Buffer, mim
     if (note) {
       const sent = await sock.sendMessage(to.jid, { audio: note, mimetype: VOICE_MIME, ptt: true });
       const saved = await saveMedia(owner.id, note, "audio/ogg", "");
-      return keepSent(owner, to, chat, sent?.key?.id ?? "", LABEL.ptt!, { type: "audio", mime: "audio/ogg", fileName: "", file: saved.file, size: saved.size });
+      return keepSent(owner, to, chat, sent?.key?.id ?? "", LABEL.ptt!, { type: "audio", mime: "audio/ogg", fileName: "", file: saved.file, size: saved.size }, opts);
     }
   }
   const type = mime.startsWith("image/") ? "image" : mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : "document";
