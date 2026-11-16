@@ -45,6 +45,19 @@ const studentSchema = new Schema<IStudent>(
 
     // Enrollment & fee
     enrollmentDate: { type: Date, default: Date.now },
+    /** The close is left out of every sales figure (2026-11-16) — a copy of its lead's notCountedInSales. */
+    notCountedInSales: {
+      type: new Schema(
+        {
+          at: { type: Date, required: true },
+          byId: { type: Schema.Types.ObjectId, ref: "User" },
+          byName: { type: String, default: "" },
+          reason: { type: String, default: "", maxlength: 300 },
+        },
+        { _id: false },
+      ),
+      default: undefined,
+    },
     feeStatus: {
       type: String,
       enum: ["paid", "partial", "pending"],

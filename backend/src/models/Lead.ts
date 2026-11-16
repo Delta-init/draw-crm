@@ -44,6 +44,9 @@ const activityLogSchema = new Schema<IActivityLog>(
         "whatsapp_followup",
         // A person's leads transferred to someone else (Users page, 2026-11-10), and undone.
         "lead_transferred",
+        // A closed sale left out of the sales figures, and counted again (2026-11-16).
+        "sale_not_counted",
+        "sale_counted",
       ],
     },
     description: {
@@ -128,6 +131,8 @@ const paymentSchema = new Schema<IPayment>(
       required: [true, "Payment date is required"],
       default: Date.now,
     },
+    /** Its sale is left out of the sales figures (2026-11-16) — the lead's notCountedInSales, copied here. */
+    notCounted: { type: Boolean },
     addedBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -250,6 +255,22 @@ const leadSchema = new Schema<ILead>(
     payments: {
       type: [paymentSchema],
       default: [],
+    },
+    /**
+     * Its close is left out of every sales figure — revenue, closings, the TVs, leaderboard, reports, commission,
+     * rewards (the user, 2026-11-16) — with who, when and why. The sale, its payments and finance stay as they are.
+     */
+    notCountedInSales: {
+      type: new Schema(
+        {
+          at: { type: Date, required: true },
+          byId: { type: Schema.Types.ObjectId, ref: "User" },
+          byName: { type: String, default: "" },
+          reason: { type: String, default: "", maxlength: 300 },
+        },
+        { _id: false },
+      ),
+      default: undefined,
     },
     activityLogs: {
       type: [activityLogSchema],

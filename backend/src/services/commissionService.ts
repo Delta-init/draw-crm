@@ -10,6 +10,7 @@ import { fetchEnrolmentStatusesFor } from "./financeClient.js";
 import { stepsOf, allDone, waitingOn } from "./enrolmentSteps.js";
 import { slabsFor } from "./salarySlabs.js";
 import { env } from "../config/env.js";
+import { COUNTED_STUDENT } from "../utils/countedPayments.js";
 import { collectionsOf } from "../utils/enrolmentCollections.js";
 import { fromRoot, mirrorRootPlan, rootResolve } from "./rootCommission.js";
 import type {
@@ -468,7 +469,8 @@ export async function trackSales(config: CommissionConfig, names: Names): Promis
   const handed = await FinanceHandover.find({ status: "sent" }).select("studentId invoiceNumber approvedAt").lean();
   if (!handed.length) return 0;
   const handoverOf = new Map(handed.map((h) => [String(h.studentId), h]));
-  const students = (await Student.find({ _id: { $in: handed.map((h) => h.studentId) }, enrollmentDate: { $gte: COUNT_FROM } })
+  // A close marked not counted in sales (2026-11-16) earns nothing: never tracked (services/notCountedService.ts).
+  const students = (await Student.find({ _id: { $in: handed.map((h) => h.studentId) }, enrollmentDate: { $gte: COUNT_FROM }, ...COUNTED_STUDENT })
     .select("name enrollmentNumber courses team assignedTo enrollmentDate createdAt financeInvoiceNumber totalFee academy")
     .lean()) as StudentLite[];
   const sales = await CommissionSale.find({ student: { $in: students.map((s) => s._id) } }).lean();

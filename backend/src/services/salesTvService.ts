@@ -5,6 +5,7 @@ import { Student } from "../models/Student.js";
 import { LeaderboardService } from "./leaderboardService.js";
 import { saleClosedOf } from "./saleAnnouncement.js";
 import { drawMidnight } from "./breakClock.js";
+import { COUNTED_STUDENT } from "../utils/countedPayments.js";
 
 /*
  * The Root portal's Sales TV (the user, 2026-10-20: "Dubai, Draw and Remote on
@@ -76,7 +77,7 @@ export async function salesTv(q: { after?: string; parts?: string; month?: strin
   const [breakers, closed] = await Promise.all([
     User.find({ status: "active", breakSince: { $gte: midnight } }).select("name email breakSince breakKind")
       .lean<Array<{ _id: Types.ObjectId; name: string; email: string; breakSince: Date; breakKind?: string | null }>>(),
-    Student.find({ createdAt: { $gt: since }, status: { $ne: "dropped" } }).sort({ createdAt: -1 }).limit(20)
+    Student.find({ createdAt: { $gt: since }, status: { $ne: "dropped" }, ...COUNTED_STUDENT }).sort({ createdAt: -1 }).limit(20)
       .populate("courses", "name").populate("assignedTo", "name email")
       .select("courses assignedTo totalFee academy createdAt")
       .lean<Array<{ _id: Types.ObjectId; courses?: unknown; assignedTo?: { name?: string; email?: string } | null; totalFee?: number; academy?: string; createdAt: Date }>>(),
@@ -102,7 +103,7 @@ export async function salesTv(q: { after?: string; parts?: string; month?: strin
   // Super Admins too, but only those in a team (filtered below) — dilshad leads Remote's team (2026-10-20).
   const board = await new LeaderboardService().getLeaderboard(q.month, "revenue", { withSuperAdmins: true });
   const todayClosings = await Student.aggregate<{ _id: Types.ObjectId | null; n: number }>([
-    { $match: { enrollmentDate: { $gte: midnight, $lt: new Date(midnight.getTime() + DAY_MS) }, status: { $ne: "dropped" } } },
+    { $match: { enrollmentDate: { $gte: midnight, $lt: new Date(midnight.getTime() + DAY_MS) }, status: { $ne: "dropped" }, ...COUNTED_STUDENT } },
     { $group: { _id: "$assignedTo", n: { $sum: 1 } } },
   ]);
   const today = new Map(todayClosings.filter((r) => r._id).map((r) => [String(r._id), r.n]));

@@ -998,7 +998,8 @@ export class StudentService {
     user?: string;
   }, viewer?: { userId: string; role?: unknown }) {
     const TZ = "Asia/Dubai";
-    const match: Record<string, unknown> = {};
+    // A close marked not counted in sales (2026-11-16) is not one of the day's closings.
+    const match: Record<string, unknown> = { "notCountedInSales.at": { $exists: false } };
 
     // Inclusive at both ends, and read as local days: "to 18 Sept" means up to
     // the end of the 18th in Dubai, not up to midnight at the start of it.

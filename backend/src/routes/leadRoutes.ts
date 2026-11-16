@@ -39,6 +39,7 @@ import { getTeamReminders, getTeamReminderOptions } from "../controllers/teamRem
 import { getRepeatLeads, getRepeatLeadCount, giveRepeat } from "../controllers/repeatLeadController.js";
 import { authenticate } from "../middleware/auth.js";
 import { checkPermission } from "../middleware/permissions.js";
+import { countInSales, leaveOutOfSales, notCountedState } from "../controllers/notCountedController.js";
 
 const router = Router();
 
@@ -114,5 +115,11 @@ router.get("/:id/payments/finance",             checkPermission("leads", "view")
 router.post("/:id/payments/finance",            checkPermission("leads", "edit"), checkPermission("balancePayments", "create"), sendLeadPaymentToFinance);
 router.put("/:id/payments/:paymentId",          checkPermission("leads", "edit"), updatePayment);
 router.delete("/:id/payments/:paymentId",       checkPermission("leads", "edit"), deletePayment);
+
+// A closed sale left out of the sales figures, and counted again (2026-11-16) — a Super Admin or the Sales Manager,
+// checked by services/notCountedService.ts.
+router.get("/:id/not-counted",    checkPermission("leads", "view"), notCountedState);
+router.post("/:id/not-counted",   checkPermission("leads", "view"), leaveOutOfSales);
+router.delete("/:id/not-counted", checkPermission("leads", "view"), countInSales);
 
 export default router;

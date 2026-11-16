@@ -9,30 +9,48 @@
  * sums: utils/bangaloreRevenue.ts counts it in AED at the Settings rate.
  */
 
+/*
+ * A close marked "not counted in sales" (2026-11-16, services/notCountedService.ts) counts nowhere: the lead carries
+ * `notCountedInSales`, and each of its payments `notCounted` — both are checked, so a pipeline that kept only the
+ * payments still leaves it out.
+ */
+
 /** After `{ $unwind: "$payments" }`: only the payments that count. */
 export const COUNTED_PAYMENT = {
   "payments.currency": { $ne: "INR" },
+  "payments.notCounted": { $ne: true },
+  "notCountedInSales.at": { $exists: false },
   $or: [{ "payments.finance.externalId": { $exists: false } }, { "payments.finance.state": "approved" }],
 };
 
+/** A Student (a close) that counts: not marked "not counted in sales". */
+export const COUNTED_STUDENT = { "notCountedInSales.at": { $exists: false } };
+
 /** A lead's payments that count, as an expression over its `payments` array. */
 export const COUNTED_PAYMENTS = {
-  $filter: {
-    input: { $ifNull: ["$payments", []] },
-    as: "p",
-    cond: {
-      $and: [
-        { $ne: ["$$p.currency", "INR"] },
-        { $or: [{ $eq: [{ $ifNull: ["$$p.finance.externalId", null] }, null] }, { $eq: ["$$p.finance.state", "approved"] }] },
-      ],
+  $cond: [
+    { $ifNull: ["$notCountedInSales.at", false] },
+    [],
+    {
+      $filter: {
+        input: { $ifNull: ["$payments", []] },
+        as: "p",
+        cond: {
+          $and: [
+            { $ne: ["$$p.currency", "INR"] },
+            { $ne: ["$$p.notCounted", true] },
+            { $or: [{ $eq: [{ $ifNull: ["$$p.finance.externalId", null] }, null] }, { $eq: ["$$p.finance.state", "approved"] }] },
+          ],
+        },
+      },
     },
-  },
+  ],
 };
 
 /** What a lead's payments that count add up to — where `{ $sum: "$payments.amount" }` summed the whole array. */
 export const COUNTED_TOTAL = { $sum: { $map: { input: COUNTED_PAYMENTS, as: "p", in: "$$p.amount" } } };
 
 /** The same rule, for a payment in hand. */
-export function isCountedPayment(p: { currency?: string | null; finance?: { externalId?: string | null; state?: string | null } | null }): boolean {
-  return p.currency !== "INR" && (!p.finance?.externalId || p.finance.state === "approved");
+export function isCountedPayment(p: { currency?: string | null; notCounted?: boolean | null; finance?: { externalId?: string | null; state?: string | null } | null }): boolean {
+  return p.currency !== "INR" && p.notCounted !== true && (!p.finance?.externalId || p.finance.state === "approved");
 }

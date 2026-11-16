@@ -32,6 +32,8 @@ export interface LeadNote {
 export interface Payment {
   _id: string;
   amount: number;
+  /** Its sale is left out of the sales figures (2026-11-16). */
+  notCounted?: boolean;
   note?: string;
   paidAt: string;
   addedBy: User | string;

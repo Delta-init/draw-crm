@@ -88,6 +88,8 @@ const commissionSaleSchema = new Schema<ICommissionSale>(
     lines: { type: [lineSchema], default: [] },
     countedAt: { type: Date },
     reversedAt: { type: Date },
+    /** Reversed because the sale was marked not counted in sales (2026-11-16): its state before, given back on undo. */
+    notCountedFrom: { type: String, enum: ["progress", "counted", "waiting", "excluded"] },
   },
   { timestamps: true, versionKey: false, collection: "commissionsales" },
 );

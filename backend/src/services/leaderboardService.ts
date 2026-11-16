@@ -5,7 +5,7 @@ import { Student } from "../models/Student.js";
 import { LeadCall } from "../models/LeadCall.js";
 import { drawDayStart, drawToday } from "../utils/drawTime.js";
 import { CommissionSettings } from "../models/CommissionSettings.js";
-import { COUNTED_PAYMENT } from "../utils/countedPayments.js";
+import { COUNTED_PAYMENT, COUNTED_STUDENT } from "../utils/countedPayments.js";
 import { bangaloreLeadsUnion } from "../utils/bangaloreRevenue.js";
 
 /*
@@ -145,7 +145,7 @@ export class LeaderboardService {
         { $group: { _id: "$assignedTo", n: { $sum: "$payments.amount" } } },
       ]),
       Student.aggregate<Counted>([
-        { $match: { enrollmentDate: inMonth, status: { $ne: "dropped" } } },
+        { $match: { enrollmentDate: inMonth, status: { $ne: "dropped" }, ...COUNTED_STUDENT } },
         { $group: { _id: "$assignedTo", n: { $sum: 1 } } },
       ]),
       this.followUpsBy(inMonth),

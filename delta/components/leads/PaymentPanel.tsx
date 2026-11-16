@@ -25,6 +25,7 @@ import { uploadReceipt } from "@/hooks/useStudents";
 import { ENROLMENT_PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type EnrolmentPaymentMethod, type StoredReceipt } from "@/types/student";
 import { useCurrencyStore } from "@/lib/store/currencyStore";
 import { fmtCurrency, getCurrencySymbol } from "@/lib/currency";
+import { NotCountedBox } from "@/components/leads/NotCountedBox";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -267,6 +268,8 @@ export function PaymentPanel({ leadId, leadName, closed, payments, sellingAmount
       </CardHeader>
 
       <CardContent className="px-4 pb-4 space-y-3">
+        {/* Left out of the sales figures, or the button to (2026-11-16) — a Super Admin or the Sales Manager */}
+        {closed && <NotCountedBox leadId={leadId} closed={!!closed} />}
 
         {/* Summary strip */}
         {(payments.length > 0 || hasTotal) && (
@@ -429,7 +432,8 @@ export function PaymentPanel({ leadId, leadName, closed, payments, sellingAmount
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0 space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-base font-bold text-green-400">{fmt(p.amount)}</span>
+                          <span className={cn("text-base font-bold", p.notCounted ? "text-muted-foreground line-through" : "text-green-400")}>{fmt(p.amount)}</span>
+                          {p.notCounted && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">Not counted in sales</span>}
                           {pct != null && targetAmount != null && (
                             <span className="text-[10px] text-muted-foreground">
                               ({((p.amount / targetAmount) * 100).toFixed(1)}%)

@@ -343,6 +343,8 @@ export interface ICommissionSale extends Document {
   lines: ICommissionLine[];
   countedAt?: Date;
   reversedAt?: Date;
+  /** Reversed because its sale was marked not counted in sales (2026-11-16): the state it had, given back on undo. */
+  notCountedFrom?: CommissionSaleState;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -489,7 +491,10 @@ export type ActivityAction =
   | "repeat_enquiry"
   | "repeat_verified"
   | "whatsapp_followup"
-    | "lead_transferred";
+    | "lead_transferred"
+  // A closed sale left out of the sales figures, and counted again (services/notCountedService.ts, 2026-11-16).
+  | "sale_not_counted"
+  | "sale_counted";
 
 export interface ILeadNote {
   _id: Types.ObjectId;
@@ -499,8 +504,16 @@ export interface ILeadNote {
   updatedAt: Date;
 }
 
+/**
+ * A closed sale left out of every sales figure (the user, 2026-11-16: "remove this 11k on the Manager TV and Sales TV,
+ * and exclude it from the sales" — only that closing): who, when and why. Set by services/notCountedService.ts.
+ */
+export interface NotCountedInSales { at: Date; byId?: Types.ObjectId; byName: string; reason: string }
+
 export interface IPayment {
   _id: Types.ObjectId;
+  /** Its sale is left out of the sales figures (copy of the lead's notCountedInSales, so payment-only pipelines see it). */
+  notCounted?: boolean;
   amount: number;
   note?: string;
   paidAt: Date;
@@ -566,6 +579,8 @@ export interface ILead extends Document {
   reminders: Types.DocumentArray<IReminder & Document>;
   payments: Types.DocumentArray<IPayment & Document>;
   activityLogs: Types.DocumentArray<IActivityLog & Document>;
+  /** Its close is left out of every sales figure (2026-11-16) — services/notCountedService.ts. */
+  notCountedInSales?: NotCountedInSales;
   platform?: string;
   campaign?: string;
   callNotConnected: number;
@@ -665,6 +680,8 @@ export interface IStudentPayment {
 }
 
 export interface IStudent extends Document {
+  /** The close is left out of every sales figure (2026-11-16) — services/notCountedService.ts. */
+  notCountedInSales?: NotCountedInSales;
   _id: Types.ObjectId;
   enrollmentNumber: string;
   name: string;
