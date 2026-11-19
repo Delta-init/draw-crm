@@ -18,6 +18,8 @@ import type {
   CommissionSaleState,
   ICommissionLine,
   IRole,
+  ISaleMeeting,
+  ISaleMentor,
 } from "../types/index.js";
 
 /*
@@ -314,6 +316,22 @@ export interface Resolved {
   lines: ICommissionLine[];
   /** Set when Root worked it out (COMMISSION_FROM_ROOT): the amounts it used — kept on the sale. */
   plan?: Plan;
+  /** The mentor's fee on a counted sale made with a mentor's meeting (2026-11-18, Root's plan); null: none. */
+  mentor?: ISaleMentor | null;
+}
+
+/**
+ * A close's mentor meeting as Root is asked about it (2026-11-18): none when the close said None, had no answer (a
+ * close from before), or names no mentor.
+ */
+export function meetingInput(m: ISaleMeeting | null | undefined): { mentorEmail: string; mentorName?: string; meetingId?: string; at?: string } | null {
+  if (!m || m.none || !String(m.mentorEmail ?? "").trim()) return null;
+  return {
+    mentorEmail: String(m.mentorEmail).trim().toLowerCase(),
+    ...(m.mentorName ? { mentorName: String(m.mentorName) } : {}),
+    ...(m.meetingId ? { meetingId: String(m.meetingId) } : {}),
+    ...(m.at ? { at: new Date(m.at).toISOString() } : {}),
+  };
 }
 
 /**
@@ -346,18 +364,28 @@ async function teamFor(
  * caller stores it, or — for the closing dialog — only shows it.
  */
 export async function resolveSale(
-  input: { closer: unknown; saleTeam: unknown; plan: Plan; course?: unknown; courses?: unknown[] },
+  input: {
+    closer: unknown; saleTeam: unknown; plan: Plan; course?: unknown; courses?: unknown[];
+    /** A held sale (2026-11-18): settled at `plan`, the amounts it was held at, though its course is given (for the meeting fee). */
+    held?: boolean;
+    /** The mentor's meeting its close named (2026-11-18): Root takes the course's meeting fee off the lines. */
+    meeting?: ISaleMeeting | null;
+  },
   config: CommissionConfig,
   names: Names = new Names(),
 ): Promise<Resolved> {
   // Worked out by Root from its plan (2026-11-01): from the course's row there (a bundle's added up), or — a held
   // sale, no course given — at the amounts it was held at. Root unreachable throws: tried again on the next sweep.
+  // The mentor's meeting fee (2026-11-18) is Root's alone: worked out here, a sale pays none.
   if (fromRoot()) {
     const course = idOf(input.course);
     const courses = (input.courses ?? []).map(idOf).filter(Boolean);
+    const meeting = meetingInput(input.meeting);
     return rootResolve({
       closer: idOf(input.closer), team: idOf(input.saleTeam),
-      ...(courses.length ? { courses } : course ? { course } : { amounts: input.plan }),
+      ...(courses.length ? { courses } : course ? { course } : {}),
+      ...(input.held || (!courses.length && !course) ? { amounts: input.plan } : {}),
+      ...(meeting ? { meeting } : {}),
     });
   }
   const none = { team: null, teamName: "", lines: [] as ICommissionLine[] };
@@ -443,6 +471,8 @@ const VOID_WINDOW_MS = 120 * 24 * 60 * 60_000;
 
 type StudentLite = {
   _id: Types.ObjectId;
+  /** The mentor's meeting its close named (2026-11-18). */
+  mentorMeeting?: ISaleMeeting | null;
   name?: string;
   enrollmentNumber?: string;
   /** Draw keeps a list: one invoice, a line per course. */
@@ -471,7 +501,7 @@ export async function trackSales(config: CommissionConfig, names: Names): Promis
   const handoverOf = new Map(handed.map((h) => [String(h.studentId), h]));
   // A close marked not counted in sales (2026-11-16) earns nothing: never tracked (services/notCountedService.ts).
   const students = (await Student.find({ _id: { $in: handed.map((h) => h.studentId) }, enrollmentDate: { $gte: COUNT_FROM }, ...COUNTED_STUDENT })
-    .select("name enrollmentNumber courses team assignedTo enrollmentDate createdAt financeInvoiceNumber totalFee academy")
+    .select("name enrollmentNumber courses team assignedTo enrollmentDate createdAt financeInvoiceNumber totalFee academy mentorMeeting")
     .lean()) as StudentLite[];
   const sales = await CommissionSale.find({ student: { $in: students.map((s) => s._id) } }).lean();
   const saleOf = new Map(sales.map((x) => [String(x.student), x]));
@@ -532,8 +562,8 @@ export async function trackSales(config: CommissionConfig, names: Names): Promis
 
       // Closed under a shared login: nobody earns it, whatever its steps.
       if (closer && config.excluded.has(closer)) {
-        const resolved = await resolveSale({ closer, saleTeam: student.team, plan: salePlan, courses: sold.map((c) => c._id) }, config, names);
-        await CommissionSale.updateOne({ student: student._id }, { $set: { ...base, ...resolved, plan: resolved.plan ?? salePlan } }, { upsert: true });
+        const resolved = await resolveSale({ closer, saleTeam: student.team, plan: salePlan, courses: sold.map((c) => c._id), meeting: student.mentorMeeting }, config, names);
+        await CommissionSale.updateOne({ student: student._id }, { $set: { ...base, ...resolved, plan: resolved.plan ?? salePlan, meeting: student.mentorMeeting ?? null, mentor: resolved.mentor ?? null } }, { upsert: true });
         changed++;
         continue;
       }
@@ -545,7 +575,7 @@ export async function trackSales(config: CommissionConfig, names: Names): Promis
         if (sale?.state === "progress" && sale.reason === reason && sale.fee === base.fee) continue;
         await CommissionSale.updateOne(
           { student: student._id },
-          { $set: { ...base, state: "progress", reason, lines: [], plan: salePlan }, $unset: { countedAt: "", team: "", teamName: "" } },
+          { $set: { ...base, state: "progress", reason, lines: [], plan: salePlan, meeting: student.mentorMeeting ?? null, mentor: null }, $unset: { countedAt: "", team: "", teamName: "" } },
           { upsert: true },
         );
         changed++;
@@ -554,12 +584,13 @@ export async function trackSales(config: CommissionConfig, names: Names): Promis
 
       // Finance approved: who earns what, at the plan of today.
       const plan = salePlan;
-      const resolved = await resolveSale({ closer: student.assignedTo, saleTeam: student.team, plan, courses: sold.map((c) => c._id) }, config, names);
+      const resolved = await resolveSale({ closer: student.assignedTo, saleTeam: student.team, plan, courses: sold.map((c) => c._id), meeting: student.mentorMeeting }, config, names);
       await CommissionSale.updateOne(
         { student: student._id },
         {
           $set: {
             ...base, ...resolved, plan: resolved.plan ?? plan, stepsDoneAt: new Date(),
+            meeting: student.mentorMeeting ?? null, mentor: resolved.mentor ?? null,
             ...(resolved.state === "counted" ? { countedAt: new Date() } : {}),
             ...(base.approvedAt ? {} : { approvedAt: new Date() }),
           },
@@ -587,12 +618,14 @@ export async function settlePendingSales(config: CommissionConfig, names: Names)
 
   for (const sale of pending) {
     try {
-      const student = (await Student.findById(sale.student).select("team assignedTo").lean()) as StudentLite | null;
+      const student = (await Student.findById(sale.student).select("team assignedTo mentorMeeting").lean()) as StudentLite | null;
       // A student deleted since is decided on what the sale recorded.
       const closer = student ? student.assignedTo : sale.closer;
       const saleTeam = student ? student.team : sale.team;
       const plan = planOf({ commission: sale.plan as Partial<Plan> });
-      const resolved = await resolveSale({ closer, saleTeam, plan }, config, names);
+      // At the amounts it was held at; its course and meeting for the mentor's fee (2026-11-18).
+      const meeting = student ? student.mentorMeeting : sale.meeting;
+      const resolved = await resolveSale({ closer, saleTeam, plan, course: sale.course, held: true, meeting }, config, names);
 
       const closerId = idOf(closer);
       const sameCloser = closerId === idOf(sale.closer);
@@ -607,6 +640,7 @@ export async function settlePendingSales(config: CommissionConfig, names: Names)
 
       sale.set({
         ...resolved,
+        mentor: resolved.mentor ?? null,
         closer: closerId && Types.ObjectId.isValid(closerId) ? new Types.ObjectId(closerId) : null,
         closerName: closerId ? await names.of(closerId) : "",
         ...(resolved.state === "counted" ? { countedAt: new Date() } : {}),
@@ -1021,7 +1055,7 @@ export class CommissionService {
    * What a sale would earn if it were approved now — for the closing dialog,
    * before anything is saved. The same rules as a real sale, written nowhere.
    */
-  async preview(input: { courses: string[]; team?: string; closer?: string }, viewer: Viewer) {
+  async preview(input: { courses: string[]; team?: string; closer?: string; mentor?: string }, viewer: Viewer) {
     const found = await Course.find({ _id: { $in: input.courses } }).select("name commission").lean();
     if (!found.length || found.length !== new Set(input.courses).size) {
       throw Object.assign(new Error("Course not found"), { statusCode: 404 });
@@ -1029,7 +1063,9 @@ export class CommissionService {
     const course = { name: found.map((c) => c.name).join(" + ") };
     const config = await loadConfig();
     const names = new Names();
-    const resolved = await resolveSale({ closer: input.closer, saleTeam: input.team, plan: planOfAll(found), courses: found.map((c) => c._id) }, config, names);
+    // The mentor picked on the close form (2026-11-18): the meeting fee off the lines, as it will be once counted.
+    const meeting = input.mentor ? { mentorEmail: input.mentor } : null;
+    const resolved = await resolveSale({ closer: input.closer, saleTeam: input.team, plan: planOfAll(found), courses: found.map((c) => c._id), meeting }, config, names);
     const plan = resolved.plan ?? planOfAll(found);
     const closer = input.closer ?? "";
 
@@ -1063,7 +1099,10 @@ export class CommissionService {
         amount: l.amount,
         amountInr: (l as { amountInr?: number }).amountInr ?? 0,
         note: l.note ?? "",
+        mentorCut: (l as { mentorCut?: number }).mentorCut ?? 0,
       })),
+      // The mentor's fee on it (2026-11-18): what the meeting takes off the lines; 0 when none.
+      mentorFee: resolved.mentor?.amount ?? 0,
     };
   }
 }

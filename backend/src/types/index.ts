@@ -303,6 +303,33 @@ export interface ICommissionLine {
    */
   amountInr?: number;
   note?: string;
+  /** What came off this line for the mentor's meeting on the sale (2026-11-18), AED; absent: nothing. */
+  mentorCut?: number;
+}
+
+/**
+ * The mentor's meeting a sale was made with, as its close said (the user, 2026-11-18: "in the close form it shows
+ * meeting done by, and which meeting"): `none` when no mentor held one; else the meeting in the LMS and its mentor.
+ * `checked`: found among the closer's held meetings when the close was saved (false: the LMS could not be asked).
+ */
+export interface ISaleMeeting {
+  none?: boolean;
+  meetingId?: string;
+  mentorEmail?: string;
+  mentorName?: string;
+  at?: Date | null;
+  title?: string;
+  checked?: boolean;
+}
+
+/** What the mentor earns on a counted sale (2026-11-18): Root's figure, taken off the sale's lines. */
+export interface ISaleMentor {
+  email: string;
+  name: string;
+  meetingId: string;
+  at: string;
+  amount: number;
+  plan: { mentor: number; sales: number; tl: number; sm: number };
 }
 
 export interface ICommissionSale extends Document {
@@ -342,6 +369,10 @@ export interface ICommissionSale extends Document {
   /** Why it is waiting, excluded or reversed. */
   reason: string;
   lines: ICommissionLine[];
+  /** The mentor's meeting its close named (2026-11-18), as it was when the sale was decided. */
+  meeting?: ISaleMeeting | null;
+  /** The mentor's fee on it once counted (2026-11-18); null: none. */
+  mentor?: ISaleMentor | null;
   countedAt?: Date;
   reversedAt?: Date;
   /** Reversed because its sale was marked not counted in sales (2026-11-16): the state it had, given back on undo. */
@@ -729,6 +760,8 @@ export interface IStudent extends Document {
   notes?: string;
   /** Which academy it was closed for — fixed at the close; unset on closes from before, which are Dubai. */
   academy?: Academy;
+  /** Who held the mentor's meeting the sale was made with (2026-11-18); absent on closes from before. */
+  mentorMeeting?: ISaleMeeting | null;
   /** Whether a bonus was given at the close — unset on enrolments from before it was asked. */
   hasBonus?: boolean | null;
   /** The bonus, in the same currency as the fee; 0 when none. Never part of the balance. */
