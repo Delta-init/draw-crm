@@ -530,6 +530,7 @@ export type ActivityAction =
   | "repeat_verified"
   | "whatsapp_followup"
     | "lead_transferred"
+  | "lead_moved"
   // A closed sale left out of the sales figures, and counted again (services/notCountedService.ts, 2026-11-16).
   | "sale_not_counted"
   | "sale_counted";
@@ -646,6 +647,8 @@ export interface ILead extends Document {
   repeatCount?: number;
   /** The last time it came again, and the team leader's verification of it. */
   repeat?: ILeadRepeat | null;
+  /** Moved in from another sales CRM (2026-11-19). */
+  movedFrom?: { crm?: string; leadId?: string; ownerName?: string; status?: string; byName?: string; at?: Date } | null;
 }
 
 /** A lead whose number came in again (2026-10-23): with its team leader until they verify it and give it out. */

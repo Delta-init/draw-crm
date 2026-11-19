@@ -19,7 +19,9 @@ export type ActivityAction =
   | "note_deleted"
   | "inactive_reassigned"
   | "repeat_enquiry"
-  | "repeat_verified";
+  | "repeat_verified"
+  // Moved in from / out to another sales CRM, or the move undone (2026-11-19).
+  | "lead_moved";
 
 export interface LeadNote {
   _id: string;

@@ -44,6 +44,8 @@ const activityLogSchema = new Schema<IActivityLog>(
         "whatsapp_followup",
         // A person's leads transferred to someone else (Users page, 2026-11-10), and undone.
         "lead_transferred",
+        // Moved in from / out to another sales CRM, or the move undone (2026-11-19).
+        "lead_moved",
         // A closed sale left out of the sales figures, and counted again (2026-11-16).
         "sale_not_counted",
         "sale_counted",
@@ -306,6 +308,14 @@ const leadSchema = new Schema<ILead>(
     },
     // The same number coming in again from the ads (2026-10-23, services/repeatLeadService.ts): counted, and held by
     // its team leader until they verify it and give it to the same person or another in the team.
+    // Moved in from another sales CRM (2026-11-19, services/crmLeadMoveService.ts): where it was, whose, and who moved it.
+    movedFrom: {
+      type: new Schema(
+        { crm: String, leadId: String, ownerName: String, status: String, byName: String, at: Date },
+        { _id: false },
+      ),
+      default: undefined,
+    },
     repeatCount: { type: Number, default: 0, min: 0 },
     repeat: {
       type: new Schema(

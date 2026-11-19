@@ -50,6 +50,9 @@ import { PaymentPanel } from "@/components/leads/PaymentPanel";
 import { LeadWhatsAppCard } from "@/components/leads/LeadWhatsAppCard";
 import { CallsPanel } from "@/components/leads/CallsPanel";
 import { ClickToCall } from "@/components/leads/ClickToCall";
+import { MoveToCrmDialog } from "@/components/leads/MoveToCrmDialog";
+import { MovedLeadView } from "@/components/leads/MovedLeadView";
+import { useMayMoveToCrm } from "@/hooks/useCrmLeadMoves";
 import { fmtFull } from "@/lib/currency";
 import { INITIAL_RESPONSE_CONFIG, PRIMARY_CONCERN_CONFIG, FOLLOWUP_STRATEGY_CONFIG } from "@/lib/leadConfig";
 import { LEAD_STATUSES, STATUS_META } from "@/lib/statusConfig";
@@ -74,6 +77,7 @@ const ACTION_CONFIG: Record<ActivityAction, { icon: React.ElementType; color: st
   inactive_reassigned: { icon: ArrowRightLeft, color: "text-amber-400", bg: "bg-amber-500/15" },
   repeat_enquiry: { icon: Repeat2, color: "text-violet-400", bg: "bg-violet-500/15" },
   repeat_verified: { icon: UserCheck, color: "text-violet-400", bg: "bg-violet-500/15" },
+  lead_moved: { icon: Send, color: "text-sky-400", bg: "bg-sky-500/15" },
 };
 
 const noteSchema = z.object({ content: z.string().min(1, "Note cannot be empty").max(2000) });
@@ -459,6 +463,9 @@ export default function LeadDetailPage() {
   const { user: authUser, hasPermission } = useAuthStore();
 
   const [editOpen, setEditOpen] = useState(false);
+  // Move to another CRM (2026-11-19): Super Admins, the Sales Manager, team leaders — the server says.
+  const [moveOpen, setMoveOpen] = useState(false);
+  const { data: mayMove = false } = useMayMoveToCrm();
 
   const { data: lead, isLoading } = useLead(leadId);
   const { data: teamsData } = useTeams({ status: "active", limit: 100 });
@@ -509,13 +516,16 @@ export default function LeadDetailPage() {
   }
 
   if (!lead) {
+    // Moved to another CRM: shown read only, with Undo; otherwise not found, as before.
     return (
-      <div className="flex flex-col items-center justify-center py-32 gap-4">
-        <p className="text-muted-foreground">Lead not found</p>
-        <Button variant="outline" onClick={() => router.push("/leads")}>
-          <ArrowLeft className="h-4 w-4 mr-2" /> Back to Leads
-        </Button>
-      </div>
+      <MovedLeadView leadId={leadId} mayMove={mayMove} onBack={() => router.push("/leads")} fallback={
+        <div className="flex flex-col items-center justify-center py-32 gap-4">
+          <p className="text-muted-foreground">Lead not found</p>
+          <Button variant="outline" onClick={() => router.push("/leads")}>
+            <ArrowLeft className="h-4 w-4 mr-2" /> Back to Leads
+          </Button>
+        </div>
+      } />
     );
   }
 
@@ -534,13 +544,22 @@ export default function LeadDetailPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to Leads
         </Button>
-        {canEdit && (
-          <Button onClick={() => setEditOpen(true)} size="sm" variant="outline" className="gap-2">
-            <Pencil className="h-3.5 w-3.5" />
-            Edit Lead
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {mayMove && lead.status !== "closed" && lead.status !== "lost" && (
+            <Button onClick={() => setMoveOpen(true)} size="sm" variant="outline" className="gap-2">
+              <Send className="h-3.5 w-3.5" />
+              Move to another CRM
+            </Button>
+          )}
+          {canEdit && (
+            <Button onClick={() => setEditOpen(true)} size="sm" variant="outline" className="gap-2">
+              <Pencil className="h-3.5 w-3.5" />
+              Edit Lead
+            </Button>
+          )}
+        </div>
       </motion.div>
+      <MoveToCrmDialog open={moveOpen} onOpenChange={setMoveOpen} leadIds={[lead._id]} label={lead.name || "this lead"} />
 
       {/* Two-column layout */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
