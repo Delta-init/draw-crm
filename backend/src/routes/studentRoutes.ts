@@ -7,6 +7,7 @@ import {
   getStudentByLeadId, updateStudent, deleteStudent,
   getMyEnrolments,
   getEnrolment, requestInvoice, getCorrection, correctEnrolment, uploadPaymentReceipt, checkEmail, getDailyClosings,
+  getCourseChange, requestCourseChange,
 } from "../controllers/studentController.js";
 
 const router = Router();
@@ -77,6 +78,10 @@ router.post("/:id/invoice", authenticate, checkPermission("students", "edit"), r
 // it again in the same step; with the same permission as sending it again.
 router.get("/:id/correction", authenticate, checkPermission("students", "edit"), getCorrection);
 router.put("/:id/correction", authenticate, checkPermission("students", "edit"), correctEnrolment);
+// Change the course of an enrolment finance approved (2026-11-23) — asked here, decided in finance. As Correct it
+// and Send again here: Students → edit.
+router.get("/:id/course-change", authenticate, checkPermission("students", "edit"), getCourseChange);
+router.post("/:id/course-change", authenticate, checkPermission("students", "edit"), requestCourseChange);
 
 router.get("/",    authenticate, checkPermission("students", "view"),   getStudents);
 router.post("/",   authenticate, checkPermission("students", "create"), createStudent);

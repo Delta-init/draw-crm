@@ -68,7 +68,15 @@ async function assertEmailFree(input: { email: string; client: Person; leadId?: 
 
 /** Whole fils, so 300.10 + 199.90 is 500 and never 499.9999. */
 const minor = (n: number) => Math.round(n * 100);
-const money = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+
+/** Whether two lists name the same courses, in any order — ids or populated courses alike. */
+export function sameCourses(a: unknown, b: unknown): boolean {
+  const ids = (v: unknown) => [...new Set((Array.isArray(v) ? v : []).filter(Boolean)
+    .map((c) => String(c && typeof c === "object" && "_id" in c ? (c as { _id: unknown })._id : c)))].sort().join(",");
+  return ids(a) === ids(b);
+}
+
+const money =(n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 type ReceiptInput = { name?: string; url?: string; key?: string; size?: number; mimeType?: string } | null | undefined;
 type PaymentInput = {
@@ -241,6 +249,43 @@ const bangalorePrice = (c: { bangalore?: { price?: number | null } | null } | nu
   const p = Number(c?.bangalore?.price);
   return Number.isFinite(p) && p > 0 ? p : null;
 };
+
+/** What of a course finance is told: its name and mapping (the course form's fields). */
+export interface FinanceCourseSource {
+  name?: string | null;
+  financeItemId?: string | null;
+  lmsCourseSlug?: string | null;
+  lmsCourseSlugs?: string[] | null;
+  bangalore?: { price?: number | null; financeItemId?: string | null; lmsCourseSlugs?: string[] | null } | null;
+}
+
+/**
+ * One course as finance is sent it — a line of the close, and the course of a course change after finance approved
+ * the enrolment (2026-11-23), which must name it exactly as the close would — less its amount.
+ */
+export function financeCourseOf(course: FinanceCourseSource | null | undefined, academy: Academy): {
+  name: string; itemId?: string; lmsCourseSlug?: string; lmsCourseSlugs?: string[];
+} {
+  // Every LMS course it opens — the list where it was mapped as one (two for a
+  // bundle), the single slug from before otherwise.
+  const listed = (course?.lmsCourseSlugs ?? []).map((s) => s.trim()).filter(Boolean);
+  const dubaiLms = listed.length ? listed : course?.lmsCourseSlug?.trim() ? [course.lmsCourseSlug.trim()] : [];
+  /*
+   * A Bangalore close (the user, 2026-10-10): the course's Bangalore finance
+   * item, and its Bangalore LMS courses — or the Dubai ones when it has none of
+   * its own (the Forex courses are shared). Dubai's item means nothing in the
+   * Bangalore organization, so a course with no Bangalore item goes as a plain
+   * line with its name and fee.
+   */
+  const bangaloreLms = (course?.bangalore?.lmsCourseSlugs ?? []).map((s) => s.trim()).filter(Boolean);
+  const lms = academy === "bangalore" && bangaloreLms.length ? bangaloreLms : dubaiLms;
+  const itemId = academy === "bangalore" ? course?.bangalore?.financeItemId : course?.financeItemId;
+  return {
+    name: course?.name ?? "Course",
+    ...(itemId ? { itemId } : {}),
+    ...(lms.length ? { lmsCourseSlug: lms[0], lmsCourseSlugs: lms } : {}),
+  };
+}
 
 /**
  * A Bangalore close's courses must each have a Bangalore price (the user,
@@ -651,6 +696,17 @@ export class StudentService {
     const student = await Student.findById(id);
     if (!student) throw createError("Student not found", 404);
 
+    /*
+     * The courses and fee of an enrolment finance has (the user, 2026-11-23): changed only with Change course, which
+     * finance approves — an edit here, or reopening the lead and closing it again, left the invoice on the old course
+     * and price. Before finance has it, as before; sent back, as before (the correction is for that).
+     */
+    const courseMoves = data.courses !== undefined && !sameCourses(data.courses, student.courses);
+    const feeMoves = data.totalFee !== undefined && minor(Number(data.totalFee)) !== minor(student.totalFee ?? 0);
+    if ((courseMoves || feeMoves) && (await this.heldByFinance(id, student.academy))) {
+      throw createError("This enrolment is in finance — change its course or fee with Change course; finance approves it.", 409);
+    }
+
     const allowed: Array<keyof typeof data> = [
       "name", "phone", "email", "courses", "team", "assignedTo",
       "initialLeadResponse", "primaryConcern", "followupStrategyType",
@@ -728,19 +784,7 @@ export class StudentService {
      */
     const academy = academyOf(student.academy);
     const bangalore = academy === "bangalore";
-    const courseDocs = ((student.courses ?? []) as unknown as {
-      name?: string; amount?: number; financeItemId?: string | null; lmsCourseSlug?: string; lmsCourseSlugs?: string[];
-      bangalore?: { price?: number | null; financeItemId?: string | null; lmsCourseSlugs?: string[] } | null;
-    }[]).filter(Boolean).map((c) => (bangalore
-      ? {
-          name: c.name,
-          amount: bangalorePrice(c) ?? 0,
-          financeItemId: c.bangalore?.financeItemId ?? null,
-          ...((c.bangalore?.lmsCourseSlugs ?? []).some((x) => x.trim())
-            ? { lmsCourseSlug: undefined, lmsCourseSlugs: c.bangalore!.lmsCourseSlugs }
-            : { lmsCourseSlug: c.lmsCourseSlug, lmsCourseSlugs: c.lmsCourseSlugs }),
-        }
-      : c));
+    const courseDocs = ((student.courses ?? []) as unknown as (FinanceCourseSource & { amount?: number })[]).filter(Boolean);
     if (courseDocs.length === 0) return null;
 
     const rep = student.assignedTo as unknown as { name?: string; email?: string } | undefined;
@@ -753,7 +797,9 @@ export class StudentService {
      * has to reach finance, the same principle Delta's single-course
      * handover already holds.
      */
-    const listTotal = courseDocs.reduce((sum, c) => sum + (c.amount ?? 0), 0) || 1;
+    // Each course weighed at its price in the academy it was closed for — Bangalore's in INR.
+    const listPrice = (c: (typeof courseDocs)[number]) => (bangalore ? bangalorePrice(c) ?? 0 : c.amount ?? 0);
+    const listTotal = courseDocs.reduce((sum, c) => sum + listPrice(c), 0) || 1;
     const totalFee = Math.round((student.totalFee ?? 0) * 100);
     let allocated = 0;
     const courses = courseDocs.map((c, i) => {
@@ -762,18 +808,11 @@ export class StudentService {
       // add up to the whole fee rather than drifting a cent short or long.
       const amountMinor = isLast
         ? totalFee - allocated
-        : Math.round((totalFee * (c.amount ?? 0)) / listTotal);
+        : Math.round((totalFee * listPrice(c)) / listTotal);
       allocated += amountMinor;
-      // Every LMS course this one opens — the list where it was mapped as one,
-      // the single slug from before otherwise.
-      const listed = (c.lmsCourseSlugs ?? []).map((s) => s.trim()).filter(Boolean);
-      const lms = listed.length ? listed : c.lmsCourseSlug?.trim() ? [c.lmsCourseSlug.trim()] : [];
-      return {
-        name: c.name ?? "Course",
-        amountMinor,
-        ...(c.financeItemId ? { itemId: c.financeItemId } : {}),
-        ...(lms.length ? { lmsCourseSlug: lms[0], lmsCourseSlugs: lms } : {}),
-      };
+      // Its item and LMS courses as the academy bills it (financeCourseOf), the amount in its place among them.
+      const { name, ...mapping } = financeCourseOf(c, academy);
+      return { name, amountMinor, ...mapping };
     });
 
     return {
@@ -1406,6 +1445,18 @@ export class StudentService {
     // Of the organization it was closed into.
     const [st] = await fetchEnrolmentStatuses([studentId], academy);
     return st?.approval === "returned" ? { sentBack: true, reason: st.returnedReason ?? "" } : { sentBack: false, reason: "" };
+  }
+
+  /**
+   * Whether finance has this enrolment and hasn't sent it back (2026-11-23): then its courses and fee change only with
+   * Change course. Finance unreachable counts as not sent back — the safe answer.
+   */
+  private async heldByFinance(studentId: string, studentAcademy?: unknown): Promise<boolean> {
+    const { FinanceHandover } = await import("../models/FinanceHandover.js");
+    const h = await FinanceHandover.findOne({ studentId }).select("status approvalState returnedReason academy").lean();
+    if (h?.status !== "sent") return false;
+    // Asked of the organization it is billed in, as its balance payments are.
+    return !(await this.sendBackOf(studentId, h, academyOf(h.academy ?? studentAcademy))).sentBack;
   }
 
   /**

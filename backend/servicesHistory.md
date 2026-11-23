@@ -767,3 +767,17 @@ This file documents every service in `backend/src/services/`. Read this before w
   failure throws a sentence with statusCode 502 (503: not set up, or the plan not in Root yet).
 - While on: `resolveSale` (and so `trackSales`, `settlePendingSales`, `preview`) asks Root; `slabsFor` and `payRows`
   are Root's; `sweepCommission` copies Root's plan in every five minutes.
+
+## Change course (added 2026-11-23)
+
+- `courseChangeService` — `CourseChangeService.info(viewer, studentId)`, `.request(viewer, studentId, { courseId, fee,
+  reason, key? })` (checked here, then sent to finance at once; `courseChangeAskedAt` set before it goes);
+  `applyApprovedCourseChange(studentId, d)`, `applyRejectedCourseChange(studentId, d)`, `adoptCourseChange(studentId,
+  d)` (a request finance has that isn't here), `syncCourseChanges()` (every 2 min with the balance payment decisions —
+  `leadPaymentDecisions.tick`), `ADOPTED_REASON`.
+- `financeClient` — `sendCourseChange(payload, orgId)` (`POST /integrations/enrolments/course-changes`, source
+  "draw-crm"; throws `FinanceRefusal`); `EnrolmentStatus.courseChanges`, `FinanceCourseChange`.
+- `studentService` — `financeCourseOf(course, academy)` (one course as finance is sent it, less its amount — the
+  close's lines are built with it, byte for byte as before), `sameCourses(a, b)`; `updateStudent` refuses other courses
+  or fee once finance has the enrolment (`heldByFinance`, not sent back).
+- `leadService.updateLead` — other courses on an enrolled lead → 409.

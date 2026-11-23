@@ -1140,3 +1140,14 @@ A new close starts "Bonus given?" at yes with the chosen courses' bonuses added 
   `components/shared/CurrencyRedraw.tsx`), which draws it again when the account's currency arrives as the app opens —
   not on a pick in Settings, nor while someone is typing.
 - `app/(dashboard)/settings/page.tsx` — its toasts go through `@/lib/toast` (the app's toaster; `sonner`'s never showed).
+
+### Change log — 2026-11-23 (Change course after finance approval — as in the Sales CRM)
+- `components/students/CourseChangeDialog.tsx` (new) — `ChangeCourseDialog` (course picker of courses sold now, fee
+  from the course in the academy's money and editable, reason, paid so far and left after), `CourseChangeBanner`
+  (waiting / rejected with why), `useMayChangeCourse()` (Students → edit).
+- `app/(dashboard)/leads/[leadId]/page.tsx` — enrolled: the courses read only with **Change course**, the banner, the
+  edit dialog's courses locked (`LeadDialog` `coursesLocked`).
+- `app/(dashboard)/students/[studentId]/page.tsx` — **Change course** once in finance (not sent back), the banner.
+- `components/students/EditStudentModal.tsx`, `CreateStudentModal.tsx` — courses / fee disabled once in finance.
+- `components/leads/PaymentPanel.tsx` — in finance, the summary is the invoice's: fee = its total, paid and remaining
+  = finance's; each payment's share only against an AED invoice.

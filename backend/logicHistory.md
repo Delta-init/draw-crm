@@ -863,3 +863,18 @@ As in Tetra Commission (`students/calls.ts` there), for leads. **Files**: `lib/t
    can't fail the page or the idle sweep for everyone. Signed in today with no heartbeat (an app) → "here today".
    While alerts are paused (the HRMS linked but not answering) the log says so every 10 minutes. Settings refuse an
    idle limit longer than the working day while alerts are on (it could never fire).
+
+## Change course after finance approval (2026-11-23)
+
+1. **Asking** (`courseChangeService.request`): the input checked (course, fee > 0 with at most 2 decimals, a reason of
+   3–500); a retry with the same `key` returns the same request; one pending at a time; one course on the enrolment
+   (several → refused: finance's change makes the invoice one line); the course exists and is active; fee ≥ paid;
+   something changes. Then finance is asked live, in the organization the enrolment's academy is billed in (handover's
+   academy, else the student's): in finance, approved (or not_required), not void, not sent back. Sent with the course
+   as the close builds its line (`financeCourseOf`: Bangalore's item and LMS courses for a Bangalore enrolment), then
+   stored pending. Finance's "already waiting" says it will show here within a few minutes.
+2. **Read back** (`syncCourseChanges`): students with one pending or `courseChangeAskedAt` set; an id finance has that
+   isn't here is taken (course matched by name, case and spaces aside, else none — then only the fee changes);
+   approved → `courses = [new]`, fee, pending, fee status, the lead's courses and selling amount, an activity entry,
+   `CommissionSale.stepsDoneAt` cleared (so `trackSales` counts it again); rejected → the reason. Each once, by id; not
+   while paid changes under it. `courseChangeAskedAt` cleared once finance answered, nothing waits and it is 10 min old.

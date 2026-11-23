@@ -449,3 +449,10 @@ Copy the template at the top and place it at the **top** of the correct category
   person and sent later); quick taps could land out of order (one at a time now); redrawing remounted pages mid-edit
   (now only when the account's currency arrives, and not while typing); picks while viewing as someone changed the
   admin's own. All fixed.
+
+## [2026-11-23] "100% paid" on a close finance billed at more
+
+- The lead's Payments card measured the lead's payments against its selling price or its courses' catalogue price —
+  after a close was moved to a cheaper course behind finance's back, it said "100% paid" while the invoice still owed.
+  **Fix**: once the close is in finance, the card shows finance's invoice total, paid and balance; the courses of an
+  enrolled lead are read only, and change with Change course (finance approves it).

@@ -580,6 +580,21 @@ export class LeadService {
     if (!lead)
       throw Object.assign(new Error("Lead not found"), { statusCode: 404 });
 
+    /*
+     * An enrolled lead's courses (the user, 2026-11-23): one was reopened, put on a cheaper course and closed again —
+     * finance never heard, and its Payments card measured the money against the new course's price. They change with
+     * Change course on the enrolment now, which finance approves, and the lead follows.
+     */
+    if (data.courses !== undefined) {
+      const { sameCourses } = await import("./studentService.js");
+      if (!sameCourses(data.courses, lead.courses)) {
+        const { Student } = await import("../models/Student.js");
+        if (await Student.exists({ leadId: lead._id })) {
+          throw Object.assign(new Error("This lead is enrolled — change its course with Change course; finance approves it."), { statusCode: 409 });
+        }
+      }
+    }
+
     // Track field changes for the log
     const trackedFields: Array<keyof typeof data> = [
       "name",

@@ -1479,3 +1479,10 @@ Removed: `useUpdateCallNotConnected`, `useUpdateCallCount` (the counts come from
 - `chooseCurrency(code)` — this device at once (`useCurrencyStore`), then `PUT /auth/preferences { currency }` ("now")
   (one at a time, in order, and only while they're still the one signed in); kept pending for them until saved; a
   failure says "your account gets it the next time the app can reach it".
+
+### Change course (2026-11-23)
+- `useCourseChangeInfo(studentId, enabled?)` — `GET /students/:id/course-change` (`CourseChangeInfo`: can it be asked,
+  why not, the course(s), fee, paid, the invoice, every change asked).
+- `useRequestCourseChange(studentId)` — `POST /students/:id/course-change { courseId, fee, reason, key }`; invalidates
+  `["students"]`. Both in `hooks/useCourseChange.ts`.
+- Types: `CourseChange`, `Student.courseChanges` (`types/student.ts`).

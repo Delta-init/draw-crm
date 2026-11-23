@@ -57,6 +57,7 @@ import { fmtFull } from "@/lib/currency";
 import { INITIAL_RESPONSE_CONFIG, PRIMARY_CONCERN_CONFIG, FOLLOWUP_STRATEGY_CONFIG } from "@/lib/leadConfig";
 import { LEAD_STATUSES, STATUS_META } from "@/lib/statusConfig";
 import { CloseLeadDialog } from "@/components/students/CloseLeadDialog";
+import { ChangeCourseDialog, CourseChangeBanner, useMayChangeCourse } from "@/components/students/CourseChangeDialog";
 import { useStudentByLeadId } from "@/hooks/useStudents";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -475,7 +476,14 @@ export default function LeadDetailPage() {
   const updateStatus = useUpdateLeadStatus();
   const updateLead = useUpdateLead();
   // Loaded ahead, so the enrolment dialog opens at once when Closed is picked.
-  useStudentByLeadId(lead?._id ?? "");
+  const { data: existingStudent } = useStudentByLeadId(lead?._id ?? "");
+  /*
+   * Enrolled (2026-11-23): the lead's courses are read only — they change with Change course, which finance approves
+   * (the server refuses an edit). Whoever may edit students may ask, as with Correct it.
+   */
+  const enrolled = !!existingStudent;
+  const mayChangeCourse = useMayChangeCourse();
+  const [courseChangeOpen, setCourseChangeOpen] = useState(false);
   const [showStudentModal, setShowStudentModal] = useState(false);
   const assignLead = useAssignLead();
   const assignToTeam = useAssignLeadToTeam();
@@ -673,6 +681,9 @@ export default function LeadDetailPage() {
                   </div>
                 )}
 
+                {/* A course change asked of finance: waiting, or rejected with why (approved shows in the activity). */}
+                {enrolled && <CourseChangeBanner changes={existingStudent?.courseChanges} academy={existingStudent?.academy} />}
+
                 {/* Selling Amount */}
                 {lead.sellingAmount != null && (
                   <div className="flex items-start gap-3">
@@ -854,7 +865,28 @@ export default function LeadDetailPage() {
                       </Select>
                     </div>
 
-                    {/* Courses change */}
+                    {/* Courses change — enrolled, it goes to finance instead (2026-11-23). */}
+                    {enrolled ? (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
+                        <BookOpen className="h-3 w-3" />
+                        Courses
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-8 min-w-0 flex-1 items-center rounded-md border border-border/50 bg-muted/30 px-2 text-xs">
+                          <span className="truncate">
+                            {(lead.courses ?? []).map((c) => (typeof c === "object" && c !== null ? (c as Course).name : "")).filter(Boolean).join(" + ") || "No course"}
+                          </span>
+                        </div>
+                        {mayChangeCourse && (
+                          <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs shrink-0" onClick={() => setCourseChangeOpen(true)}>
+                            <ArrowRightLeft className="h-3 w-3" /> Change course
+                          </Button>
+                        )}
+                      </div>
+                      <p className="mt-1 text-[10px] text-muted-foreground">Enrolled — a course change goes to finance for approval.</p>
+                    </div>
+                    ) : (
                     <div>
                       <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
                         <BookOpen className="h-3 w-3" />
@@ -877,6 +909,7 @@ export default function LeadDetailPage() {
                         emptyText="No courses found."
                       />
                     </div>
+                    )}
 
                     {/* Selling Amount */}
                     <div>
@@ -1288,7 +1321,13 @@ export default function LeadDetailPage() {
         onOpenChange={setEditOpen}
         lead={lead}
         mode="edit"
+        coursesLocked={enrolled}
       />
+
+      {/* Change course on an enrolled lead (2026-11-23): asked of finance, applied once approved. */}
+      {courseChangeOpen && existingStudent && (
+        <ChangeCourseDialog studentId={existingStudent._id} name={lead.name} onClose={() => setCourseChangeOpen(false)} />
+      )}
 
       {/* Enrolment — fires when status → closed. Shown for a lead that is
           already enrolled too: closing one a second time, after it went to

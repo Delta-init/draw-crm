@@ -311,3 +311,11 @@ router.patch("/:teamId/leads/:leadId/assign", authenticate, checkPermission("tea
 - **A pick time taken from the device's clock** let a slow clock's fresh picks lose and a fast clock's late pick win.
   **Fix**: a save sent at once is "now" by this server; a late one sends how long ago it was made (`pickedAgoMs`, on
   the device's own clock) and is placed at server time minus that.
+
+## [2026-11-23] A finance-approved close moved to another course behind finance's back
+
+- **What happened** (Sales CRM; the same paths here): a closed, approved lead was reopened, put on a cheaper course and
+  closed again. The lead's and the enrolment's courses changed here only — the invoice kept the old course and price,
+  and the lead's Payments card measured the money against the new course and said "100% paid". **Fix**: an enrolled
+  lead's courses and an enrolment's courses and fee (once finance has it, not sent back) are refused (409); they change
+  with Change course, which finance approves. The Payments card follows finance's invoice once the close is there.

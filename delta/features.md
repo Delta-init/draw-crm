@@ -797,3 +797,13 @@ own calls (and their leads'), a team leader their team's, the Super Admin / Repo
   three openings — since on a shared computer it may be someone else's; a choice the device holds for another person
   goes back to USD. A pick that can't reach the account is kept on the device, for you, and sent next time: the newest
   pick wins, by when it was picked. Not while viewing as someone (picks are refused then).
+
+## Change course after finance approval (2026-11-23)
+
+- Once finance has approved an enrolment, its courses can't be edited on the lead or the enrolment (nor by closing the
+  lead again). **Change course** (lead page, enrolment page — whoever may edit students) asks finance: the new course,
+  its fee (filled in from the course, editable) and why. A banner shows it waiting, or rejected with finance's reason;
+  approved, the enrolment and the lead move to it and the lead's activity says so. An enrolment of several courses
+  (from before one course a close) can't be changed this way — finance changes its invoice.
+- The lead's Payments card follows finance once the close is there: the fee is the invoice's total, paid and remaining
+  are finance's.

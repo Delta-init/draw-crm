@@ -41,9 +41,11 @@ interface LeadDialogProps {
   onOpenChange: (open: boolean) => void;
   lead?: Lead | null;
   mode?: "create" | "edit";
+  /** Enrolled (2026-11-23): the courses change with Change course, which finance approves — not here. */
+  coursesLocked?: boolean;
 }
 
-export function LeadDialog({ open, onOpenChange, lead, mode }: LeadDialogProps) {
+export function LeadDialog({ open, onOpenChange, lead, mode, coursesLocked }: LeadDialogProps) {
   const isEditing = mode === "edit" || !!lead;
 
   const { mutate: createLead, isPending: creating } = useCreateLead();
@@ -287,9 +289,13 @@ export function LeadDialog({ open, onOpenChange, lead, mode }: LeadDialogProps) 
                     placeholder="Select courses"
                     searchPlaceholder="Search courses…"
                     emptyText="No courses found."
+                    disabled={coursesLocked}
                   />
                 )}
               />
+              {coursesLocked && (
+                <p className="text-[11px] text-muted-foreground">Enrolled — change the course with Change course on the lead; finance approves it.</p>
+              )}
             </div>
 
             {/* Selling Amount */}

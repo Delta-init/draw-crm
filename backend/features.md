@@ -815,3 +815,29 @@ clock set wrong doesn't matter: not kept over a newer one, and the answer says w
 **Models Used**: `User` (`currency`, `currencyAt`, new, default null).
 
 **Tests**: `scripts/preferences-check.sh` — 29 checks (scratch mongod).
+
+## Change course after finance approval (2026-11-23, as in the Sales CRM)
+
+**What it does**: Once finance has an enrolment and has approved it, its courses and fee are no longer edited here — a
+closed, approved lead was reopened, put on a cheaper course and closed again, and finance never heard. Instead
+**Change course** asks finance: the new course, its fee and why. It waits in finance's Approvals ("Course change");
+approved, finance changes the invoice (one line: the new course at the new fee) and opens the new LMS course, and the
+sweep here moves the student and the lead to it (selling amount too, where the lead has one), notes it in the lead's
+activity and has the sale's commission counted again with finance's fee; rejected, it says why. One waiting at a time.
+An enrolment of several courses (from before one course a close) is refused with a message — finance changes that
+invoice itself. A request finance kept while the answer here was lost (a timeout) is taken from finance's answer.
+
+**Routes**: `GET /api/v1/students/:id/course-change` → `{ canRequest, whyNot, academy, currency, course, courses,
+fee, paid, invoice, changes }`; `POST /api/v1/students/:id/course-change` `{ courseId, fee, reason, key? }` → the
+request, pending (201). Students → edit, as Correct it. Refused: not in finance yet, waiting for approval, sent back
+(Correct it), void, finance away (502), one waiting, several courses, a course not sold, fee ≤ 0 / below what is paid /
+3 decimals, nothing changing; finance's own refusal passed on (409). Locks: `PUT /leads/:id` with other courses on an
+enrolled lead → 409; `PUT /students/:id` with other courses or fee once finance has it (not sent back) → 409.
+
+**Models Used**: `Student` (`courseChanges[]`, `courseChangeAskedAt`, new), `Lead`, `Course`, `FinanceHandover`,
+`CommissionSale` (`stepsDoneAt` cleared).
+
+**Script**: `src/scripts/financeMismatch.ts` — read only: enrolments whose course or fee isn't finance's, leads whose
+courses aren't their enrolment's.
+
+**Tests**: `scripts/course-change-check.sh` — 92 checks (scratch mongod, stand-in finance).

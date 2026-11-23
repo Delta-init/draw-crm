@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useUpdateStudent } from "@/hooks/useStudents";
+import { useEnrolmentCorrection } from "@/hooks/useEnrolments";
 import { useCourses } from "@/hooks/useCourses";
 import { useUsers } from "@/hooks/useUsers";
 import { useTeams } from "@/hooks/useTeams";
@@ -69,6 +70,10 @@ export function EditStudentModal({ open, student, onClose }: Props) {
   const courseIds    = (student.courses ?? []).map((c) => (typeof c === "object" && c !== null ? (c as Course)._id : (c as string)));
   const teamId       = student.team       && typeof student.team       === "object" ? (student.team   as Team)._id       : (student.team       as string | undefined);
   const assignedToId = student.assignedTo && typeof student.assignedTo === "object" ? (student.assignedTo as User)._id  : (student.assignedTo as string | undefined);
+  // In finance and not sent back (2026-11-23): its courses and fee change with Change course, which finance approves —
+  // the server refuses them here (sent back, Correct it is the way). Saving here needs Students → edit, as asking does.
+  const { data: correction } = useEnrolmentCorrection(student._id, open);
+  const inFinance = Boolean(correction?.invoiceNumber) && !correction?.sentBack;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -179,7 +184,11 @@ export function EditStudentModal({ open, student, onClose }: Props) {
               placeholder="Select courses"
               searchPlaceholder="Search courses…"
               emptyText="No courses found."
+              disabled={inFinance}
             />
+            {inFinance && (
+              <p className="text-[11px] text-muted-foreground">In finance — the course and fee change with Change course, which finance approves.</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -222,7 +231,7 @@ export function EditStudentModal({ open, student, onClose }: Props) {
             {/* Total fee */}
             <div className="space-y-1.5">
               <Label htmlFor="totalFee">Total Fee (₹)</Label>
-              <Input id="totalFee" type="number" min={0} {...form.register("totalFee")} />
+              <Input id="totalFee" type="number" min={0} {...form.register("totalFee")} disabled={inFinance} />
             </div>
             {/* Paid amount */}
             <div className="space-y-1.5">
