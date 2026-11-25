@@ -26,6 +26,7 @@ import {
 import { cn } from "@/lib/utils";
 import { drawRange } from "@/lib/drawDates";
 import { ExportPdfDialog } from "@/components/reports/ExportPdfDialog";
+import { OldBooksCard } from "@/components/reports/OldBooksCard";
 import { AiChatPanel } from "@/components/leads/AiChatPanel";
 import {
   useReportOverview,
@@ -1083,6 +1084,9 @@ function RevenueTab({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) 
           loading={overview.isLoading}
         />
       </div>
+
+      {/* Finance's old books counted here (2026-11-25) — hidden when none */}
+      <OldBooksCard dateFrom={dateFrom} dateTo={dateTo} />
 
       {/* ── Revenue Timeline Chart ─────────────────────────────────────────── */}
       <motion.div initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.24 }}>

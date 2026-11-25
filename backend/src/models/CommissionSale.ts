@@ -117,6 +117,8 @@ const commissionSaleSchema = new Schema<ICommissionSale>(
     reversedAt: { type: Date },
     /** Reversed because the sale was marked not counted in sales (2026-11-16): its state before, given back on undo. */
     notCountedFrom: { type: String, enum: ["progress", "counted", "waiting", "excluded"] },
+    /** A sale from finance's old books (2026-11-25, services/oldBooks.ts): `student` is finance's invoice id, not a student. */
+    oldBooks: { type: Boolean },
   },
   { timestamps: true, versionKey: false, collection: "commissionsales" },
 );

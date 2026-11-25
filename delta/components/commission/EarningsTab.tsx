@@ -207,6 +207,9 @@ function SaleRow({ sale: s, index }: { sale: CommissionSale; index: number }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold text-foreground">{s.studentName}</span>
             {s.enrollmentNumber && <span className="text-[10px] text-muted-foreground">{s.enrollmentNumber}</span>}
+            {s.oldBooks && (
+              <span className="inline-flex items-center rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-400">Old books</span>
+            )}
             <motion.span
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}

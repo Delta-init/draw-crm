@@ -106,8 +106,9 @@ const BANGALORE_ENROLMENT = { academy: "bangalore", status: { $ne: "dropped" } }
 /**
  * For a pipeline that unwinds lead payments (revenue by the day a payment was made): put first, it adds — beside the
  * leads — one copy of each Bangalore-enrolled lead carrying only the enrolment's payments and the lead's rupee ones,
- * in AED. The lead's AED payments still come from the lead itself, and its rupee ones are left out there, so nothing
- * is counted twice; a count of leads must not use this.
+ * in AED, and each of finance's old books kept for a user here (services/oldBooks.ts), as a lead of theirs. The
+ * lead's AED payments still come from the lead itself, and its rupee ones are left out there, so nothing is counted
+ * twice; a count of leads must not use this.
  */
 export async function bangaloreLeadsUnion(): Promise<Stage[]> {
   const rate = await inrPerAed();
@@ -122,6 +123,18 @@ export async function bangaloreLeadsUnion(): Promise<Stage[]> {
           { $unwind: "$lead" },
           { $replaceWith: { $mergeObjects: ["$lead", { payments: { $concatArrays: ["$payments", rupeesInAed("$lead.payments", rate)] } }] } },
           { $match: { "payments.0": { $exists: true } } },
+        ],
+      },
+    },
+    // Finance's old books (2026-11-25, services/oldBooks.ts): each one kept for a user here, as a lead of theirs
+    // carrying only the payments that count (from OLD_BOOKS_FROM on) — the revenue figures take them as they take a
+    // lead's. Nothing is on a real lead, so nothing is counted twice.
+    {
+      $unionWith: {
+        coll: "oldbookssales",
+        pipeline: [
+          { $match: { assignedTo: { $ne: null }, "payments.0": { $exists: true } } },
+          { $project: { _id: "$financeInvoiceId", assignedTo: 1, team: 1, name: "$customerName", payments: 1, oldBooks: { $literal: true } } },
         ],
       },
     },

@@ -297,7 +297,7 @@ export function slabsForScope<T extends Record<string, unknown>>(slabs: T, scope
 }
 
 /** Names looked up once per pass, not once per line. */
-class Names {
+export class Names {
   private cache = new Map<string, string>();
   async of(id: unknown): Promise<string> {
     const key = idOf(id);
@@ -673,6 +673,7 @@ export async function reverseVoidedSales(): Promise<number> {
   const live = await CommissionSale.find({
     state: { $in: ["counted", "waiting", "excluded"] },
     saleDate: { $gte: new Date(Date.now() - VOID_WINDOW_MS) },
+    oldBooks: { $ne: true },                               // finance's old books: services/oldBooks.ts follows them
   })
     .select("student fee")
     .lean();
@@ -722,7 +723,7 @@ export async function reverseVoidedSales(): Promise<number> {
  * every pass; sales from COUNT_FROM on, voided ones left as they are.
  */
 export async function refreshPaidShares(): Promise<number> {
-  const sales = await CommissionSale.find({ saleDate: { $gte: COUNT_FROM }, state: { $ne: "reversed" } })
+  const sales = await CommissionSale.find({ saleDate: { $gte: COUNT_FROM }, state: { $ne: "reversed" }, oldBooks: { $ne: true } })
     .select("student saleDate paidShare owedShare collections").lean();
   if (!sales.length) return 0;
   const students = await Student.find({ _id: { $in: sales.map((s) => s.student) } })
@@ -1026,6 +1027,8 @@ export class CommissionService {
       monthShare: shareBetween(s, from, to),
       /** When the client finished paying — the commission is earned then; null while they owe. */
       paidInFullAt: paidInFullAt(s),
+      /** From finance's old books (2026-11-25) — no enrolment here. */
+      oldBooks: s.oldBooks === true,
       /** The share of what the client paid that came in rupees (2026-11-13) — earned at the lines' rupee amounts. */
       rupeeShare: rupeeShareOf(s),
       lines: visible(s).map((l) => {

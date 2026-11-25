@@ -213,3 +213,32 @@ export function useRevenueTeams(dateFrom: string, dateTo: string) {
     staleTime: 60_000,
   });
 }
+
+// ── Old books (finance's old invoices counted here, 2026-11-25) ───────────────
+
+export interface OldBooksRow {
+  invoiceNumber: string;
+  customerName: string;
+  course: string;
+  userId: string;
+  name: string;
+  amount: number;
+  paidAt: string;
+  paidInFull: boolean;
+}
+export interface OldBooksReport { total: number; count: number; rows: OldBooksRow[] }
+
+/** Finance's old-books instalments counted for Draw's people in the range — already inside every revenue figure. */
+export function useOldBooks(dateFrom: string, dateTo: string) {
+  return useQuery<OldBooksReport>({
+    queryKey: ["reports", "old-books", dateFrom, dateTo],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (dateFrom) params.set("dateFrom", dateFrom);
+      if (dateTo)   params.set("dateTo",   dateTo);
+      const { data } = await api.get<ApiResponse<OldBooksReport>>(`/reports/old-books?${params}`);
+      return data.data;
+    },
+    staleTime: 60_000,
+  });
+}
